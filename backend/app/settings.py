@@ -11,6 +11,21 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
     SECRET_KEY: str = "dev-change-me"
     LOG_LEVEL: str = "INFO"
+    ADMIN_SESSION_MAX_AGE_SECONDS: int = 60 * 60 * 12
+    ADMIN_SESSION_COOKIE_SECURE: bool = False
+    OTP_TTL_SECONDS: int = 60 * 10
+    OTP_MAX_ATTEMPTS: int = 5
+    OTP_RATE_LIMIT_WINDOW_SECONDS: int = 60
+    OTP_RATE_LIMIT_PER_IP: int = 5
+    OTP_RATE_LIMIT_PER_MAC: int = 5
+    OTP_VERIFY_RATE_LIMIT_PER_IP: int = 10
+    OTP_VERIFY_RATE_LIMIT_PER_MAC: int = 10
+    VOUCHER_RATE_LIMIT_WINDOW_SECONDS: int = 60
+    VOUCHER_RATE_LIMIT_PER_IP: int = 10
+    VOUCHER_RATE_LIMIT_PER_MAC: int = 10
+    OIDC_STATE_TTL_SECONDS: int = 60 * 10
+    CELERY_BROKER_URL: str | None = None
+    CELERY_RESULT_BACKEND: str | None = None
 
     # SMTP
     SMTP_HOST: str = "localhost"

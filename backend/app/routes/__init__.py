@@ -1,1 +1,1 @@
-from . import guest, admin  # noqa: F401
+from . import guest, admin, oidc  # noqa: F401

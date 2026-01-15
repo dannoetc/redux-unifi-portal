@@ -15,5 +15,35 @@ services:
     ports:
       - "6379:6379"
 
+  api:
+    build:
+      context: ./backend
+    environment:
+      BASE_URL: http://localhost:3000
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/redux_portal
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: dev-change-me
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+      - redis
+
+  celery:
+    build:
+      context: ./backend
+    command: celery -A app.celery_app.celery_app worker -l info
+    environment:
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/redux_portal
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: dev-change-me
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+    depends_on:
+      - postgres
+      - redis
+
 volumes:
   postgres_data:

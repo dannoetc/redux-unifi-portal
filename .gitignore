@@ -1,0 +1,67 @@
+# ---- OS / Editor ----
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+*.iml
+
+# ---- Env / Secrets ----
+.env
+.env.*
+!.env.example
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+env/
+pip-wheel-metadata/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+.cache/
+pytestdebug.log
+*.log
+
+# ---- Alembic ----
+# Keep migrations tracked; ignore temp files only
+alembic.ini.local
+
+# ---- Node / Frontend ----
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.next/
+out/
+dist/
+coverage/
+*.tsbuildinfo
+
+# ---- Tailwind / PostCSS ----
+.sass-cache/
+.postcss-cache/
+
+# ---- Logs / Runtime ----
+logs/
+*.pid
+*.pid.lock
+
+# ---- Docker ----
+docker-compose.override.yml
+
+# ---- Misc ----
+*.tmp
+*.bak
