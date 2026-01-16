@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
@@ -52,8 +52,9 @@ type SiteOidcForm = {
   allowed_email_domains: string;
 };
 
-export default function SiteDetailPage({ params }: { params: { id: string } }) {
+export default function SiteDetailPage() {
   const searchParams = useSearchParams();
+  const params = useParams<{ id: string }>();
   const tenantId = searchParams.get("tenant");
   const [site, setSite] = useState<SiteResponse | null>(null);
   const [providers, setProviders] = useState<OidcProvider[]>([]);
@@ -77,6 +78,10 @@ export default function SiteDetailPage({ params }: { params: { id: string } }) {
     let active = true;
     async function load() {
       try {
+        if (!params?.id) {
+          setError("Missing site ID.");
+          return;
+        }
         const data = await apiFetch<{ site: SiteResponse }>(
           `/api/admin/tenants/${tenantId}/sites/${params.id}`
         );
@@ -103,13 +108,16 @@ export default function SiteDetailPage({ params }: { params: { id: string } }) {
     return () => {
       active = false;
     };
-  }, [tenantId, params.id, siteForm]);
+  }, [tenantId, params, siteForm]);
 
   const saveSite = async (values: SiteFormValues) => {
     if (!tenantId) {
       return;
     }
     setError(null);
+    if (!params?.id) {
+      return;
+    }
     try {
       const data = await apiFetch<{ site: SiteResponse }>(
         `/api/admin/tenants/${tenantId}/sites/${params.id}`,
@@ -129,6 +137,9 @@ export default function SiteDetailPage({ params }: { params: { id: string } }) {
 
   const saveOidc = async () => {
     if (!tenantId) {
+      return;
+    }
+    if (!params?.id) {
       return;
     }
     try {
