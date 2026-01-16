@@ -6,6 +6,8 @@ if [ -z "$DOMAIN" ]; then
   exit 1
 fi
 
+envsubst '$DOMAIN' < /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf
+
 CERT_DIR="/etc/letsencrypt/live/$DOMAIN"
 CERT_PATH="$CERT_DIR/fullchain.pem"
 KEY_PATH="$CERT_DIR/privkey.pem"
