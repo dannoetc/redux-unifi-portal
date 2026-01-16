@@ -32,6 +32,7 @@ class Site(Base, TimestampMixin):
     logo_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     primary_color: Mapped[str | None] = mapped_column(String(32), nullable=True)
     terms_html: Mapped[str | None] = mapped_column(Text, nullable=True)
+    enable_tos_only: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     support_contact: Mapped[str | None] = mapped_column(String(255), nullable=True)
     success_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
 

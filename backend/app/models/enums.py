@@ -25,6 +25,7 @@ class AuthMethod(str, Enum):
     VOUCHER = "VOUCHER"
     EMAIL_OTP = "EMAIL_OTP"
     OIDC = "OIDC"
+    TOS_ONLY = "TOS_ONLY"
 
 
 class AuthResult(str, Enum):

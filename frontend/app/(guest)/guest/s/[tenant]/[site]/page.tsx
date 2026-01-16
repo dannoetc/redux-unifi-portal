@@ -44,6 +44,7 @@ export default function GuestLanding() {
   const [voucherCode, setVoucherCode] = useState("");
   const [otpEmail, setOtpEmail] = useState("");
   const [otpCode, setOtpCode] = useState("");
+  const [tosAccepted, setTosAccepted] = useState(false);
   const [continueUrl, setContinueUrl] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -184,6 +185,24 @@ export default function GuestLanding() {
     }
   };
 
+  const acceptTos = async () => {
+    if (!portalSessionId || !params?.tenant || !params?.site) {
+      toast.error("Missing portal session.");
+      return;
+    }
+    try {
+      const data = await apiFetch<VoucherResponse>(`/api/guest/${params.tenant}/${params.site}/tos/accept`, {
+        method: "POST",
+        body: JSON.stringify({ portal_session_id: portalSessionId }),
+      });
+      setContinueUrl(data.continue_url);
+      setActivePanel("success");
+      toast.success("Connected.");
+    } catch (error: any) {
+      toast.error(error?.message ?? "Unable to connect.");
+    }
+  };
+
   const startSso = () => {
     if (!portalSessionId || !params?.tenant || !params?.site) {
       toast.error("Missing portal session.");
@@ -238,6 +257,29 @@ export default function GuestLanding() {
 
             {activePanel === "choose" && (
               <div className="space-y-3">
+                {methods.includes("tos_only") && (
+                  <div className="space-y-3">
+                    {config?.branding.terms_html ? (
+                      <label className="flex items-start gap-2 text-xs text-muted-foreground">
+                        <input
+                          type="checkbox"
+                          className="mt-0.5 h-4 w-4 rounded border border-input"
+                          checked={tosAccepted}
+                          onChange={(event) => setTosAccepted(event.target.checked)}
+                        />
+                        <span>I agree to the Terms of Service</span>
+                      </label>
+                    ) : null}
+                    <Button
+                      className="w-full"
+                      style={primaryButtonStyle}
+                      onClick={acceptTos}
+                      disabled={!portalSessionId || (config?.branding.terms_html ? !tosAccepted : false)}
+                    >
+                      Accept terms and connect
+                    </Button>
+                  </div>
+                )}
                 {methods.includes("oidc") && (
                   <Button className="w-full" style={primaryButtonStyle} onClick={startSso} disabled={!portalSessionId}>
                     Continue with SSO

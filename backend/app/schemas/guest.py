@@ -36,3 +36,7 @@ class GuestOtpVerifyRequest(BaseModel):
     portal_session_id: str
     email: str
     code: str
+
+
+class GuestTosAcceptRequest(BaseModel):
+    portal_session_id: str

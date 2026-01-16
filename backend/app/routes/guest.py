@@ -21,10 +21,11 @@ from app.schemas.guest import (
     GuestOtpStartRequest,
     GuestOtpVerifyRequest,
     GuestSessionInitRequest,
+    GuestTosAcceptRequest,
     GuestVoucherRequest,
 )
 from app.services.otp import start_challenge, verify_code
-from app.services.portal_session import create_or_reuse_session, set_status
+from app.services.portal_session import create_or_reuse_session, get_session, set_status
 from app.services.ratelimit import enforce_rate_limit, limit_key_ip, limit_key_mac
 from app.services.unifi import UnifiClient, UnifiPolicy
 from app.services.vouchers import VoucherError, redeem_voucher
@@ -51,6 +52,8 @@ def get_site_config(
         )
 
     methods = ["voucher", "email_otp"]
+    if site.enable_tos_only:
+        methods.append("tos_only")
     oidc_enabled = db.execute(
         select(SiteOidcSetting.id).where(
             SiteOidcSetting.site_id == site.id, SiteOidcSetting.enabled.is_(True)
@@ -114,6 +117,8 @@ def init_session(
     )
 
     methods = ["voucher", "email_otp"]
+    if site.enable_tos_only:
+        methods.append("tos_only")
     oidc_enabled = db.execute(
         select(SiteOidcSetting.id).where(
             SiteOidcSetting.site_id == site.id, SiteOidcSetting.enabled.is_(True)
@@ -327,6 +332,107 @@ def otp_verify(
         result=AuthResult.SUCCESS,
         unifi_client_id=unifi_client_id,
         guest_identity=identity,
+    )
+
+    return {"ok": True, "data": {"continue_url": _continue_url(portal_session, site)}}
+
+
+@router.post("/{tenant_slug}/{site_slug}/tos/accept")
+def tos_accept(
+    tenant_slug: str,
+    site_slug: str,
+    payload: GuestTosAcceptRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> dict:
+    site = _get_site(db, tenant_slug, site_slug)
+    if not site.enabled:
+        raise HTTPException(
+            status_code=404,
+            detail={"ok": False, "error": {"code": "NOT_FOUND", "message": "Site not found."}},
+        )
+    if not site.enable_tos_only:
+        raise HTTPException(
+            status_code=403,
+            detail={"ok": False, "error": {"code": "TOS_ONLY_DISABLED", "message": "TOS-only access disabled."}},
+        )
+
+    portal_session = _get_portal_session(db, payload.portal_session_id, site)
+    redis_client = get_redis_client()
+    redis_session = get_session(redis_client, site.id, portal_session.client_mac)
+    if not redis_session:
+        raise HTTPException(
+            status_code=410,
+            detail={"ok": False, "error": {"code": "SESSION_EXPIRED", "message": "Session expired."}},
+        )
+    if str(redis_session.portal_session_id) != payload.portal_session_id:
+        raise HTTPException(
+            status_code=400,
+            detail={"ok": False, "error": {"code": "SESSION_MISMATCH", "message": "Invalid session."}},
+        )
+
+    if redis_session.status == PortalSessionStatus.AUTHORIZED:
+        if portal_session.status != PortalSessionStatus.AUTHORIZED:
+            set_status(
+                db,
+                redis_client,
+                site_id=site.id,
+                client_mac=portal_session.client_mac,
+                status=PortalSessionStatus.AUTHORIZED,
+            )
+        return {"ok": True, "data": {"continue_url": _continue_url(portal_session, site)}}
+
+    client_ip = request.client.host if request.client else "unknown"
+    enforce_rate_limit(
+        redis_client,
+        scope_key=limit_key_ip(client_ip, "tos_only"),
+        limit=settings.VOUCHER_RATE_LIMIT_PER_IP,
+        window_seconds=settings.VOUCHER_RATE_LIMIT_WINDOW_SECONDS,
+    )
+    enforce_rate_limit(
+        redis_client,
+        scope_key=limit_key_mac(str(site.id), portal_session.client_mac, "tos_only"),
+        limit=settings.VOUCHER_RATE_LIMIT_PER_MAC,
+        window_seconds=settings.VOUCHER_RATE_LIMIT_WINDOW_SECONDS,
+    )
+
+    authorized, reason, unifi_client_id = _authorize_unifi(site, portal_session.client_mac)
+    if not authorized:
+        set_status(
+            db,
+            redis_client,
+            site_id=site.id,
+            client_mac=portal_session.client_mac,
+            status=PortalSessionStatus.FAILED,
+        )
+        _log_auth_event(
+            db,
+            site=site,
+            portal_session=portal_session,
+            method=AuthMethod.TOS_ONLY,
+            result=AuthResult.FAIL,
+            reason=reason,
+            unifi_client_id=unifi_client_id,
+        )
+        raise HTTPException(
+            status_code=502,
+            detail={"ok": False, "error": {"code": "UNIFI_ERROR", "message": "Authorization failed."}},
+        )
+
+    set_status(
+        db,
+        redis_client,
+        site_id=site.id,
+        client_mac=portal_session.client_mac,
+        status=PortalSessionStatus.AUTHORIZED,
+    )
+    _log_auth_event(
+        db,
+        site=site,
+        portal_session=portal_session,
+        method=AuthMethod.TOS_ONLY,
+        result=AuthResult.SUCCESS,
+        unifi_client_id=unifi_client_id,
     )
 
     return {"ok": True, "data": {"continue_url": _continue_url(portal_session, site)}}

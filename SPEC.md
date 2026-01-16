@@ -7,7 +7,7 @@ Target prod domain: `wifi.reduxtc.com`
 ### Primary objectives
 - Hosted external captive portal for UniFi Hotspot networks:
   - Ingress: UniFi redirect to external portal with query params (AP MAC, client MAC, SSID, original URL, timestamp).
-  - Guest auth methods: **OIDC SSO**, **Voucher**, **Email OTP**
+  - Guest auth methods: **OIDC SSO**, **Voucher**, **Email OTP**, **TOS-only**
   - Egress: authorize guests via UniFi **Network API** `AUTHORIZE_GUEST_ACCESS`.
 
 - **MSP-first** from day one:
@@ -191,6 +191,7 @@ Server actions:
 - `POST /api/guest/{tenant}/{site}/voucher`
 - `POST /api/guest/{tenant}/{site}/otp/start`
 - `POST /api/guest/{tenant}/{site}/otp/verify`
+- `POST /api/guest/{tenant}/{site}/tos/accept`
 - `GET  /api/guest/{tenant}/{site}/config` (branding + enabled methods + policy defaults)
 - `POST /api/guest/{tenant}/{site}/authorize` (internal use after auth)
 

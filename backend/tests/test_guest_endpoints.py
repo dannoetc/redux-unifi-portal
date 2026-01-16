@@ -22,6 +22,7 @@ from app.models import (
     VoucherBatch,
 )
 from app.services.otp import start_challenge
+from app.services.portal_session import create_or_reuse_session, set_status
 from app.services.unifi import UnifiClient
 
 
@@ -47,7 +48,7 @@ class FakeRedis:
         return None
 
 
-def _seed_site(db_session):
+def _seed_site(db_session, *, enable_tos_only: bool = False):
     tenant = Tenant(id=uuid.uuid4(), slug="acme", name="Acme", status=TenantStatus.ACTIVE)
     site = Site(
         id=uuid.uuid4(),
@@ -62,6 +63,7 @@ def _seed_site(db_session):
         default_data_limit_mb=None,
         default_rx_kbps=None,
         default_tx_kbps=None,
+        enable_tos_only=enable_tos_only,
     )
     db_session.add_all([tenant, site])
     db_session.commit()
@@ -232,3 +234,142 @@ def test_otp_verify_authorizes_unifi_httpx(client, db_session, monkeypatch):
         )
     ).scalar_one_or_none()
     assert auth_event is not None
+
+
+def test_tos_only_disabled(client, db_session):
+    tenant, site = _seed_site(db_session, enable_tos_only=False)
+    portal_session = _seed_portal_session(db_session, tenant, site)
+
+    response = client.post(
+        f"/api/guest/{tenant.slug}/{site.slug}/tos/accept",
+        json={"portal_session_id": str(portal_session.id)},
+    )
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "TOS_ONLY_DISABLED"
+
+
+def test_tos_only_authorizes_unifi_httpx(client, db_session, monkeypatch):
+    tenant, site = _seed_site(db_session, enable_tos_only=True)
+    redis_client = FakeRedis()
+    from app import routes as _routes
+
+    monkeypatch.setattr(_routes.guest, "get_redis_client", lambda: redis_client)
+
+    session_data = create_or_reuse_session(
+        db_session,
+        redis_client,
+        tenant_id=tenant.id,
+        site=site,
+        client_mac="AA:BB:CC:DD:EE:FF",
+        ap_mac="11:22:33:44:55:66",
+        ssid="TestWiFi",
+        orig_url="https://example.com",
+        ip="127.0.0.1",
+        user_agent="pytest",
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":
+            assert request.url.path == "/v1/sites/default/clients"
+            assert request.url.params.get("filter") == "macAddress.eq('AA:BB:CC:DD:EE:FF')"
+            return httpx.Response(200, json={"data": [{"id": "client-3"}]})
+        if request.method == "POST":
+            assert request.url.path == "/v1/sites/default/clients/client-3/actions"
+            payload = json.loads(request.content.decode("utf-8"))
+            assert payload["action"] == "AUTHORIZE_GUEST_ACCESS"
+            assert payload["timeLimitMinutes"] == 60
+            return httpx.Response(200, json={"ok": True})
+        return httpx.Response(500, json={"error": "unexpected"})
+
+    transport = httpx.MockTransport(handler)
+    monkeypatch.setattr(_routes.guest, "UnifiClient", _unifi_factory(transport))
+
+    response = client.post(
+        f"/api/guest/{tenant.slug}/{site.slug}/tos/accept",
+        json={"portal_session_id": str(session_data.portal_session_id)},
+    )
+    assert response.status_code == 200
+    assert response.json()["ok"] is True
+
+    auth_event = db_session.execute(
+        select(AuthEvent).where(
+            AuthEvent.portal_session_id == session_data.portal_session_id,
+            AuthEvent.method == AuthMethod.TOS_ONLY,
+            AuthEvent.result == AuthResult.SUCCESS,
+        )
+    ).scalar_one_or_none()
+    assert auth_event is not None
+
+
+def test_tos_only_idempotent_when_authorized(client, db_session, monkeypatch):
+    tenant, site = _seed_site(db_session, enable_tos_only=True)
+    redis_client = FakeRedis()
+    from app import routes as _routes
+
+    monkeypatch.setattr(_routes.guest, "get_redis_client", lambda: redis_client)
+
+    session_data = create_or_reuse_session(
+        db_session,
+        redis_client,
+        tenant_id=tenant.id,
+        site=site,
+        client_mac="AA:BB:CC:DD:EE:FF",
+        ap_mac="11:22:33:44:55:66",
+        ssid="TestWiFi",
+        orig_url="https://example.com",
+        ip="127.0.0.1",
+        user_agent="pytest",
+    )
+    set_status(
+        db_session,
+        redis_client,
+        site_id=site.id,
+        client_mac="AA:BB:CC:DD:EE:FF",
+        status=PortalSessionStatus.AUTHORIZED,
+    )
+
+    monkeypatch.setattr(_routes.guest, "UnifiClient", lambda *args, **kwargs: None)
+
+    response = client.post(
+        f"/api/guest/{tenant.slug}/{site.slug}/tos/accept",
+        json={"portal_session_id": str(session_data.portal_session_id)},
+    )
+    assert response.status_code == 200
+    assert response.json()["ok"] is True
+
+    auth_event = db_session.execute(
+        select(AuthEvent).where(
+            AuthEvent.portal_session_id == session_data.portal_session_id,
+            AuthEvent.method == AuthMethod.TOS_ONLY,
+        )
+    ).scalar_one_or_none()
+    assert auth_event is None
+
+
+def test_tos_only_rate_limit(client, db_session, monkeypatch):
+    tenant, site = _seed_site(db_session, enable_tos_only=True)
+    redis_client = FakeRedis()
+    from app import routes as _routes
+
+    monkeypatch.setattr(_routes.guest, "get_redis_client", lambda: redis_client)
+    monkeypatch.setattr(_routes.guest.settings, "VOUCHER_RATE_LIMIT_PER_IP", 0)
+    monkeypatch.setattr(_routes.guest.settings, "VOUCHER_RATE_LIMIT_PER_MAC", 0)
+
+    session_data = create_or_reuse_session(
+        db_session,
+        redis_client,
+        tenant_id=tenant.id,
+        site=site,
+        client_mac="AA:BB:CC:DD:EE:FF",
+        ap_mac="11:22:33:44:55:66",
+        ssid="TestWiFi",
+        orig_url="https://example.com",
+        ip="127.0.0.1",
+        user_agent="pytest",
+    )
+
+    response = client.post(
+        f"/api/guest/{tenant.slug}/{site.slug}/tos/accept",
+        json={"portal_session_id": str(session_data.portal_session_id)},
+    )
+    assert response.status_code == 429

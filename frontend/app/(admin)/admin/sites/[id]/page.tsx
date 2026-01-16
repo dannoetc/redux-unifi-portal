@@ -23,6 +23,7 @@ const siteSchema = z.object({
   terms_html: z.string().optional().or(z.literal("")),
   support_contact: z.string().optional().or(z.literal("")),
   success_url: z.string().optional().or(z.literal("")),
+  enable_tos_only: z.boolean().default(false),
   unifi_base_url: z.string().optional().or(z.literal("")),
   unifi_site_id: z.string().optional().or(z.literal("")),
   unifi_api_key_ref: z.string().optional().or(z.literal("")),
@@ -229,6 +230,15 @@ export default function SiteDetailPage() {
                 {...siteForm.register("enabled")}
               />
               <Label htmlFor="enabled">Site enabled</Label>
+            </div>
+            <div className="flex items-center gap-2 md:col-span-2">
+              <input
+                id="enable_tos_only"
+                type="checkbox"
+                className="h-4 w-4 rounded border border-input"
+                {...siteForm.register("enable_tos_only")}
+              />
+              <Label htmlFor="enable_tos_only">Enable TOS-only guest access</Label>
             </div>
             <div className="md:col-span-2">
               <Button type="submit">Save site</Button>

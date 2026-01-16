@@ -14,7 +14,17 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.deps import ADMIN_SESSION_COOKIE, get_current_admin, require_tenant_role
-from app.models import AdminRole, AdminUser, OidcProvider, Site, SiteOidcSetting, Voucher, VoucherBatch
+from app.models import (
+    AdminRole,
+    AdminUser,
+    OidcProvider,
+    Site,
+    SiteOidcSetting,
+    Tenant,
+    TenantStatus,
+    Voucher,
+    VoucherBatch,
+)
 from app.schemas.admin import AdminLoginRequest
 from app.schemas.admin_oidc import (
     OidcProviderCreateRequest,
@@ -23,6 +33,8 @@ from app.schemas.admin_oidc import (
     SiteOidcResponse,
     SiteOidcUpdateRequest,
 )
+from app.schemas.admin_site import SiteResponse, SiteUpdateRequest
+from app.schemas.admin_tenant import TenantCreateRequest, TenantResponse
 from app.schemas.admin_voucher import VoucherBatchCreateRequest
 from app.security import create_session_token, verify_password
 from app.settings import settings
@@ -76,6 +88,159 @@ def me(current_admin: AdminUser = Depends(get_current_admin)) -> dict:
             }
         },
     }
+
+
+@router.get("/tenants")
+def list_tenants(
+    db: Session = Depends(get_db),
+    _admin: AdminUser = Depends(require_superadmin),
+) -> dict:
+    tenants = db.execute(select(Tenant)).scalars().all()
+    return {
+        "ok": True,
+        "data": {
+            "tenants": [
+                TenantResponse(
+                    id=str(tenant.id),
+                    name=tenant.name,
+                    slug=tenant.slug,
+                    status=tenant.status.value,
+                ).model_dump(mode="json")
+                for tenant in tenants
+            ]
+        },
+    }
+
+
+@router.post("/tenants")
+def create_tenant(
+    payload: TenantCreateRequest,
+    db: Session = Depends(get_db),
+    _admin: AdminUser = Depends(require_superadmin),
+) -> dict:
+    status_value = (payload.status or TenantStatus.ACTIVE.value).strip().upper()
+    try:
+        status = TenantStatus(status_value)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"ok": False, "error": {"code": "INVALID_STATUS", "message": "Invalid tenant status."}},
+        ) from exc
+
+    tenant = Tenant(
+        id=uuid.uuid4(),
+        slug=payload.slug,
+        name=payload.name,
+        status=status,
+    )
+    db.add(tenant)
+    db.commit()
+    db.refresh(tenant)
+    return {
+        "ok": True,
+        "data": {
+            "tenant": TenantResponse(
+                id=str(tenant.id),
+                name=tenant.name,
+                slug=tenant.slug,
+                status=tenant.status.value,
+            ).model_dump(mode="json")
+        },
+    }
+
+
+@router.get("/tenants/{tenant_id}/sites")
+def list_sites(
+    tenant_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    _admin: AdminUser = Depends(require_tenant_role([AdminRole.TENANT_VIEWER, AdminRole.TENANT_ADMIN])),
+) -> dict:
+    sites = db.execute(select(Site).where(Site.tenant_id == tenant_id)).scalars().all()
+    return {
+        "ok": True,
+        "data": {
+            "sites": [
+                {
+                    "id": str(site.id),
+                    "slug": site.slug,
+                    "display_name": site.display_name,
+                    "enabled": site.enabled,
+                    "unifi_site_id": site.unifi_site_id,
+                }
+                for site in sites
+            ]
+        },
+    }
+
+
+@router.get("/tenants/{tenant_id}/sites/{site_id}")
+def get_site(
+    tenant_id: uuid.UUID,
+    site_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    _admin: AdminUser = Depends(require_tenant_role([AdminRole.TENANT_VIEWER, AdminRole.TENANT_ADMIN])),
+) -> dict:
+    site = db.execute(select(Site).where(Site.id == site_id, Site.tenant_id == tenant_id)).scalar_one_or_none()
+    if not site:
+        raise HTTPException(
+            status_code=404,
+            detail={"ok": False, "error": {"code": "NOT_FOUND", "message": "Site not found."}},
+        )
+    return {"ok": True, "data": {"site": _site_response(site).model_dump(mode="json")}}
+
+
+@router.put("/tenants/{tenant_id}/sites/{site_id}")
+def update_site(
+    tenant_id: uuid.UUID,
+    site_id: uuid.UUID,
+    payload: SiteUpdateRequest,
+    db: Session = Depends(get_db),
+    _admin: AdminUser = Depends(require_tenant_role([AdminRole.TENANT_ADMIN])),
+) -> dict:
+    site = db.execute(select(Site).where(Site.id == site_id, Site.tenant_id == tenant_id)).scalar_one_or_none()
+    if not site:
+        raise HTTPException(
+            status_code=404,
+            detail={"ok": False, "error": {"code": "NOT_FOUND", "message": "Site not found."}},
+        )
+
+    if payload.display_name is not None:
+        site.display_name = payload.display_name
+    if payload.slug is not None:
+        site.slug = payload.slug
+    if payload.enabled is not None:
+        site.enabled = payload.enabled
+    if payload.logo_url is not None:
+        site.logo_url = _empty_to_none(payload.logo_url)
+    if payload.primary_color is not None:
+        site.primary_color = _empty_to_none(payload.primary_color)
+    if payload.terms_html is not None:
+        site.terms_html = _empty_to_none(payload.terms_html)
+    if payload.support_contact is not None:
+        site.support_contact = _empty_to_none(payload.support_contact)
+    if payload.success_url is not None:
+        site.success_url = _empty_to_none(payload.success_url)
+    if payload.enable_tos_only is not None:
+        site.enable_tos_only = payload.enable_tos_only
+    if payload.unifi_base_url is not None:
+        site.unifi_base_url = _empty_to_none(payload.unifi_base_url) or site.unifi_base_url
+    if payload.unifi_site_id is not None:
+        site.unifi_site_id = _empty_to_none(payload.unifi_site_id) or site.unifi_site_id
+    if payload.unifi_api_key_ref is not None:
+        site.unifi_api_key_ref = _empty_to_none(payload.unifi_api_key_ref) or site.unifi_api_key_ref
+    if payload.default_time_limit_minutes is not None:
+        site.default_time_limit_minutes = payload.default_time_limit_minutes
+    if payload.default_data_limit_mb is not None:
+        site.default_data_limit_mb = payload.default_data_limit_mb
+    if payload.default_rx_kbps is not None:
+        site.default_rx_kbps = payload.default_rx_kbps
+    if payload.default_tx_kbps is not None:
+        site.default_tx_kbps = payload.default_tx_kbps
+
+    db.add(site)
+    db.commit()
+    db.refresh(site)
+    return {"ok": True, "data": {"site": _site_response(site).model_dump(mode="json")}}
 
 
 @router.get("/tenants/{tenant_id}/oidc-providers")
@@ -383,3 +548,31 @@ def _parse_domains(domains: str | None) -> list[str] | None:
         return None
     values = [value.strip() for value in domains.split(",") if value.strip()]
     return values or None
+
+
+def _empty_to_none(value: str | None) -> str | None:
+    if value == "":
+        return None
+    return value
+
+
+def _site_response(site: Site) -> SiteResponse:
+    return SiteResponse(
+        id=str(site.id),
+        slug=site.slug,
+        display_name=site.display_name,
+        enabled=site.enabled,
+        logo_url=site.logo_url,
+        primary_color=site.primary_color,
+        terms_html=site.terms_html,
+        support_contact=site.support_contact,
+        success_url=site.success_url,
+        enable_tos_only=site.enable_tos_only,
+        unifi_base_url=site.unifi_base_url,
+        unifi_site_id=site.unifi_site_id,
+        unifi_api_key_ref=site.unifi_api_key_ref,
+        default_time_limit_minutes=site.default_time_limit_minutes,
+        default_data_limit_mb=site.default_data_limit_mb,
+        default_rx_kbps=site.default_rx_kbps,
+        default_tx_kbps=site.default_tx_kbps,
+    )
