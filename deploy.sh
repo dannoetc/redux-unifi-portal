@@ -16,6 +16,10 @@ COMPOSE_FILES=(
   -f "${ROOT_DIR}/docker-compose.yml"
 )
 
+if [[ -f "${ROOT_DIR}/docker-compose.nginx-certbot.yml" ]]; then
+  COMPOSE_FILES+=(-f "${ROOT_DIR}/docker-compose.nginx-certbot.yml")
+fi
+
 compose() {
   DOCKER_CONFIG="${DOCKER_CONFIG}" docker compose --env-file "${ENV_FILE}" "${COMPOSE_FILES[@]}" "$@"
 }

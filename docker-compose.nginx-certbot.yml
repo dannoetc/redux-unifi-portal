@@ -1,0 +1,64 @@
+services:
+  nginx:
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -eu
+        if [ ! -x /entrypoint.sh ]; then
+          chmod +x /entrypoint.sh || true
+        fi
+        exec /entrypoint.sh
+    command: []
+
+  certbot:
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN}
+      CERTBOT_EMAIL: ${LETSENCRYPT_EMAIL}
+    volumes:
+      - certbot-etc:/etc/letsencrypt
+      - certbot-var:/var/www/certbot
+      - certbot-lib:/var/lib/letsencrypt
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -eu
+
+        if [ -z "$${DOMAIN:-}" ]; then
+          echo "[ERROR] Missing DOMAIN" >&2
+          exit 1
+        fi
+        if [ -z "$${CERTBOT_EMAIL:-}" ]; then
+          echo "[ERROR] Missing LETSENCRYPT_EMAIL" >&2
+          exit 1
+        fi
+
+        mkdir -p /var/www/certbot/.well-known/acme-challenge || true
+
+        if [ ! -f "/etc/letsencrypt/live/$${DOMAIN}/fullchain.pem" ]; then
+          echo "[INFO] Initial cert missing; requesting Let's Encrypt cert for: $${DOMAIN}"
+          certbot certonly --webroot -w /var/www/certbot -d "$${DOMAIN}" \
+            --email "$${CERTBOT_EMAIL}" --agree-tos --non-interactive --no-eff-email \
+            --preferred-challenges http \
+            --keep-until-expiring \
+            --verbose
+          echo "[OK] Initial certificate obtained."
+        else
+          echo "[OK] Existing certificate present for $${DOMAIN}; skipping initial issuance."
+        fi
+
+        echo "[INFO] Starting renewal loop (every 12h)."
+        while true; do
+          if certbot renew --webroot -w /var/www/certbot --verbose; then
+            echo "[OK] Certbot renew completed."
+          else
+            echo "[WARN] Certbot renew failed; retrying in 12h."
+          fi
+          sleep 12h
+        done
+    command: []
+
+volumes:
+  certbot-lib:
