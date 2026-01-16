@@ -2,7 +2,7 @@
 
 import type { CSSProperties } from "react";
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 
 import { apiFetch, API_BASE_URL } from "@/lib/api";
@@ -33,12 +33,9 @@ type SessionInitResponse = { portal_session_id: string; methods: string[] };
 
 type VoucherResponse = { continue_url: string };
 
-export default function GuestLanding({
-  params,
-}: {
-  params: { tenant: string; site: string };
-}) {
+export default function GuestLanding() {
   const searchParams = useSearchParams();
+  const params = useParams<{ tenant: string; site: string }>();
   const [config, setConfig] = useState<ConfigResponse | null>(null);
   const [methods, setMethods] = useState<string[]>([]);
   const [portalSessionId, setPortalSessionId] = useState<string | null>(null);
@@ -71,6 +68,9 @@ export default function GuestLanding({
     let active = true;
     async function load() {
       try {
+        if (!params?.tenant || !params?.site) {
+          return;
+        }
         const configData = await apiFetch<ConfigResponse>(
           `/api/guest/${params.tenant}/${params.site}/config`
         );
@@ -125,10 +125,10 @@ export default function GuestLanding({
     return () => {
       active = false;
     };
-  }, [params.tenant, params.site, portalParam, searchParams]);
+  }, [params, portalParam, searchParams]);
 
   const sendVoucher = async () => {
-    if (!portalSessionId) {
+    if (!portalSessionId || !params?.tenant || !params?.site) {
       toast.error("Missing portal session.");
       return;
     }
@@ -146,7 +146,7 @@ export default function GuestLanding({
   };
 
   const startOtp = async () => {
-    if (!portalSessionId) {
+    if (!portalSessionId || !params?.tenant || !params?.site) {
       toast.error("Missing portal session.");
       return;
     }
@@ -163,7 +163,7 @@ export default function GuestLanding({
   };
 
   const verifyOtp = async () => {
-    if (!portalSessionId) {
+    if (!portalSessionId || !params?.tenant || !params?.site) {
       toast.error("Missing portal session.");
       return;
     }
@@ -185,14 +185,14 @@ export default function GuestLanding({
   };
 
   const startSso = () => {
-    if (!portalSessionId) {
+    if (!portalSessionId || !params?.tenant || !params?.site) {
       toast.error("Missing portal session.");
       return;
     }
     window.location.href = `${API_BASE_URL}/api/oidc/${params.tenant}/${params.site}/start?portal_session_id=${portalSessionId}`;
   };
 
-  const openInBrowserUrl = portalSessionId
+  const openInBrowserUrl = portalSessionId && params?.tenant && params?.site
     ? `${API_BASE_URL}/api/oidc/${params.tenant}/${params.site}/start?portal_session_id=${portalSessionId}`
     : "";
 

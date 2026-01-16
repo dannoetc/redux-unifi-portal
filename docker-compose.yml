@@ -19,12 +19,12 @@ services:
     build:
       context: ./backend
     environment:
-      BASE_URL: http://localhost:3000
-      DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/redux_portal
-      REDIS_URL: redis://redis:6379/0
-      SECRET_KEY: dev-change-me
-      CELERY_BROKER_URL: redis://redis:6379/0
-      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      BASE_URL: ${BASE_URL:-http://localhost:3000}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://postgres:postgres@postgres:5432/redux_portal}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      SECRET_KEY: ${SECRET_KEY:-dev-change-me}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
     ports:
       - "8000:8000"
     depends_on:
@@ -36,14 +36,54 @@ services:
       context: ./backend
     command: celery -A app.celery_app.celery_app worker -l info
     environment:
-      DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/redux_portal
-      REDIS_URL: redis://redis:6379/0
-      SECRET_KEY: dev-change-me
-      CELERY_BROKER_URL: redis://redis:6379/0
-      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://postgres:postgres@postgres:5432/redux_portal}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      SECRET_KEY: ${SECRET_KEY:-dev-change-me}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
     depends_on:
       - postgres
       - redis
 
+  frontend:
+    build:
+      context: ./frontend
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
+    expose:
+      - "3000"
+    depends_on:
+      - api
+
+  nginx:
+    build:
+      context: ./frontend/nginx
+    environment:
+      DOMAIN: ${DOMAIN:-wifi.reduxtc.com}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - certbot-etc:/etc/letsencrypt
+      - certbot-var:/var/www/certbot
+    depends_on:
+      - frontend
+      - api
+
+  certbot:
+    image: certbot/certbot:latest
+    volumes:
+      - certbot-etc:/etc/letsencrypt
+      - certbot-var:/var/www/certbot
+    command: >
+      certonly --webroot --webroot-path=/var/www/certbot
+      --email ${LETSENCRYPT_EMAIL}
+      --agree-tos --no-eff-email
+      -d ${DOMAIN}
+    depends_on:
+      - nginx
+
 volumes:
   postgres_data:
+  certbot-etc:
+  certbot-var:
