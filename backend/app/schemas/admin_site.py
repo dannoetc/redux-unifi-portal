@@ -3,6 +3,25 @@ from __future__ import annotations
 from pydantic import BaseModel
 
 
+class SiteCreateRequest(BaseModel):
+    display_name: str
+    slug: str
+    enabled: bool = True
+    logo_url: str | None = None
+    primary_color: str | None = None
+    terms_html: str | None = None
+    support_contact: str | None = None
+    success_url: str | None = None
+    enable_tos_only: bool = False
+    unifi_base_url: str
+    unifi_site_id: str
+    unifi_api_key_ref: str
+    default_time_limit_minutes: int = 60
+    default_data_limit_mb: int | None = None
+    default_rx_kbps: int | None = None
+    default_tx_kbps: int | None = None
+
+
 class SiteUpdateRequest(BaseModel):
     display_name: str | None = None
     slug: str | None = None

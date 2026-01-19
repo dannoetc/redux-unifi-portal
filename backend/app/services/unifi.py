@@ -135,3 +135,20 @@ class UnifiClient:
             )
             raise UnifiApiError("UniFi returned an error.", status_code=response.status_code)
         return response.json()
+
+    def get_site(self) -> dict:
+        endpoint = f"/v1/sites/{self.site_id}"
+        try:
+            response = self._request("GET", endpoint)
+        except httpx.HTTPError as exc:
+            logger.error("unifi_request_failed", **self._log_context(), endpoint="GET site", error=str(exc))
+            raise UnifiApiError("UniFi request failed.") from exc
+        if response.status_code >= 400:
+            logger.error(
+                "unifi_request_error",
+                **self._log_context(),
+                endpoint="GET site",
+                status_code=response.status_code,
+            )
+            raise UnifiApiError("UniFi returned an error.", status_code=response.status_code)
+        return response.json()

@@ -36,6 +36,9 @@ export default function TenantsPage() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [tenantToDelete, setTenantToDelete] = useState<Tenant | null>(null);
 
   const form = useForm<CreateTenant>({ resolver: zodResolver(schema) });
 
@@ -76,7 +79,29 @@ export default function TenantsPage() {
       {
         accessorKey: "status",
         header: "Status",
-        cell: ({ row }) => row.original.status ?? "active",
+        cell: ({ row }) => (
+          <span className="rounded-full bg-emerald-500/10 px-2 py-1 text-xs font-semibold uppercase text-emerald-600">
+            {row.original.status ?? "active"}
+          </span>
+        ),
+      },
+      {
+        id: "actions",
+        header: "",
+        cell: ({ row }) => (
+          <div className="flex items-center justify-end gap-2">
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => {
+                setTenantToDelete(row.original);
+                setDeleteOpen(true);
+              }}
+            >
+              Remove
+            </Button>
+          </div>
+        ),
       },
     ],
     []
@@ -94,6 +119,24 @@ export default function TenantsPage() {
       form.reset();
     } catch (error: any) {
       toast.error(error?.message ?? "Unable to create tenant.");
+    }
+  };
+
+  const deleteTenant = async () => {
+    if (!tenantToDelete) {
+      return;
+    }
+    setDeleting(true);
+    try {
+      await apiFetch(`/api/admin/tenants/${tenantToDelete.id}`, { method: "DELETE" });
+      setTenants((prev) => prev.filter((tenant) => tenant.id !== tenantToDelete.id));
+      toast.success("Tenant removed.");
+      setDeleteOpen(false);
+      setTenantToDelete(null);
+    } catch (error: any) {
+      toast.error(error?.message ?? "Unable to remove tenant.");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -134,12 +177,44 @@ export default function TenantsPage() {
         </Dialog>
       </div>
       <Card className="p-4">
+        <h2 className="text-sm font-semibold text-foreground">Provisioning checklist</h2>
+        <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
+          <li>1. Create a tenant and capture the tenant slug.</li>
+          <li>2. Add one or more sites with UniFi credentials and default access policy.</li>
+          <li>
+            3. Set the UniFi external portal URL to{" "}
+            <span className="font-medium text-foreground">
+              https://wifi.reduxtc.com/guest/s/&lt;tenant_slug&gt;/&lt;site_slug&gt;/
+            </span>
+            .
+          </li>
+        </ul>
+      </Card>
+      <Card className="p-4">
         {loading ? (
           <div className="text-sm text-muted-foreground">Loading tenants...</div>
         ) : (
           <DataTable columns={columns} data={tenants} />
         )}
       </Card>
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Remove tenant</DialogTitle>
+            <DialogDescription>
+              This will permanently remove {tenantToDelete?.name ?? "this tenant"} and all associated data.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setDeleteOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={deleteTenant} disabled={deleting}>
+              {deleting ? "Removing..." : "Confirm remove"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
