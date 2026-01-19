@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.deps import ADMIN_SESSION_COOKIE, get_current_admin, require_tenant_role
+from app.deps import ADMIN_SESSION_COOKIE, get_current_admin, require_superadmin, require_tenant_role
 from app.models import (
     AdminRole,
     AdminUser,
