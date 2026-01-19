@@ -63,6 +63,7 @@ export default function SiteDetailPage() {
   const [testStatus, setTestStatus] = useState<{ latencyMs: number; siteName?: string } | null>(null);
   const [testError, setTestError] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
+  const [tenantSlug, setTenantSlug] = useState<string | null>(null);
 
   const siteForm = useForm<SiteFormValues>({
     resolver: zodResolver(siteSchema),
@@ -101,6 +102,13 @@ export default function SiteDetailPage() {
           return;
         }
         setProviders(providersData.providers);
+        const tenantData = await apiFetch<{ tenant: { slug: string } }>(
+          `/api/admin/tenants/${tenantId}`
+        );
+        if (!active) {
+          return;
+        }
+        setTenantSlug(tenantData.tenant.slug);
       } catch (err: any) {
         toast.error(err?.message ?? "Unable to load site.");
         if (active) {
@@ -205,6 +213,17 @@ export default function SiteDetailPage() {
         <p className="mt-1 text-sm text-muted-foreground">
           {site?.display_name ?? "Branding, policy defaults, and UniFi connection."}
         </p>
+        {tenantSlug && site?.slug ? (
+          <Button asChild variant="ghost" size="sm" className="mt-3">
+            <a
+              href={`/guest/s/${tenantSlug}/${site.slug}?preview=1`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Preview portal
+            </a>
+          </Button>
+        ) : null}
       </div>
       {error && (
         <Alert className="border-destructive/40">

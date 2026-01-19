@@ -23,6 +23,10 @@ type TenantListResponse = {
   tenants: TenantOption[];
 };
 
+type TenantResponse = {
+  tenant: TenantOption;
+};
+
 export function useTenantSelection() {
   const [tenantId, setTenantId] = useState<string | null>(null);
   const [tenants, setTenants] = useState<TenantOption[]>([]);
@@ -46,14 +50,13 @@ export function useTenantSelection() {
         } else {
           const firstMembership = me.admin_user.memberships[0];
           if (firstMembership?.tenant_id) {
-            setTenantId((current) => current ?? firstMembership.tenant_id);
-            setTenants([
-              {
-                id: firstMembership.tenant_id,
-                name: `Tenant ${firstMembership.tenant_id.slice(0, 8)}`,
-                slug: firstMembership.tenant_id,
-              },
-            ]);
+            const tenantId = firstMembership.tenant_id;
+            setTenantId((current) => current ?? tenantId);
+            const data = await apiFetch<TenantResponse>(`/api/admin/tenants/${tenantId}`);
+            if (!active) {
+              return;
+            }
+            setTenants([data.tenant]);
           }
         }
       } catch (error: any) {

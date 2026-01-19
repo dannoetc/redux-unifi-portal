@@ -116,6 +116,33 @@ def list_tenants(
     }
 
 
+@router.get("/tenants/{tenant_id}")
+def get_tenant(
+    tenant_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    _admin: AdminUser = Depends(require_tenant_role([AdminRole.TENANT_VIEWER, AdminRole.TENANT_ADMIN])),
+) -> dict:
+    tenant = db.execute(select(Tenant).where(Tenant.id == tenant_id)).scalar_one_or_none()
+    if not tenant:
+        raise HTTPException(
+            status_code=404,
+            detail={"ok": False, "error": {"code": "NOT_FOUND", "message": "Tenant not found."}},
+        )
+    return {
+        "ok": True,
+        "data": {
+            "tenant": TenantResponse(
+                id=str(tenant.id),
+                name=tenant.name,
+                slug=tenant.slug,
+                status=tenant.status.value,
+                unifi_base_url=tenant.unifi_base_url,
+                unifi_api_key_ref=tenant.unifi_api_key_ref,
+            ).model_dump(mode="json")
+        },
+    }
+
+
 @router.post("/tenants")
 def create_tenant(
     payload: TenantCreateRequest,

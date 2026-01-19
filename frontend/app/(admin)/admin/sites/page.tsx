@@ -60,6 +60,11 @@ export default function SitesPage() {
     defaultValues: { enabled: true, default_time_limit_minutes: 60 },
   });
 
+  const tenantSlug = useMemo(
+    () => tenants.find((tenant) => tenant.id === tenantId)?.slug ?? null,
+    [tenantId, tenants]
+  );
+
   useEffect(() => {
     if (!tenantId) {
       setSites([]);
@@ -114,6 +119,17 @@ export default function SitesPage() {
         header: "",
         cell: ({ row }) => (
           <div className="flex items-center justify-end gap-2">
+            <Button asChild variant="ghost" size="sm">
+              <a
+                href={
+                  tenantSlug ? `/guest/s/${tenantSlug}/${row.original.slug}?preview=1` : "#"
+                }
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Preview
+              </a>
+            </Button>
             <Button asChild variant="outline" size="sm">
               <a href={`/admin/sites/${row.original.id}?tenant=${tenantId ?? ""}`}>Edit</a>
             </Button>
@@ -131,7 +147,7 @@ export default function SitesPage() {
         ),
       },
     ],
-    [tenantId]
+    [tenantId, tenantSlug]
   );
 
   const onSubmit = async (values: CreateSite) => {

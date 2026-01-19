@@ -50,6 +50,7 @@ export default function GuestLanding() {
 
   const portalParam = searchParams.get("portal_session_id");
   const errorParam = searchParams.get("error");
+  const previewParam = searchParams.get("preview");
 
   const brandStyle = useMemo(() => {
     if (!config?.branding.primary_color) {
@@ -83,6 +84,11 @@ export default function GuestLanding() {
 
         if (portalParam) {
           setPortalSessionId(portalParam);
+          return;
+        }
+
+        if (previewParam) {
+          setLoading(false);
           return;
         }
 
@@ -257,6 +263,11 @@ export default function GuestLanding() {
 
             {activePanel === "choose" && (
               <div className="space-y-3">
+                {previewParam ? (
+                  <div className="rounded-md border border-dashed border-input bg-muted/30 p-3 text-xs text-muted-foreground">
+                    Preview mode. Authorization actions are disabled.
+                  </div>
+                ) : null}
                 {methods.includes("tos_only") && (
                   <div className="space-y-3">
                     {config?.branding.terms_html ? (
@@ -274,26 +285,35 @@ export default function GuestLanding() {
                       className="w-full"
                       style={primaryButtonStyle}
                       onClick={acceptTos}
-                      disabled={!portalSessionId || (config?.branding.terms_html ? !tosAccepted : false)}
+                      disabled={
+                        !portalSessionId ||
+                        Boolean(previewParam) ||
+                        (config?.branding.terms_html ? !tosAccepted : false)
+                      }
                     >
                       Accept terms and connect
                     </Button>
                   </div>
                 )}
                 {methods.includes("oidc") && (
-                  <Button className="w-full" style={primaryButtonStyle} onClick={startSso} disabled={!portalSessionId}>
+                  <Button
+                    className="w-full"
+                    style={primaryButtonStyle}
+                    onClick={startSso}
+                    disabled={!portalSessionId || Boolean(previewParam)}
+                  >
                     Continue with SSO
                   </Button>
                 )}
                 {methods.includes("voucher") && (
                   <Button className="w-full" variant="outline" onClick={() => setActivePanel("voucher")}
-                    disabled={!portalSessionId}>
+                    disabled={!portalSessionId || Boolean(previewParam)}>
                     Use voucher code
                   </Button>
                 )}
                 {methods.includes("email_otp") && (
                   <Button className="w-full" variant="secondary" onClick={() => setActivePanel("otp")}
-                    disabled={!portalSessionId}>
+                    disabled={!portalSessionId || Boolean(previewParam)}>
                     Email me a code
                   </Button>
                 )}
