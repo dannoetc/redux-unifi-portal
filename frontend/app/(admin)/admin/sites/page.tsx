@@ -35,9 +35,9 @@ const siteSchema = z.object({
   display_name: z.string().min(2),
   slug: z.string().min(2),
   enabled: z.boolean().default(true),
-  unifi_base_url: z.string().url(),
+  unifi_base_url: z.string().url().optional().or(z.literal("")),
   unifi_site_id: z.string().min(1),
-  unifi_api_key_ref: z.string().min(1),
+  unifi_api_key_ref: z.string().optional().or(z.literal("")),
   default_time_limit_minutes: z.coerce.number().min(1),
   default_data_limit_mb: optionalNumber,
   default_rx_kbps: optionalNumber,
@@ -217,16 +217,16 @@ export default function SitesPage() {
                   <Input id="slug" {...form.register("slug")} />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="unifi_base_url">UniFi base URL</Label>
-                  <Input id="unifi_base_url" placeholder="https://unifi.local" {...form.register("unifi_base_url")} />
+                  <Label htmlFor="unifi_base_url">UniFi base URL (optional override)</Label>
+                  <Input id="unifi_base_url" placeholder="Use tenant controller" {...form.register("unifi_base_url")} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="unifi_site_id">UniFi site ID</Label>
                   <Input id="unifi_site_id" {...form.register("unifi_site_id")} />
                 </div>
                 <div className="space-y-2 md:col-span-2">
-                  <Label htmlFor="unifi_api_key_ref">UniFi API key reference</Label>
-                  <Input id="unifi_api_key_ref" {...form.register("unifi_api_key_ref")} />
+                  <Label htmlFor="unifi_api_key_ref">UniFi API key reference (optional override)</Label>
+                  <Input id="unifi_api_key_ref" placeholder="Use tenant controller" {...form.register("unifi_api_key_ref")} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="default_time_limit_minutes">Time limit (minutes)</Label>

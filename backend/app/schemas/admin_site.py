@@ -13,9 +13,9 @@ class SiteCreateRequest(BaseModel):
     support_contact: str | None = None
     success_url: str | None = None
     enable_tos_only: bool = False
-    unifi_base_url: str
+    unifi_base_url: str | None = None
     unifi_site_id: str
-    unifi_api_key_ref: str
+    unifi_api_key_ref: str | None = None
     default_time_limit_minutes: int = 60
     default_data_limit_mb: int | None = None
     default_rx_kbps: int | None = None
@@ -52,9 +52,9 @@ class SiteResponse(BaseModel):
     support_contact: str | None
     success_url: str | None
     enable_tos_only: bool
-    unifi_base_url: str
+    unifi_base_url: str | None
     unifi_site_id: str
-    unifi_api_key_ref: str
+    unifi_api_key_ref: str | None
     default_time_limit_minutes: int
     default_data_limit_mb: int | None
     default_rx_kbps: int | None

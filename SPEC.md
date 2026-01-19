@@ -38,12 +38,13 @@ Example path structure: `/guest/s/default/?ap=...&id=...&...`
 3. (Optional) Verify:
    - `GET /v1/sites/{siteId}/clients/{clientId}` returns `authorized: true`
 
-### Site resolution (MSP-friendly, deterministic)
-Configure each UniFi site's external portal URL as:
+### Site resolution (single external portal URL)
+Configure the UniFi external portal URL once:
 
-`https://wifi.reduxtc.com/guest/s/{tenant_slug}/{site_slug}/`
+`https://wifi.reduxtc.com/guest/`
 
-This removes the need to guess siteId from SSID/AP-MAC.
+The portal resolves the correct tenant + site by looking up the client MAC against UniFi
+sites for the tenant's controller, then proceeds with the normal guest flow.
 
 ---
 
@@ -101,10 +102,10 @@ Feel like an “extension” of the UniFi console by matching interaction patter
 ## 5) Core Flows
 
 ### 5.1 Guest entry & session
-`GET /guest/s/{tenant_slug}/{site_slug}/?ap=...&id=...&ssid=...&url=...&t=...`
+`GET /guest/?ap=...&id=...&ssid=...&url=...&t=...`
 
 Server actions:
-- Validate slugs + MAC format
+- Resolve tenant + site via UniFi client lookup, then validate MAC format
 - Create/reuse portal session:
   - Redis key: `ps:{site_id}:{client_mac}`
   - Postgres row for audit
@@ -167,7 +168,10 @@ Server actions:
 - `admin_memberships` (admin_user_id, tenant_id, role)
 
 ### Sites
-- `sites` (tenant_id, slug, display_name, enabled, unifi connection fields, branding, default policy)
+- `sites` (tenant_id, slug, display_name, enabled, unifi_site_id, branding, default policy)
+
+### UniFi controller (tenant-level)
+- `tenants` includes `unifi_base_url`, `unifi_api_key_ref` for the shared controller per tenant.
 
 ### Guest & audit
 - `portal_sessions` (tenant_id, site_id, client_mac, ap_mac, ssid, orig_url, status, ip, user_agent, timestamps)
@@ -192,6 +196,7 @@ Server actions:
 - `POST /api/guest/{tenant}/{site}/otp/start`
 - `POST /api/guest/{tenant}/{site}/otp/verify`
 - `POST /api/guest/{tenant}/{site}/tos/accept`
+- `POST /api/guest/resolve` (resolve tenant/site from UniFi redirect params)
 - `GET  /api/guest/{tenant}/{site}/config` (branding + enabled methods + policy defaults)
 - `POST /api/guest/{tenant}/{site}/authorize` (internal use after auth)
 

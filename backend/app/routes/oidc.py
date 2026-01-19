@@ -51,7 +51,7 @@ def oidc_start(
     request: Request,
     db: Session = Depends(get_db),
 ) -> RedirectResponse:
-    site = _get_site(db, tenant_slug, site_slug)
+    site, tenant = _get_site(db, tenant_slug, site_slug)
     if not site.enabled:
         raise HTTPException(
             status_code=404,
@@ -101,7 +101,7 @@ def oidc_callback(
     error_description: str | None = None,
     db: Session = Depends(get_db),
 ) -> RedirectResponse:
-    site = _get_site(db, tenant_slug, site_slug)
+    site, tenant = _get_site(db, tenant_slug, site_slug)
     if not site.enabled:
         raise HTTPException(
             status_code=404,
@@ -165,7 +165,7 @@ def oidc_callback(
         email=email,
         display_name=display_name,
     )
-    authorized, reason, unifi_client_id = _authorize_unifi(site, portal_session.client_mac)
+    authorized, reason, unifi_client_id = _authorize_unifi(site, tenant, portal_session.client_mac)
     if not authorized:
         set_status(
             db,
@@ -206,19 +206,20 @@ def oidc_callback(
     return _success_redirect(tenant_slug, site_slug, str(portal_session_id))
 
 
-def _get_site(db: Session, tenant_slug: str, site_slug: str) -> Site:
+def _get_site(db: Session, tenant_slug: str, site_slug: str) -> tuple[Site, Tenant]:
     stmt = (
-        select(Site)
+        select(Site, Tenant)
         .join(Tenant, Tenant.id == Site.tenant_id)
         .where(Tenant.slug == tenant_slug, Site.slug == site_slug)
     )
-    site = db.execute(stmt).scalar_one_or_none()
-    if not site:
+    result = db.execute(stmt).first()
+    if not result:
         raise HTTPException(
             status_code=404,
             detail={"ok": False, "error": {"code": "NOT_FOUND", "message": "Site not found."}},
         )
-    return site
+    site, tenant = result
+    return site, tenant
 
 
 def _get_portal_session(db: Session, portal_session_id: str, site: Site) -> PortalSession:
@@ -259,10 +260,14 @@ def _get_oidc_setting(db: Session, site: Site) -> tuple[SiteOidcSetting, OidcPro
     return setting, provider
 
 
-def _authorize_unifi(site: Site, client_mac: str) -> tuple[bool, str | None, str | None]:
+def _authorize_unifi(site: Site, tenant: Tenant, client_mac: str) -> tuple[bool, str | None, str | None]:
+    base_url = site.unifi_base_url or tenant.unifi_base_url
+    api_key_ref = site.unifi_api_key_ref or tenant.unifi_api_key_ref
+    if not base_url or not api_key_ref:
+        return False, "UNIFI_CONFIG_MISSING", None
     client = UnifiClient(
-        site.unifi_base_url,
-        site.unifi_api_key_ref,
+        base_url,
+        api_key_ref,
         site.unifi_site_id,
         tenant_id=str(site.tenant_id),
         site_uuid=str(site.id),

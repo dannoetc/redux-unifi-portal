@@ -61,9 +61,14 @@ def main() -> None:
                 slug=tenant_slug,
                 name=tenant_name,
                 status=TenantStatus.ACTIVE,
+                unifi_base_url=unifi_base_url,
+                unifi_api_key_ref=unifi_api_key_ref,
             )
             session.add(tenant)
             session.flush()
+        else:
+            tenant.unifi_base_url = tenant.unifi_base_url or unifi_base_url
+            tenant.unifi_api_key_ref = tenant.unifi_api_key_ref or unifi_api_key_ref
 
         membership = session.execute(
             select(AdminMembership).where(
@@ -96,9 +101,9 @@ def main() -> None:
                 slug=slug,
                 display_name=display_name,
                 enabled=True,
-                unifi_base_url=unifi_base_url,
                 unifi_site_id=site_id,
-                unifi_api_key_ref=unifi_api_key_ref,
+                unifi_base_url=None,
+                unifi_api_key_ref=None,
                 default_time_limit_minutes=default_time_limit,
                 default_data_limit_mb=int(default_data_limit) if default_data_limit else None,
                 default_rx_kbps=int(default_rx_kbps) if default_rx_kbps else None,

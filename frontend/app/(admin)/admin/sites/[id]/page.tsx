@@ -301,7 +301,7 @@ export default function SiteDetailPage() {
         <CardContent>
           <form className="grid gap-4 md:grid-cols-2" onSubmit={siteForm.handleSubmit(saveSite)}>
             <div className="space-y-2">
-              <Label htmlFor="unifi_base_url">UniFi base URL</Label>
+              <Label htmlFor="unifi_base_url">UniFi base URL (optional override)</Label>
               <Input id="unifi_base_url" {...siteForm.register("unifi_base_url")} />
             </div>
             <div className="space-y-2">
@@ -309,7 +309,7 @@ export default function SiteDetailPage() {
               <Input id="unifi_site_id" {...siteForm.register("unifi_site_id")} />
             </div>
             <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="unifi_api_key_ref">UniFi API key reference</Label>
+              <Label htmlFor="unifi_api_key_ref">UniFi API key reference (optional override)</Label>
               <Input id="unifi_api_key_ref" {...siteForm.register("unifi_api_key_ref")} />
             </div>
             <div className="md:col-span-2">

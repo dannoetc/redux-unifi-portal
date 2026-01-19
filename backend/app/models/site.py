@@ -20,9 +20,9 @@ class Site(Base, TimestampMixin):
     display_name: Mapped[str] = mapped_column(String(255), nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
 
-    unifi_base_url: Mapped[str] = mapped_column(String(255), nullable=False)
+    unifi_base_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
     unifi_site_id: Mapped[str] = mapped_column(String(128), nullable=False)
-    unifi_api_key_ref: Mapped[str] = mapped_column(String(255), nullable=False)
+    unifi_api_key_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     default_time_limit_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
     default_data_limit_mb: Mapped[int | None] = mapped_column(Integer, nullable=True)

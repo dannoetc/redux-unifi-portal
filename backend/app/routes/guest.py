@@ -25,7 +25,7 @@ from app.schemas.guest import (
     GuestVoucherRequest,
 )
 from app.services.otp import start_challenge, verify_code
-from app.services.portal_session import create_or_reuse_session, get_session, set_status
+from app.services.portal_session import create_or_reuse_session, get_session, normalize_mac, set_status
 from app.services.ratelimit import enforce_rate_limit, limit_key_ip, limit_key_mac
 from app.services.unifi import UnifiClient, UnifiPolicy
 from app.services.vouchers import VoucherError, redeem_voucher
@@ -37,6 +37,64 @@ import structlog
 logger = structlog.get_logger(__name__)
 
 router = APIRouter()
+
+@router.post("/resolve")
+def resolve_site(
+    payload: GuestSessionInitRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> dict:
+    try:
+        normalized_client = normalize_mac(payload.id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"ok": False, "error": {"code": "INVALID_MAC", "message": "Invalid client MAC address."}},
+        ) from exc
+
+    site, tenant = _resolve_site_by_unifi(db, normalized_client)
+    if not site.enabled:
+        raise HTTPException(
+            status_code=404,
+            detail={"ok": False, "error": {"code": "NOT_FOUND", "message": "Site not found."}},
+        )
+
+    redis_client = get_redis_client()
+    user_agent = payload.user_agent or request.headers.get("user-agent")
+    client_ip = request.client.host if request.client else None
+    session = create_or_reuse_session(
+        db,
+        redis_client,
+        tenant_id=site.tenant_id,
+        site=site,
+        client_mac=normalized_client,
+        ap_mac=payload.ap,
+        ssid=payload.ssid,
+        orig_url=payload.url,
+        ip=client_ip,
+        user_agent=user_agent,
+    )
+
+    methods = ["voucher", "email_otp"]
+    if site.enable_tos_only:
+        methods.append("tos_only")
+    oidc_enabled = db.execute(
+        select(SiteOidcSetting.id).where(
+            SiteOidcSetting.site_id == site.id, SiteOidcSetting.enabled.is_(True)
+        )
+    ).scalar_one_or_none()
+    if oidc_enabled:
+        methods.append("oidc")
+
+    return {
+        "ok": True,
+        "data": {
+            "tenant_slug": tenant.slug,
+            "site_slug": site.slug,
+            "portal_session_id": str(session.portal_session_id),
+            "methods": methods,
+        },
+    }
 
 @router.get("/{tenant_slug}/{site_slug}/config")
 def get_site_config(
@@ -183,7 +241,8 @@ def voucher_auth(
             detail={"ok": False, "error": {"code": "VOUCHER_INVALID", "message": "Voucher is not valid."}},
         ) from exc
 
-    authorized, reason, unifi_client_id = _authorize_unifi(site, portal_session.client_mac)
+    tenant = db.execute(select(Tenant).where(Tenant.id == site.tenant_id)).scalar_one_or_none()
+    authorized, reason, unifi_client_id = _authorize_unifi(site, tenant, portal_session.client_mac)
     if not authorized:
         set_status(db, redis_client, site_id=site.id, client_mac=portal_session.client_mac, status=PortalSessionStatus.FAILED)
         _log_auth_event(
@@ -305,7 +364,8 @@ def otp_verify(
         )
 
     identity = _upsert_guest_identity(db, site.tenant_id, payload.email)
-    authorized, auth_reason, unifi_client_id = _authorize_unifi(site, portal_session.client_mac)
+    tenant = db.execute(select(Tenant).where(Tenant.id == site.tenant_id)).scalar_one_or_none()
+    authorized, auth_reason, unifi_client_id = _authorize_unifi(site, tenant, portal_session.client_mac)
     if not authorized:
         set_status(db, redis_client, site_id=site.id, client_mac=portal_session.client_mac, status=PortalSessionStatus.FAILED)
         _log_auth_event(
@@ -396,7 +456,8 @@ def tos_accept(
         window_seconds=settings.VOUCHER_RATE_LIMIT_WINDOW_SECONDS,
     )
 
-    authorized, reason, unifi_client_id = _authorize_unifi(site, portal_session.client_mac)
+    tenant = db.execute(select(Tenant).where(Tenant.id == site.tenant_id)).scalar_one_or_none()
+    authorized, reason, unifi_client_id = _authorize_unifi(site, tenant, portal_session.client_mac)
     if not authorized:
         set_status(
             db,
@@ -453,6 +514,42 @@ def _get_site(db: Session, tenant_slug: str, site_slug: str) -> Site:
     return site
 
 
+def _resolve_site_by_unifi(db: Session, client_mac: str) -> tuple[Site, Tenant]:
+    tenant_results = db.execute(select(Tenant)).scalars().all()
+    for tenant in tenant_results:
+        sites = db.execute(select(Site).where(Site.tenant_id == tenant.id)).scalars().all()
+        for site in sites:
+            if not site.enabled:
+                continue
+            base_url = site.unifi_base_url or tenant.unifi_base_url
+            api_key_ref = site.unifi_api_key_ref or tenant.unifi_api_key_ref
+            if not base_url or not api_key_ref:
+                continue
+            try:
+                client = UnifiClient(
+                    base_url,
+                    api_key_ref,
+                    site.unifi_site_id,
+                    tenant_id=str(site.tenant_id),
+                    site_uuid=str(site.id),
+                )
+                clients = client.get_clients_by_mac(client_mac)
+            except Exception as exc:
+                logger.warning(
+                    "unifi_site_lookup_failed",
+                    tenant_id=str(site.tenant_id),
+                    site_id=str(site.id),
+                    error=str(exc),
+                )
+                continue
+            if clients:
+                return site, tenant
+    raise HTTPException(
+        status_code=404,
+        detail={"ok": False, "error": {"code": "SITE_RESOLVE_FAILED", "message": "Unable to resolve site."}},
+    )
+
+
 def _get_portal_session(db: Session, portal_session_id: str, site: Site) -> PortalSession:
     try:
         session_uuid = uuid.UUID(portal_session_id)
@@ -475,10 +572,16 @@ def _get_portal_session(db: Session, portal_session_id: str, site: Site) -> Port
     return portal_session
 
 
-def _authorize_unifi(site: Site, client_mac: str) -> tuple[bool, str | None, str | None]:
+def _authorize_unifi(site: Site, tenant: Tenant | None, client_mac: str) -> tuple[bool, str | None, str | None]:
+    if not tenant:
+        return False, "TENANT_NOT_FOUND", None
+    base_url = site.unifi_base_url or tenant.unifi_base_url
+    api_key_ref = site.unifi_api_key_ref or tenant.unifi_api_key_ref
+    if not base_url or not api_key_ref:
+        return False, "UNIFI_CONFIG_MISSING", None
     client = UnifiClient(
-        site.unifi_base_url,
-        site.unifi_api_key_ref,
+        base_url,
+        api_key_ref,
         site.unifi_site_id,
         tenant_id=str(site.tenant_id),
         site_uuid=str(site.id),

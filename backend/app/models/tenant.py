@@ -19,6 +19,8 @@ class Tenant(Base, TimestampMixin):
         nullable=False,
         default=TenantStatus.ACTIVE,
     )
+    unifi_base_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    unifi_api_key_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     sites = relationship("Site", back_populates="tenant", cascade="all, delete-orphan")
     memberships = relationship("AdminMembership", back_populates="tenant", cascade="all, delete-orphan")

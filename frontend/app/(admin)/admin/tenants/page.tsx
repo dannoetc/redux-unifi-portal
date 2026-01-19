@@ -19,6 +19,13 @@ const schema = z.object({
   name: z.string().min(2),
   slug: z.string().min(2),
   status: z.string().optional(),
+  unifi_base_url: z.string().url().optional().or(z.literal("")),
+  unifi_api_key_ref: z.string().optional().or(z.literal("")),
+});
+
+const controllerSchema = z.object({
+  unifi_base_url: z.string().url().optional().or(z.literal("")),
+  unifi_api_key_ref: z.string().optional().or(z.literal("")),
 });
 
 type Tenant = {
@@ -26,6 +33,8 @@ type Tenant = {
   name: string;
   slug: string;
   status?: string;
+  unifi_base_url?: string | null;
+  unifi_api_key_ref?: string | null;
 };
 
 type TenantList = { tenants: Tenant[] };
@@ -37,10 +46,15 @@ export default function TenantsPage() {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [controllerOpen, setControllerOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [tenantToDelete, setTenantToDelete] = useState<Tenant | null>(null);
+  const [tenantToConfigure, setTenantToConfigure] = useState<Tenant | null>(null);
 
   const form = useForm<CreateTenant>({ resolver: zodResolver(schema) });
+  const controllerForm = useForm<z.infer<typeof controllerSchema>>({
+    resolver: zodResolver(controllerSchema),
+  });
 
   useEffect(() => {
     let active = true;
@@ -91,6 +105,20 @@ export default function TenantsPage() {
         cell: ({ row }) => (
           <div className="flex items-center justify-end gap-2">
             <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setTenantToConfigure(row.original);
+                controllerForm.reset({
+                  unifi_base_url: row.original.unifi_base_url ?? "",
+                  unifi_api_key_ref: row.original.unifi_api_key_ref ?? "",
+                });
+                setControllerOpen(true);
+              }}
+            >
+              Configure UniFi
+            </Button>
+            <Button
               variant="destructive"
               size="sm"
               onClick={() => {
@@ -140,6 +168,26 @@ export default function TenantsPage() {
     }
   };
 
+  const saveController = async (values: z.infer<typeof controllerSchema>) => {
+    if (!tenantToConfigure) {
+      return;
+    }
+    try {
+      const data = await apiFetch<{ tenant: Tenant }>(`/api/admin/tenants/${tenantToConfigure.id}`, {
+        method: "PUT",
+        body: JSON.stringify(values),
+      });
+      setTenants((prev) =>
+        prev.map((tenant) => (tenant.id === data.tenant.id ? data.tenant : tenant))
+      );
+      toast.success("UniFi controller updated.");
+      setControllerOpen(false);
+      setTenantToConfigure(null);
+    } catch (error: any) {
+      toast.error(error?.message ?? "Unable to update UniFi controller.");
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -169,6 +217,14 @@ export default function TenantsPage() {
                 <Label htmlFor="status">Status</Label>
                 <Input id="status" placeholder="active" {...form.register("status")} />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="unifi_base_url">UniFi controller base URL</Label>
+                <Input id="unifi_base_url" placeholder="https://unifi.local" {...form.register("unifi_base_url")} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="unifi_api_key_ref">UniFi API key reference</Label>
+                <Input id="unifi_api_key_ref" {...form.register("unifi_api_key_ref")} />
+              </div>
               <DialogFooter>
                 <Button type="submit">Create tenant</Button>
               </DialogFooter>
@@ -183,10 +239,8 @@ export default function TenantsPage() {
           <li>2. Add one or more sites with UniFi credentials and default access policy.</li>
           <li>
             3. Set the UniFi external portal URL to{" "}
-            <span className="font-medium text-foreground">
-              https://wifi.reduxtc.com/guest/s/&lt;tenant_slug&gt;/&lt;site_slug&gt;/
-            </span>
-            .
+            <span className="font-medium text-foreground">https://wifi.reduxtc.com/guest/</span>. The
+            portal resolves the correct site using the UniFi Network API.
           </li>
         </ul>
       </Card>
@@ -213,6 +267,29 @@ export default function TenantsPage() {
               {deleting ? "Removing..." : "Confirm remove"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={controllerOpen} onOpenChange={setControllerOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>UniFi controller</DialogTitle>
+            <DialogDescription>
+              Configure the tenant-level UniFi controller used to resolve sites and authorize clients.
+            </DialogDescription>
+          </DialogHeader>
+          <form className="space-y-4" onSubmit={controllerForm.handleSubmit(saveController)}>
+            <div className="space-y-2">
+              <Label htmlFor="controller_base_url">Base URL</Label>
+              <Input id="controller_base_url" {...controllerForm.register("unifi_base_url")} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="controller_api_key_ref">API key reference</Label>
+              <Input id="controller_api_key_ref" {...controllerForm.register("unifi_api_key_ref")} />
+            </div>
+            <DialogFooter>
+              <Button type="submit">Save controller</Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

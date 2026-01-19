@@ -35,7 +35,7 @@ from app.schemas.admin_oidc import (
     SiteOidcUpdateRequest,
 )
 from app.schemas.admin_site import SiteCreateRequest, SiteResponse, SiteUpdateRequest
-from app.schemas.admin_tenant import TenantCreateRequest, TenantResponse
+from app.schemas.admin_tenant import TenantCreateRequest, TenantResponse, TenantUpdateRequest
 from app.schemas.admin_voucher import VoucherBatchCreateRequest
 from app.security import create_session_token, verify_password
 from app.services.unifi import UnifiApiError, UnifiClient
@@ -107,6 +107,8 @@ def list_tenants(
                     name=tenant.name,
                     slug=tenant.slug,
                     status=tenant.status.value,
+                    unifi_base_url=tenant.unifi_base_url,
+                    unifi_api_key_ref=tenant.unifi_api_key_ref,
                 ).model_dump(mode="json")
                 for tenant in tenants
             ]
@@ -134,6 +136,8 @@ def create_tenant(
         slug=payload.slug,
         name=payload.name,
         status=status,
+        unifi_base_url=_empty_to_none(payload.unifi_base_url),
+        unifi_api_key_ref=_empty_to_none(payload.unifi_api_key_ref),
     )
     db.add(tenant)
     db.commit()
@@ -146,6 +150,58 @@ def create_tenant(
                 name=tenant.name,
                 slug=tenant.slug,
                 status=tenant.status.value,
+                unifi_base_url=tenant.unifi_base_url,
+                unifi_api_key_ref=tenant.unifi_api_key_ref,
+            ).model_dump(mode="json")
+        },
+    }
+
+
+@router.put("/tenants/{tenant_id}")
+def update_tenant(
+    tenant_id: uuid.UUID,
+    payload: TenantUpdateRequest,
+    db: Session = Depends(get_db),
+    _admin: AdminUser = Depends(require_superadmin),
+) -> dict:
+    tenant = db.execute(select(Tenant).where(Tenant.id == tenant_id)).scalar_one_or_none()
+    if not tenant:
+        raise HTTPException(
+            status_code=404,
+            detail={"ok": False, "error": {"code": "NOT_FOUND", "message": "Tenant not found."}},
+        )
+
+    if payload.status is not None:
+        status_value = payload.status.strip().upper()
+        try:
+            tenant.status = TenantStatus(status_value)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail={"ok": False, "error": {"code": "INVALID_STATUS", "message": "Invalid tenant status."}},
+            ) from exc
+    if payload.name is not None:
+        tenant.name = payload.name
+    if payload.slug is not None:
+        tenant.slug = payload.slug
+    if payload.unifi_base_url is not None:
+        tenant.unifi_base_url = _empty_to_none(payload.unifi_base_url)
+    if payload.unifi_api_key_ref is not None:
+        tenant.unifi_api_key_ref = _empty_to_none(payload.unifi_api_key_ref)
+
+    db.add(tenant)
+    db.commit()
+    db.refresh(tenant)
+    return {
+        "ok": True,
+        "data": {
+            "tenant": TenantResponse(
+                id=str(tenant.id),
+                name=tenant.name,
+                slug=tenant.slug,
+                status=tenant.status.value,
+                unifi_base_url=tenant.unifi_base_url,
+                unifi_api_key_ref=tenant.unifi_api_key_ref,
             ).model_dump(mode="json")
         },
     }
@@ -182,6 +238,17 @@ def create_site(
             detail={"ok": False, "error": {"code": "NOT_FOUND", "message": "Tenant not found."}},
         )
 
+    base_url = _empty_to_none(payload.unifi_base_url) or tenant.unifi_base_url
+    api_key_ref = _empty_to_none(payload.unifi_api_key_ref) or tenant.unifi_api_key_ref
+    if not base_url or not api_key_ref:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "ok": False,
+                "error": {"code": "UNIFI_CONFIG_REQUIRED", "message": "UniFi controller settings are required."},
+            },
+        )
+
     site = Site(
         tenant_id=tenant_id,
         slug=payload.slug,
@@ -193,9 +260,9 @@ def create_site(
         support_contact=_empty_to_none(payload.support_contact),
         success_url=_empty_to_none(payload.success_url),
         enable_tos_only=payload.enable_tos_only,
-        unifi_base_url=payload.unifi_base_url.strip(),
+        unifi_base_url=_empty_to_none(payload.unifi_base_url),
         unifi_site_id=payload.unifi_site_id.strip(),
-        unifi_api_key_ref=payload.unifi_api_key_ref.strip(),
+        unifi_api_key_ref=_empty_to_none(payload.unifi_api_key_ref),
         default_time_limit_minutes=payload.default_time_limit_minutes,
         default_data_limit_mb=payload.default_data_limit_mb,
         default_rx_kbps=payload.default_rx_kbps,
@@ -261,6 +328,12 @@ def update_site(
             status_code=404,
             detail={"ok": False, "error": {"code": "NOT_FOUND", "message": "Site not found."}},
         )
+    tenant = db.execute(select(Tenant).where(Tenant.id == tenant_id)).scalar_one_or_none()
+    if not tenant:
+        raise HTTPException(
+            status_code=404,
+            detail={"ok": False, "error": {"code": "NOT_FOUND", "message": "Tenant not found."}},
+        )
 
     if payload.display_name is not None:
         site.display_name = payload.display_name
@@ -281,11 +354,11 @@ def update_site(
     if payload.enable_tos_only is not None:
         site.enable_tos_only = payload.enable_tos_only
     if payload.unifi_base_url is not None:
-        site.unifi_base_url = _empty_to_none(payload.unifi_base_url) or site.unifi_base_url
+        site.unifi_base_url = _empty_to_none(payload.unifi_base_url)
     if payload.unifi_site_id is not None:
         site.unifi_site_id = _empty_to_none(payload.unifi_site_id) or site.unifi_site_id
     if payload.unifi_api_key_ref is not None:
-        site.unifi_api_key_ref = _empty_to_none(payload.unifi_api_key_ref) or site.unifi_api_key_ref
+        site.unifi_api_key_ref = _empty_to_none(payload.unifi_api_key_ref)
     if payload.default_time_limit_minutes is not None:
         site.default_time_limit_minutes = payload.default_time_limit_minutes
     if payload.default_data_limit_mb is not None:
@@ -294,6 +367,15 @@ def update_site(
         site.default_rx_kbps = payload.default_rx_kbps
     if payload.default_tx_kbps is not None:
         site.default_tx_kbps = payload.default_tx_kbps
+
+    if not (site.unifi_base_url or tenant.unifi_base_url) or not (site.unifi_api_key_ref or tenant.unifi_api_key_ref):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "ok": False,
+                "error": {"code": "UNIFI_CONFIG_REQUIRED", "message": "UniFi controller settings are required."},
+            },
+        )
 
     db.add(site)
     db.commit()
@@ -332,11 +414,19 @@ def test_unifi_connection(
             status_code=404,
             detail={"ok": False, "error": {"code": "NOT_FOUND", "message": "Site not found."}},
         )
+    tenant = db.execute(select(Tenant).where(Tenant.id == tenant_id)).scalar_one_or_none()
+    if not tenant:
+        raise HTTPException(
+            status_code=404,
+            detail={"ok": False, "error": {"code": "NOT_FOUND", "message": "Tenant not found."}},
+        )
+
+    base_url, api_key_ref = _resolve_unifi_credentials(site, tenant)
 
     start = time.monotonic()
     client = UnifiClient(
-        site.unifi_base_url,
-        site.unifi_api_key_ref,
+        base_url,
+        api_key_ref,
         site.unifi_site_id,
         tenant_id=str(site.tenant_id),
         site_uuid=str(site.id),
@@ -677,6 +767,20 @@ def _empty_to_none(value: str | None) -> str | None:
     if value == "":
         return None
     return value
+
+
+def _resolve_unifi_credentials(site: Site, tenant: Tenant) -> tuple[str, str]:
+    base_url = _empty_to_none(site.unifi_base_url) or tenant.unifi_base_url
+    api_key_ref = _empty_to_none(site.unifi_api_key_ref) or tenant.unifi_api_key_ref
+    if not base_url or not api_key_ref:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "ok": False,
+                "error": {"code": "UNIFI_CONFIG_REQUIRED", "message": "UniFi controller settings are required."},
+            },
+        )
+    return base_url, api_key_ref
 
 
 def _site_response(site: Site) -> SiteResponse:
