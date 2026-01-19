@@ -8,6 +8,7 @@ Create Date: 2026-01-15 00:00:00.000000
 from __future__ import annotations
 
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 from alembic import op
 
 
@@ -18,9 +19,9 @@ depends_on = None
 
 
 def upgrade() -> None:
-    tenant_status = sa.Enum("ACTIVE", "SUSPENDED", name="tenant_status", create_type=False)
-    admin_role = sa.Enum("TENANT_ADMIN", "TENANT_VIEWER", name="admin_role", create_type=False)
-    portal_session_status = sa.Enum(
+    tenant_status = postgresql.ENUM("ACTIVE", "SUSPENDED", name="tenant_status", create_type=False)
+    admin_role = postgresql.ENUM("TENANT_ADMIN", "TENANT_VIEWER", name="admin_role", create_type=False)
+    portal_session_status = postgresql.ENUM(
         "STARTED",
         "AUTHED",
         "AUTHORIZED",
@@ -29,8 +30,8 @@ def upgrade() -> None:
         name="portal_session_status",
         create_type=False,
     )
-    auth_method = sa.Enum("VOUCHER", "EMAIL_OTP", "OIDC", name="auth_method", create_type=False)
-    auth_result = sa.Enum("SUCCESS", "FAIL", name="auth_result", create_type=False)
+    auth_method = postgresql.ENUM("VOUCHER", "EMAIL_OTP", "OIDC", name="auth_method", create_type=False)
+    auth_result = postgresql.ENUM("SUCCESS", "FAIL", name="auth_result", create_type=False)
 
     bind = op.get_bind()
     tenant_status.create(bind, checkfirst=True)
