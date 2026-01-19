@@ -14,7 +14,20 @@ export class ApiError extends Error {
   }
 }
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+const resolveApiBaseUrl = () => {
+  if (typeof window !== "undefined") {
+    const runtimeEnv = (window as Window & {
+      __ENV__?: { NEXT_PUBLIC_API_BASE_URL?: string };
+    }).__ENV__;
+    const runtimeValue = runtimeEnv?.NEXT_PUBLIC_API_BASE_URL;
+    if (runtimeValue && runtimeValue.length > 0) {
+      return runtimeValue;
+    }
+  }
+  return process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+};
+
+const API_BASE_URL = resolveApiBaseUrl();
 
 const buildUrl = (path: string) => {
   if (path.startsWith("http://") || path.startsWith("https://")) {

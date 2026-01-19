@@ -22,5 +22,8 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/package.json ./package.json
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
 EXPOSE 3000
+ENTRYPOINT ["/app/entrypoint.sh"]
 CMD ["npm", "run", "start"]
