@@ -23,6 +23,7 @@ services:
     environment:
       BASE_URL: ${BASE_URL:-http://localhost:3000}
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://postgres:postgres@postgres:5432/redux_portal}
+      DATABASE_URL_DOCKER: ${DATABASE_URL_DOCKER:-postgresql+psycopg://postgres:postgres@postgres:5432/redux_portal}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       SECRET_KEY: ${SECRET_KEY:-dev-change-me}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
@@ -49,6 +50,7 @@ services:
       - .env
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://postgres:postgres@postgres:5432/redux_portal}
+      DATABASE_URL_DOCKER: ${DATABASE_URL_DOCKER:-postgresql+psycopg://postgres:postgres@postgres:5432/redux_portal}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       SECRET_KEY: ${SECRET_KEY:-dev-change-me}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}

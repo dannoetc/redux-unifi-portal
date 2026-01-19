@@ -60,6 +60,9 @@ export default function SiteDetailPage() {
   const [site, setSite] = useState<SiteResponse | null>(null);
   const [providers, setProviders] = useState<OidcProvider[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [testStatus, setTestStatus] = useState<{ latencyMs: number; siteName?: string } | null>(null);
+  const [testError, setTestError] = useState<string | null>(null);
+  const [testing, setTesting] = useState(false);
 
   const siteForm = useForm<SiteFormValues>({
     resolver: zodResolver(siteSchema),
@@ -157,6 +160,31 @@ export default function SiteDetailPage() {
       toast.success("OIDC settings saved.");
     } catch (err: any) {
       toast.error(err?.message ?? "Unable to save OIDC settings.");
+    }
+  };
+
+  const runUnifiTest = async () => {
+    if (!tenantId || !params?.id) {
+      return;
+    }
+    setTesting(true);
+    setTestError(null);
+    try {
+      const response = await apiFetch<{ latency_ms: number; site?: { name?: string } }>(
+        `/api/admin/tenants/${tenantId}/sites/${params.id}/unifi-test`,
+        { method: "POST" }
+      );
+      setTestStatus({
+        latencyMs: response.latency_ms,
+        siteName: response.site?.name,
+      });
+      toast.success("UniFi API connection verified.");
+    } catch (err: any) {
+      const message = err?.message ?? "Unable to reach UniFi controller.";
+      setTestError(message);
+      toast.error(message);
+    } finally {
+      setTesting(false);
     }
   };
 
@@ -288,6 +316,30 @@ export default function SiteDetailPage() {
               <Button type="submit">Save UniFi settings</Button>
             </div>
           </form>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>UniFi API health check</CardTitle>
+          <CardDescription>Verify that the controller can be reached with the configured credentials.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {testStatus ? (
+            <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700">
+              Connected in {testStatus.latencyMs}ms
+              {testStatus.siteName ? ` · ${testStatus.siteName}` : null}
+            </div>
+          ) : (
+            <div className="text-sm text-muted-foreground">Run a quick request to validate UniFi API access.</div>
+          )}
+          {testError ? (
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+              {testError}
+            </div>
+          ) : null}
+          <Button onClick={runUnifiTest} disabled={testing}>
+            {testing ? "Testing..." : "Run test"}
+          </Button>
         </CardContent>
       </Card>
       <Card>

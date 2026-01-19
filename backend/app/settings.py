@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+from urllib.parse import urlparse
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=(".env", "../.env"), extra="ignore")
 
     BASE_URL: str = "http://localhost:3000"
 
     DATABASE_URL: str = "postgresql+psycopg://postgres:postgres@localhost:5432/redux_portal"
+    DATABASE_URL_DOCKER: str | None = None
     REDIS_URL: str = "redis://localhost:6379/0"
     SECRET_KEY: str = "dev-change-me"
     LOG_LEVEL: str = "INFO"
@@ -40,5 +43,12 @@ class Settings(BaseSettings):
 
     # Optional
     SENTRY_DSN: str | None = None
+
+    def model_post_init(self, __context: object) -> None:
+        if not self.DATABASE_URL_DOCKER:
+            return
+        parsed = urlparse(self.DATABASE_URL)
+        if parsed.hostname in {"localhost", "127.0.0.1", "::1"}:
+            self.DATABASE_URL = self.DATABASE_URL_DOCKER
 
 settings = Settings()
