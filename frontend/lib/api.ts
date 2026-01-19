@@ -24,7 +24,7 @@ const resolveApiBaseUrl = () => {
       return runtimeValue;
     }
   }
-  return process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+  return process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://dev.reduxtc.com";
 };
 
 const API_BASE_URL = resolveApiBaseUrl();
