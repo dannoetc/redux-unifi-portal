@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { apiFetch } from "@/lib/api";
@@ -13,7 +13,7 @@ type ResolveResponse = {
   portal_session_id: string;
 };
 
-export default function GuestEntryPage() {
+function GuestEntryContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -80,5 +80,29 @@ export default function GuestEntryPage() {
         </Card>
       </div>
     </main>
+  );
+}
+
+export default function GuestEntryPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="surface-grid min-h-screen px-4 py-8">
+          <div className="mx-auto max-w-md">
+            <Card>
+              <CardHeader>
+                <CardTitle>Connecting...</CardTitle>
+                <CardDescription>Preparing portal session.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="text-sm text-muted-foreground">Loading...</div>
+              </CardContent>
+            </Card>
+          </div>
+        </main>
+      }
+    >
+      <GuestEntryContent />
+    </Suspense>
   );
 }
