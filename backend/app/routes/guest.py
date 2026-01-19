@@ -532,6 +532,7 @@ def _resolve_site_by_unifi(db: Session, client_mac: str) -> tuple[Site, Tenant]:
                     site.unifi_site_id,
                     tenant_id=str(site.tenant_id),
                     site_uuid=str(site.id),
+                    timeout_s=3.0,
                 )
                 clients = client.get_clients_by_mac(client_mac)
             except Exception as exc:

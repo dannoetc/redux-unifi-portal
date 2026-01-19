@@ -29,6 +29,8 @@ function GuestEntryContent() {
         return;
       }
       try {
+        const controller = new AbortController();
+        const timeoutId = window.setTimeout(() => controller.abort(), 8000);
         const data = await apiFetch<ResolveResponse>("/api/guest/resolve", {
           method: "POST",
           body: JSON.stringify({
@@ -39,7 +41,9 @@ function GuestEntryContent() {
             t: searchParams.get("t"),
             user_agent: typeof navigator !== "undefined" ? navigator.userAgent : undefined,
           }),
+          signal: controller.signal,
         });
+        window.clearTimeout(timeoutId);
         if (!active) {
           return;
         }
@@ -47,7 +51,8 @@ function GuestEntryContent() {
         router.replace(target);
       } catch (err: any) {
         if (active) {
-          setError(err?.message ?? "Unable to resolve site.");
+          const isAbort = err?.name === "AbortError";
+          setError(isAbort ? "Site resolution timed out. Please retry." : err?.message ?? "Unable to resolve site.");
         }
       } finally {
         if (active) {
