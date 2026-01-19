@@ -18,8 +18,8 @@ depends_on = None
 
 
 def upgrade() -> None:
-    tenant_status = sa.Enum("ACTIVE", "SUSPENDED", name="tenant_status")
-    admin_role = sa.Enum("TENANT_ADMIN", "TENANT_VIEWER", name="admin_role")
+    tenant_status = sa.Enum("ACTIVE", "SUSPENDED", name="tenant_status", create_type=False)
+    admin_role = sa.Enum("TENANT_ADMIN", "TENANT_VIEWER", name="admin_role", create_type=False)
     portal_session_status = sa.Enum(
         "STARTED",
         "AUTHED",
@@ -27,9 +27,10 @@ def upgrade() -> None:
         "FAILED",
         "EXPIRED",
         name="portal_session_status",
+        create_type=False,
     )
-    auth_method = sa.Enum("VOUCHER", "EMAIL_OTP", "OIDC", name="auth_method")
-    auth_result = sa.Enum("SUCCESS", "FAIL", name="auth_result")
+    auth_method = sa.Enum("VOUCHER", "EMAIL_OTP", "OIDC", name="auth_method", create_type=False)
+    auth_result = sa.Enum("SUCCESS", "FAIL", name="auth_result", create_type=False)
 
     bind = op.get_bind()
     tenant_status.create(bind, checkfirst=True)
