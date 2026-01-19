@@ -18,11 +18,21 @@ services:
   api:
     build:
       context: ./backend
+    env_file:
+      - .env
     environment:
       BASE_URL: ${BASE_URL:-http://localhost:3000}
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://postgres:postgres@postgres:5432/redux_portal}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       SECRET_KEY: ${SECRET_KEY:-dev-change-me}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      SMTP_HOST: ${SMTP_HOST:-localhost}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-wifi@reduxtc.com}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-ReduxTC WiFi}
+      SENTRY_DSN: ${SENTRY_DSN:-}
       CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
       CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
     ports:
@@ -35,10 +45,20 @@ services:
     build:
       context: ./backend
     command: celery -A app.celery_app.celery_app worker -l info
+    env_file:
+      - .env
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://postgres:postgres@postgres:5432/redux_portal}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       SECRET_KEY: ${SECRET_KEY:-dev-change-me}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      SMTP_HOST: ${SMTP_HOST:-localhost}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-wifi@reduxtc.com}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-ReduxTC WiFi}
+      SENTRY_DSN: ${SENTRY_DSN:-}
       CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
       CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
     depends_on:
@@ -62,6 +82,8 @@ services:
   nginx:
     build:
       context: ./frontend/nginx
+    env_file:
+      - .env
     environment:
       DOMAIN: ${DOMAIN:-wifi.reduxtc.com}
     ports:
@@ -76,6 +98,8 @@ services:
 
   certbot:
     image: certbot/certbot:latest
+    env_file:
+      - .env
     volumes:
       - certbot-etc:/etc/letsencrypt
       - certbot-var:/var/www/certbot
