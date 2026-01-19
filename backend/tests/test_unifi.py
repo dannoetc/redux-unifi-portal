@@ -55,3 +55,16 @@ def test_find_client_by_mac_retries():
     api = UnifiClient("https://unifi.local", "key", "default", http_client=client)
     result = api.find_client_by_mac("AA:BB:CC:DD:EE:FF", attempts=3, backoff_s=0)
     assert result == {"id": "client-2"}
+
+
+def test_get_site():
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v1/sites/default"
+        return httpx.Response(200, json={"data": {"id": "default", "name": "HQ"}})
+
+    transport = httpx.MockTransport(handler)
+    client = httpx.Client(base_url="https://unifi.local", transport=transport)
+
+    api = UnifiClient("https://unifi.local", "key", "default", http_client=client)
+    result = api.get_site()
+    assert result == {"data": {"id": "default", "name": "HQ"}}

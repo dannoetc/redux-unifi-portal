@@ -27,7 +27,8 @@ def redeem_voucher(
     normalized_mac = normalize_mac(client_mac)
     now = datetime.now(timezone.utc)
 
-    with db.begin():
+    transaction = db.begin_nested() if db.in_transaction() else db.begin()
+    with transaction:
         stmt = (
             select(Voucher, VoucherBatch)
             .join(VoucherBatch, VoucherBatch.id == Voucher.batch_id)

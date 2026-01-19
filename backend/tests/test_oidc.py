@@ -106,7 +106,7 @@ def test_oidc_callback_success(client, db_session, monkeypatch):
     response = client.get(
         f"/api/oidc/callback/{tenant.slug}/{site.slug}",
         params={"state": state, "code": "code"},
-        allow_redirects=False,
+        follow_redirects=False,
     )
     assert response.status_code == 302
     assert "portal_session_id=" in response.headers.get("location", "")
@@ -163,7 +163,7 @@ def test_oidc_domain_allowlist_denies(client, db_session, monkeypatch):
     response = client.get(
         f"/api/oidc/callback/{tenant.slug}/{site.slug}",
         params={"state": state, "code": "code"},
-        allow_redirects=False,
+        follow_redirects=False,
     )
     assert response.status_code == 302
     assert "error=OIDC_DOMAIN_DENIED" in response.headers.get("location", "")

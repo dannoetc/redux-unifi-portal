@@ -4,6 +4,7 @@ import csv
 import io
 import secrets
 import string
+import time
 import uuid
 from datetime import datetime
 
@@ -33,10 +34,11 @@ from app.schemas.admin_oidc import (
     SiteOidcResponse,
     SiteOidcUpdateRequest,
 )
-from app.schemas.admin_site import SiteResponse, SiteUpdateRequest
+from app.schemas.admin_site import SiteCreateRequest, SiteResponse, SiteUpdateRequest
 from app.schemas.admin_tenant import TenantCreateRequest, TenantResponse
 from app.schemas.admin_voucher import VoucherBatchCreateRequest
 from app.security import create_session_token, verify_password
+from app.services.unifi import UnifiApiError, UnifiClient
 from app.settings import settings
 
 router = APIRouter()
@@ -149,6 +151,62 @@ def create_tenant(
     }
 
 
+@router.delete("/tenants/{tenant_id}")
+def delete_tenant(
+    tenant_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    _admin: AdminUser = Depends(require_superadmin),
+) -> dict:
+    tenant = db.execute(select(Tenant).where(Tenant.id == tenant_id)).scalar_one_or_none()
+    if not tenant:
+        raise HTTPException(
+            status_code=404,
+            detail={"ok": False, "error": {"code": "NOT_FOUND", "message": "Tenant not found."}},
+        )
+    db.delete(tenant)
+    db.commit()
+    return {"ok": True, "data": {"deleted": True}}
+
+
+@router.post("/tenants/{tenant_id}/sites")
+def create_site(
+    tenant_id: uuid.UUID,
+    payload: SiteCreateRequest,
+    db: Session = Depends(get_db),
+    _admin: AdminUser = Depends(require_tenant_role([AdminRole.TENANT_ADMIN])),
+) -> dict:
+    tenant = db.execute(select(Tenant).where(Tenant.id == tenant_id)).scalar_one_or_none()
+    if not tenant:
+        raise HTTPException(
+            status_code=404,
+            detail={"ok": False, "error": {"code": "NOT_FOUND", "message": "Tenant not found."}},
+        )
+
+    site = Site(
+        tenant_id=tenant_id,
+        slug=payload.slug,
+        display_name=payload.display_name,
+        enabled=payload.enabled,
+        logo_url=_empty_to_none(payload.logo_url),
+        primary_color=_empty_to_none(payload.primary_color),
+        terms_html=_empty_to_none(payload.terms_html),
+        support_contact=_empty_to_none(payload.support_contact),
+        success_url=_empty_to_none(payload.success_url),
+        enable_tos_only=payload.enable_tos_only,
+        unifi_base_url=payload.unifi_base_url.strip(),
+        unifi_site_id=payload.unifi_site_id.strip(),
+        unifi_api_key_ref=payload.unifi_api_key_ref.strip(),
+        default_time_limit_minutes=payload.default_time_limit_minutes,
+        default_data_limit_mb=payload.default_data_limit_mb,
+        default_rx_kbps=payload.default_rx_kbps,
+        default_tx_kbps=payload.default_tx_kbps,
+    )
+    db.add(site)
+    db.commit()
+    db.refresh(site)
+    return {"ok": True, "data": {"site": _site_response(site).model_dump(mode="json")}}
+
+
 @router.get("/tenants/{tenant_id}/sites")
 def list_sites(
     tenant_id: uuid.UUID,
@@ -241,6 +299,71 @@ def update_site(
     db.commit()
     db.refresh(site)
     return {"ok": True, "data": {"site": _site_response(site).model_dump(mode="json")}}
+
+
+@router.delete("/tenants/{tenant_id}/sites/{site_id}")
+def delete_site(
+    tenant_id: uuid.UUID,
+    site_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    _admin: AdminUser = Depends(require_tenant_role([AdminRole.TENANT_ADMIN])),
+) -> dict:
+    site = db.execute(select(Site).where(Site.id == site_id, Site.tenant_id == tenant_id)).scalar_one_or_none()
+    if not site:
+        raise HTTPException(
+            status_code=404,
+            detail={"ok": False, "error": {"code": "NOT_FOUND", "message": "Site not found."}},
+        )
+    db.delete(site)
+    db.commit()
+    return {"ok": True, "data": {"deleted": True}}
+
+
+@router.post("/tenants/{tenant_id}/sites/{site_id}/unifi-test")
+def test_unifi_connection(
+    tenant_id: uuid.UUID,
+    site_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    _admin: AdminUser = Depends(require_tenant_role([AdminRole.TENANT_ADMIN])),
+) -> dict:
+    site = db.execute(select(Site).where(Site.id == site_id, Site.tenant_id == tenant_id)).scalar_one_or_none()
+    if not site:
+        raise HTTPException(
+            status_code=404,
+            detail={"ok": False, "error": {"code": "NOT_FOUND", "message": "Site not found."}},
+        )
+
+    start = time.monotonic()
+    client = UnifiClient(
+        site.unifi_base_url,
+        site.unifi_api_key_ref,
+        site.unifi_site_id,
+        tenant_id=str(site.tenant_id),
+        site_uuid=str(site.id),
+    )
+    try:
+        payload = client.get_site()
+    except UnifiApiError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "ok": False,
+                "error": {"code": "UNIFI_ERROR", "message": "UniFi API test failed."},
+            },
+        ) from exc
+
+    latency_ms = int((time.monotonic() - start) * 1000)
+    data = payload.get("data") if isinstance(payload, dict) else None
+    if isinstance(data, list):
+        data = data[0] if data else None
+    return {
+        "ok": True,
+        "data": {
+            "status": "ok",
+            "latency_ms": latency_ms,
+            "site": data,
+        },
+    }
 
 
 @router.get("/tenants/{tenant_id}/oidc-providers")
