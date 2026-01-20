@@ -6,18 +6,21 @@ if [ -z "$DOMAIN" ]; then
   exit 1
 fi
 
-envsubst '$DOMAIN' < /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf
+PRIMARY_DOMAIN=$(printf '%s' "$DOMAIN" | cut -d',' -f1 | tr -d ' ')
+export PRIMARY_DOMAIN
 
-CERT_DIR="/etc/letsencrypt/live/$DOMAIN"
+envsubst '$DOMAIN $PRIMARY_DOMAIN' < /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf
+
+CERT_DIR="/etc/letsencrypt/live/$PRIMARY_DOMAIN"
 CERT_PATH="$CERT_DIR/fullchain.pem"
 KEY_PATH="$CERT_DIR/privkey.pem"
 
 if [ ! -f "$CERT_PATH" ] || [ ! -f "$KEY_PATH" ]; then
-  echo "Creating temporary self-signed cert for $DOMAIN"
+  echo "Creating temporary self-signed cert for $PRIMARY_DOMAIN"
   mkdir -p "$CERT_DIR"
   openssl req -x509 -nodes -newkey rsa:2048 -days 1 \
     -keyout "$KEY_PATH" -out "$CERT_PATH" \
-    -subj "/CN=$DOMAIN"
+    -subj "/CN=$PRIMARY_DOMAIN"
 fi
 
 # Watch cert fingerprint and reload nginx if it changes (works if certbot overwrites self-signed cert)
