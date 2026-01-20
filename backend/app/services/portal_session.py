@@ -170,9 +170,15 @@ def set_status(
             _serialize_session(updated),
         )
 
-    stmt = select(PortalSession).where(
-        PortalSession.site_id == site_id, PortalSession.client_mac == normalized_client
-    )
+    if existing:
+        stmt = select(PortalSession).where(PortalSession.id == existing.portal_session_id)
+    else:
+        stmt = (
+            select(PortalSession)
+            .where(PortalSession.site_id == site_id, PortalSession.client_mac == normalized_client)
+            .order_by(PortalSession.created_at.desc())
+            .limit(1)
+        )
     portal_session = db.execute(stmt).scalar_one_or_none()
     if portal_session:
         portal_session.status = status
