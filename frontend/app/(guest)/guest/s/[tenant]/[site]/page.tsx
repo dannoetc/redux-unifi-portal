@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 
-import { apiFetch, API_BASE_URL } from "@/lib/api";
+import { apiFetch, API_BASE_URL, ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -64,6 +64,7 @@ export default function GuestLanding() {
   const [tosAccepted, setTosAccepted] = useState(false);
   const [continueUrl, setContinueUrl] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [authPending, setAuthPending] = useState(false);
 
   const portalParam = searchParams.get("portal_session_id");
   const errorParam = searchParams.get("error");
@@ -164,16 +165,42 @@ export default function GuestLanding() {
     };
   }, [params, portalParam, searchParams]);
 
+  const executeWithClientRetry = async <T,>(action: () => Promise<T>) => {
+    const maxAttempts = 3;
+    const baseDelayMs = 900;
+    setAuthPending(true);
+    try {
+      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        try {
+          return await action();
+        } catch (error) {
+          const apiError = error instanceof ApiError ? error : null;
+          if (apiError?.code === "CLIENT_NOT_FOUND" && attempt < maxAttempts) {
+            const delay = baseDelayMs * attempt;
+            await new Promise((resolve) => setTimeout(resolve, delay));
+            continue;
+          }
+          throw error;
+        }
+      }
+      throw new Error("Unable to authorize.");
+    } finally {
+      setAuthPending(false);
+    }
+  };
+
   const sendVoucher = async () => {
     if (!portalSessionId || !params?.tenant || !params?.site) {
       toast.error("Missing portal session.");
       return;
     }
     try {
-      const data = await apiFetch<VoucherResponse>(`/api/guest/${params.tenant}/${params.site}/voucher`, {
-        method: "POST",
-        body: JSON.stringify({ portal_session_id: portalSessionId, code: voucherCode }),
-      });
+      const data = await executeWithClientRetry(() =>
+        apiFetch<VoucherResponse>(`/api/guest/${params.tenant}/${params.site}/voucher`, {
+          method: "POST",
+          body: JSON.stringify({ portal_session_id: portalSessionId, code: voucherCode }),
+        })
+      );
       setContinueUrl(data.continue_url);
       setActivePanel("success");
       toast.success("Voucher accepted.");
@@ -205,14 +232,16 @@ export default function GuestLanding() {
       return;
     }
     try {
-      const data = await apiFetch<VoucherResponse>(`/api/guest/${params.tenant}/${params.site}/otp/verify`, {
-        method: "POST",
-        body: JSON.stringify({
-          portal_session_id: portalSessionId,
-          email: otpEmail,
-          code: otpCode,
-        }),
-      });
+      const data = await executeWithClientRetry(() =>
+        apiFetch<VoucherResponse>(`/api/guest/${params.tenant}/${params.site}/otp/verify`, {
+          method: "POST",
+          body: JSON.stringify({
+            portal_session_id: portalSessionId,
+            email: otpEmail,
+            code: otpCode,
+          }),
+        })
+      );
       setContinueUrl(data.continue_url);
       setActivePanel("success");
       toast.success("Verified.");
@@ -227,10 +256,12 @@ export default function GuestLanding() {
       return;
     }
     try {
-      const data = await apiFetch<VoucherResponse>(`/api/guest/${params.tenant}/${params.site}/tos/accept`, {
-        method: "POST",
-        body: JSON.stringify({ portal_session_id: portalSessionId }),
-      });
+      const data = await executeWithClientRetry(() =>
+        apiFetch<VoucherResponse>(`/api/guest/${params.tenant}/${params.site}/tos/accept`, {
+          method: "POST",
+          body: JSON.stringify({ portal_session_id: portalSessionId }),
+        })
+      );
       setContinueUrl(data.continue_url);
       setActivePanel("success");
       toast.success("Connected.");
@@ -316,10 +347,11 @@ export default function GuestLanding() {
                   disabled={
                     !portalSessionId ||
                     Boolean(previewParam) ||
-                    (config?.branding.terms_html ? !tosAccepted : false)
+                    (config?.branding.terms_html ? !tosAccepted : false) ||
+                    authPending
                   }
                 >
-                  Accept terms and connect
+                  {authPending ? "Authorizing..." : "Accept terms and connect"}
                 </Button>
               </div>
             )}
@@ -328,7 +360,7 @@ export default function GuestLanding() {
                 className="w-full"
                 style={primaryButtonStyle}
                 onClick={startSso}
-                disabled={!portalSessionId || Boolean(previewParam)}
+                disabled={!portalSessionId || Boolean(previewParam) || authPending}
               >
                 Continue with SSO
               </Button>
@@ -338,7 +370,7 @@ export default function GuestLanding() {
                 className="w-full"
                 variant="outline"
                 onClick={() => setActivePanel("voucher")}
-                disabled={!portalSessionId || Boolean(previewParam)}
+                disabled={!portalSessionId || Boolean(previewParam) || authPending}
               >
                 Use voucher code
               </Button>
@@ -348,7 +380,7 @@ export default function GuestLanding() {
                 className="w-full"
                 variant="secondary"
                 onClick={() => setActivePanel("otp")}
-                disabled={!portalSessionId || Boolean(previewParam)}
+                disabled={!portalSessionId || Boolean(previewParam) || authPending}
               >
                 Email me a code
               </Button>
@@ -378,8 +410,13 @@ export default function GuestLanding() {
               />
             </div>
             <div className="flex gap-2">
-              <Button className="flex-1" style={primaryButtonStyle} onClick={sendVoucher} disabled={!voucherCode}>
-                Connect
+              <Button
+                className="flex-1"
+                style={primaryButtonStyle}
+                onClick={sendVoucher}
+                disabled={!voucherCode || authPending}
+              >
+                {authPending ? "Authorizing..." : "Connect"}
               </Button>
               <Button variant="ghost" onClick={() => setActivePanel("choose")}>Back</Button>
             </div>
@@ -399,7 +436,12 @@ export default function GuestLanding() {
               />
             </div>
             <div className="flex gap-2">
-              <Button className="flex-1" style={primaryButtonStyle} onClick={startOtp} disabled={!otpEmail}>
+              <Button
+                className="flex-1"
+                style={primaryButtonStyle}
+                onClick={startOtp}
+                disabled={!otpEmail || authPending}
+              >
                 Send code
               </Button>
               <Button variant="ghost" onClick={() => setActivePanel("choose")}>Back</Button>
@@ -419,8 +461,13 @@ export default function GuestLanding() {
               />
             </div>
             <div className="flex gap-2">
-              <Button className="flex-1" style={primaryButtonStyle} onClick={verifyOtp} disabled={!otpCode}>
-                Verify
+              <Button
+                className="flex-1"
+                style={primaryButtonStyle}
+                onClick={verifyOtp}
+                disabled={!otpCode || authPending}
+              >
+                {authPending ? "Authorizing..." : "Verify"}
               </Button>
               <Button variant="ghost" onClick={() => setActivePanel("otp")}>Back</Button>
             </div>
