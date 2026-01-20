@@ -24,6 +24,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <li><a className="flex items-center justify-between rounded-md px-2 py-1.5 hover:bg-accent" href="/admin">Dashboard</a></li>
             <li><a className="flex items-center justify-between rounded-md px-2 py-1.5 hover:bg-accent" href="/admin/tenants">Tenants</a></li>
             <li><a className="flex items-center justify-between rounded-md px-2 py-1.5 hover:bg-accent" href="/admin/sites">Sites</a></li>
+            <li><a className="flex items-center justify-between rounded-md px-2 py-1.5 hover:bg-accent" href="/admin/admin-users">Admins</a></li>
             <li><a className="flex items-center justify-between rounded-md px-2 py-1.5 hover:bg-accent" href="/admin/oidc-providers">OIDC</a></li>
             <li><a className="flex items-center justify-between rounded-md px-2 py-1.5 hover:bg-accent" href="/admin/vouchers">Vouchers</a></li>
             <li><a className="flex items-center justify-between rounded-md px-2 py-1.5 hover:bg-accent" href="/admin/auth-events">Auth Events</a></li>

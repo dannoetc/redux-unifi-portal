@@ -11,12 +11,13 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.deps import ADMIN_SESSION_COOKIE, get_current_admin, require_superadmin, require_tenant_role
 from app.models import (
+    AdminMembership,
     AdminRole,
     AdminUser,
     OidcProvider,
@@ -35,6 +36,7 @@ from app.schemas.admin_oidc import (
     SiteOidcResponse,
     SiteOidcUpdateRequest,
 )
+from app.schemas.admin_user import AdminUserCreateRequest, AdminUserResponse
 from app.schemas.admin_site import (
     SiteCreateRequest,
     SiteProvisionRequest,
@@ -44,7 +46,7 @@ from app.schemas.admin_site import (
 )
 from app.schemas.admin_tenant import TenantCreateRequest, TenantResponse, TenantUpdateRequest
 from app.schemas.admin_voucher import VoucherBatchCreateRequest
-from app.security import create_session_token, verify_password
+from app.security import create_session_token, hash_password, verify_password
 from app.services.unifi import UnifiApiError, UnifiClient
 from app.settings import settings
 
@@ -149,6 +151,142 @@ def get_tenant(
         },
     }
 
+
+@router.get("/tenants/{tenant_id}/admins")
+def list_admin_users(
+    tenant_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    _admin: AdminUser = Depends(require_tenant_role([AdminRole.TENANT_ADMIN])),
+) -> dict:
+    stmt = (
+        select(AdminUser, AdminMembership)
+        .join(AdminMembership, AdminMembership.admin_user_id == AdminUser.id)
+        .where(AdminMembership.tenant_id == tenant_id)
+        .order_by(AdminUser.created_at.asc())
+    )
+    rows = db.execute(stmt).all()
+    admins = [
+        AdminUserResponse(
+            id=str(admin.id),
+            email=admin.email,
+            role=membership.role.value,
+            is_superadmin=admin.is_superadmin,
+            created_at=admin.created_at,
+        ).model_dump(mode="json")
+        for admin, membership in rows
+    ]
+    return {"ok": True, "data": {"admins": admins}}
+
+
+@router.post("/tenants/{tenant_id}/admins")
+def create_admin_user(
+    tenant_id: uuid.UUID,
+    payload: AdminUserCreateRequest,
+    db: Session = Depends(get_db),
+    _admin: AdminUser = Depends(require_tenant_role([AdminRole.TENANT_ADMIN])),
+) -> dict:
+    tenant = db.execute(select(Tenant).where(Tenant.id == tenant_id)).scalar_one_or_none()
+    if not tenant:
+        raise HTTPException(
+            status_code=404,
+            detail={"ok": False, "error": {"code": "NOT_FOUND", "message": "Tenant not found."}},
+        )
+
+    normalized_email = payload.email.strip().lower()
+    admin_user = db.execute(
+        select(AdminUser).where(func.lower(AdminUser.email) == normalized_email)
+    ).scalar_one_or_none()
+
+    if admin_user:
+        membership = db.execute(
+            select(AdminMembership).where(
+                AdminMembership.admin_user_id == admin_user.id,
+                AdminMembership.tenant_id == tenant_id,
+            )
+        ).scalar_one_or_none()
+        if membership:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "ok": False,
+                    "error": {"code": "ADMIN_EXISTS", "message": "Admin already exists for tenant."},
+                },
+            )
+    else:
+        admin_user = AdminUser(
+            email=normalized_email,
+            password_hash=hash_password(payload.password),
+            is_superadmin=False,
+        )
+        db.add(admin_user)
+        db.flush()
+
+    membership = AdminMembership(
+        admin_user_id=admin_user.id,
+        tenant_id=tenant_id,
+        role=payload.role,
+    )
+    db.add(membership)
+    db.commit()
+    db.refresh(admin_user)
+
+    return {
+        "ok": True,
+        "data": {
+            "admin": AdminUserResponse(
+                id=str(admin_user.id),
+                email=admin_user.email,
+                role=membership.role.value,
+                is_superadmin=admin_user.is_superadmin,
+                created_at=admin_user.created_at,
+            ).model_dump(mode="json")
+        },
+    }
+
+
+@router.delete("/tenants/{tenant_id}/admins/{admin_user_id}")
+def delete_admin_user(
+    tenant_id: uuid.UUID,
+    admin_user_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    _admin: AdminUser = Depends(require_tenant_role([AdminRole.TENANT_ADMIN])),
+) -> dict:
+    membership = db.execute(
+        select(AdminMembership).where(
+            AdminMembership.admin_user_id == admin_user_id,
+            AdminMembership.tenant_id == tenant_id,
+        )
+    ).scalar_one_or_none()
+    if not membership:
+        raise HTTPException(
+            status_code=404,
+            detail={"ok": False, "error": {"code": "NOT_FOUND", "message": "Admin membership not found."}},
+        )
+
+    admin_user = db.execute(select(AdminUser).where(AdminUser.id == admin_user_id)).scalar_one_or_none()
+    if not admin_user:
+        raise HTTPException(
+            status_code=404,
+            detail={"ok": False, "error": {"code": "NOT_FOUND", "message": "Admin user not found."}},
+        )
+    if admin_user.is_superadmin:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "ok": False,
+                "error": {"code": "SUPERADMIN_IMMUTABLE", "message": "Superadmin access cannot be removed."},
+            },
+        )
+
+    db.delete(membership)
+    remaining = db.execute(
+        select(AdminMembership).where(AdminMembership.admin_user_id == admin_user_id)
+    ).scalars().all()
+    if not remaining:
+        db.delete(admin_user)
+    db.commit()
+
+    return {"ok": True, "data": {"deleted": True}}
 
 @router.post("/tenants")
 def create_tenant(
