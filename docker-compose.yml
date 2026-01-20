@@ -79,6 +79,12 @@ services:
     depends_on:
       - api
 
+  docs:
+    build:
+      context: ./docs
+    expose:
+      - "8000"
+
   nginx:
     build:
       context: ./frontend/nginx
@@ -95,6 +101,7 @@ services:
     depends_on:
       - frontend
       - api
+      - docs
 
   certbot:
     image: certbot/certbot:latest
