@@ -402,3 +402,29 @@ def test_resolve_site_uses_ap_mac_fallback(client, db_session, monkeypatch):
     payload = response.json()["data"]
     assert payload["tenant_slug"] == tenant.slug
     assert payload["site_slug"] == site.slug
+
+
+def test_resolve_normalizes_ap_mac_in_session(client, db_session, monkeypatch):
+    tenant, site = _seed_site(db_session)
+    redis_client = FakeRedis()
+    from app import routes as _routes
+
+    monkeypatch.setattr(_routes.guest, "get_redis_client", lambda: redis_client)
+
+    class StubUnifi:
+        def __init__(self, *args, **kwargs) -> None:
+            return None
+
+        def find_client_by_mac(self, mac: str):
+            return {"id": "client-1"}
+
+    monkeypatch.setattr(_routes.guest, "UnifiClient", StubUnifi)
+
+    response = client.post(
+        "/api/guest/resolve",
+        json={"id": "aa-bb-cc-dd-ee-ff", "ap": "11-22-33-44-55-66"},
+    )
+    assert response.status_code == 200
+
+    session = db_session.execute(select(PortalSession).where(PortalSession.site_id == site.id)).scalar_one()
+    assert session.ap_mac == "11:22:33:44:55:66"

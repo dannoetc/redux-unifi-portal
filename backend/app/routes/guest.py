@@ -75,7 +75,7 @@ def resolve_site(
         tenant_id=site.tenant_id,
         site=site,
         client_mac=normalized_client,
-        ap_mac=payload.ap,
+        ap_mac=normalized_ap,
         ssid=payload.ssid,
         orig_url=payload.url,
         ip=client_ip,
@@ -168,13 +168,19 @@ def init_session(
     redis_client = get_redis_client()
     user_agent = payload.user_agent or request.headers.get("user-agent")
     client_ip = request.client.host if request.client else None
+    normalized_ap = None
+    if payload.ap:
+        try:
+            normalized_ap = normalize_mac(payload.ap)
+        except ValueError:
+            normalized_ap = None
     session = create_or_reuse_session(
         db,
         redis_client,
         tenant_id=site.tenant_id,
         site=site,
         client_mac=payload.id,
-        ap_mac=payload.ap,
+        ap_mac=normalized_ap,
         ssid=payload.ssid,
         orig_url=payload.url,
         ip=client_ip,
@@ -542,7 +548,7 @@ def _resolve_site_by_unifi(db: Session, client_mac: str, ap_mac: str | None) -> 
                     timeout_s=3.0,
                     verify_ssl=settings.UNIFI_VERIFY_SSL,
                 )
-                clients = client.get_clients_by_mac(client_mac)
+                unifi_client = client.find_client_by_mac(client_mac)
             except Exception as exc:
                 logger.warning(
                     "unifi_site_lookup_failed",
@@ -551,7 +557,7 @@ def _resolve_site_by_unifi(db: Session, client_mac: str, ap_mac: str | None) -> 
                     error=str(exc),
                 )
                 continue
-            if clients:
+            if unifi_client:
                 return site, tenant
     if ap_mac:
         for tenant in tenant_results:
@@ -583,6 +589,24 @@ def _resolve_site_by_unifi(db: Session, client_mac: str, ap_mac: str | None) -> 
                     )
                     continue
                 if devices:
+                    device_site_id = (
+                        devices[0].get("siteId")
+                        or devices[0].get("site_id")
+                        or devices[0].get("site")
+                    )
+                    if device_site_id:
+                        matched_site = (
+                            db.execute(
+                                select(Site).where(
+                                    Site.tenant_id == tenant.id,
+                                    Site.unifi_site_id == device_site_id,
+                                )
+                            )
+                            .scalars()
+                            .first()
+                        )
+                        if matched_site:
+                            return matched_site, tenant
                     return site, tenant
     raise HTTPException(
         status_code=404,
