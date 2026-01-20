@@ -32,10 +32,11 @@ type Filters = {
 };
 
 export default function AuthEventsPage() {
-  const { tenantId, tenants, setTenantId, loading: tenantLoading } = useTenantSelection();
+  const { tenantId, tenants } = useTenantSelection();
   const [events, setEvents] = useState<AuthEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<Filters>({ method: "", result: "", search: "" });
+  const activeTenant = tenants.find((tenant) => tenant.id === tenantId) ?? null;
 
   useEffect(() => {
     if (!tenantId) {
@@ -111,6 +112,9 @@ export default function AuthEventsPage() {
         <div>
           <h1 className="text-2xl font-semibold">Auth events</h1>
           <p className="mt-1 text-sm text-muted-foreground">Audit guest authentications across sites.</p>
+          <p className="mt-2 text-xs text-muted-foreground">
+            {activeTenant ? `Active tenant: ${activeTenant.name}` : "Select a tenant from the header to continue."}
+          </p>
         </div>
         <Button variant="outline" onClick={exportCsv}>
           Export CSV
@@ -118,23 +122,6 @@ export default function AuthEventsPage() {
       </div>
       <Card className="p-4">
         <div className="grid gap-4 md:grid-cols-4">
-          <div className="space-y-2">
-            <Label htmlFor="tenant">Tenant</Label>
-            <select
-              id="tenant"
-              className="h-10 rounded-md border border-input bg-background px-3 text-sm"
-              value={tenantId ?? ""}
-              onChange={(event) => setTenantId(event.target.value)}
-              disabled={tenantLoading || tenants.length === 0}
-            >
-              {tenants.length === 0 && <option value="">No tenants available</option>}
-              {tenants.map((tenant) => (
-                <option key={tenant.id} value={tenant.id}>
-                  {tenant.name}
-                </option>
-              ))}
-            </select>
-          </div>
           <div className="space-y-2">
             <Label htmlFor="method">Method</Label>
             <select

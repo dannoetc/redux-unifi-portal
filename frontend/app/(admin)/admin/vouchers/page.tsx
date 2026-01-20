@@ -33,7 +33,7 @@ type SiteList = { sites: Site[] };
 type BatchResponse = { batch_id: string; count: number };
 
 export default function VouchersPage() {
-  const { tenantId, tenants, setTenantId, loading: tenantLoading } = useTenantSelection();
+  const { tenantId, tenants } = useTenantSelection();
   const [sites, setSites] = useState<Site[]>([]);
   const [siteId, setSiteId] = useState<string>("");
   const [batchId, setBatchId] = useState<string>("");
@@ -46,6 +46,8 @@ export default function VouchersPage() {
       max_uses_per_code: 1,
     },
   });
+
+  const activeTenant = tenants.find((tenant) => tenant.id === tenantId) ?? null;
 
   useEffect(() => {
     if (!tenantId) {
@@ -111,6 +113,9 @@ export default function VouchersPage() {
       <div>
         <h1 className="text-2xl font-semibold">Voucher batches</h1>
         <p className="mt-1 text-sm text-muted-foreground">Generate access codes and export CSVs.</p>
+        <p className="mt-2 text-xs text-muted-foreground">
+          {activeTenant ? `Active tenant: ${activeTenant.name}` : "Select a tenant from the header to continue."}
+        </p>
       </div>
       <Card>
         <CardHeader>
@@ -119,23 +124,6 @@ export default function VouchersPage() {
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="tenant">Tenant</Label>
-              <select
-                id="tenant"
-                className="h-10 rounded-md border border-input bg-background px-3 text-sm"
-                value={tenantId ?? ""}
-                onChange={(event) => setTenantId(event.target.value)}
-                disabled={tenantLoading || tenants.length === 0}
-              >
-                {tenants.length === 0 && <option value="">No tenants available</option>}
-                {tenants.map((tenant) => (
-                  <option key={tenant.id} value={tenant.id}>
-                    {tenant.name}
-                  </option>
-                ))}
-              </select>
-            </div>
             <div className="space-y-2">
               <Label htmlFor="site">Site</Label>
               <select

@@ -39,10 +39,10 @@ class Site(Base, TimestampMixin):
     success_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
 
     tenant = relationship("Tenant", back_populates="sites")
-    portal_sessions = relationship("PortalSession", back_populates="site")
-    auth_events = relationship("AuthEvent", back_populates="site")
-    voucher_batches = relationship("VoucherBatch", back_populates="site")
-    oidc_settings = relationship("SiteOidcSetting", back_populates="site")
+    portal_sessions = relationship("PortalSession", back_populates="site", passive_deletes=True)
+    auth_events = relationship("AuthEvent", back_populates="site", passive_deletes=True)
+    voucher_batches = relationship("VoucherBatch", back_populates="site", passive_deletes=True)
+    oidc_settings = relationship("SiteOidcSetting", back_populates="site", passive_deletes=True)
 
     __table_args__ = (
         Index("uq_sites_tenant_slug", "tenant_id", "slug", unique=True),

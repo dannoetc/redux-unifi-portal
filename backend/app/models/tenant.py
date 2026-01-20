@@ -24,8 +24,8 @@ class Tenant(Base, TimestampMixin):
 
     sites = relationship("Site", back_populates="tenant", cascade="all, delete-orphan")
     memberships = relationship("AdminMembership", back_populates="tenant", cascade="all, delete-orphan")
-    portal_sessions = relationship("PortalSession", back_populates="tenant")
-    guest_identities = relationship("GuestIdentity", back_populates="tenant")
-    auth_events = relationship("AuthEvent", back_populates="tenant")
-    voucher_batches = relationship("VoucherBatch", back_populates="tenant")
-    oidc_providers = relationship("OidcProvider", back_populates="tenant")
+    portal_sessions = relationship("PortalSession", back_populates="tenant", passive_deletes=True)
+    guest_identities = relationship("GuestIdentity", back_populates="tenant", passive_deletes=True)
+    auth_events = relationship("AuthEvent", back_populates="tenant", passive_deletes=True)
+    voucher_batches = relationship("VoucherBatch", back_populates="tenant", passive_deletes=True)
+    oidc_providers = relationship("OidcProvider", back_populates="tenant", passive_deletes=True)

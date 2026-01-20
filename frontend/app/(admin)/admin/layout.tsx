@@ -1,3 +1,5 @@
+import { AdminShellControls } from "@/components/admin/admin-shell-controls";
+
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="surface-grid min-h-screen">
@@ -15,20 +17,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <div className="text-xs text-muted-foreground">Admin Console</div>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              className="inline-flex items-center rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2"
-            >
-              Demo tenant
-            </button>
-            <div
-              className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-xs font-semibold text-muted-foreground"
-              aria-label="Admin user"
-            >
-              AD
-            </div>
-          </div>
+          <AdminShellControls />
         </div>
       </header>
       <div className="mx-auto grid max-w-6xl grid-cols-[220px_1fr] gap-6 px-6 py-8">

@@ -43,7 +43,7 @@ const formatDate = (value: string) => {
 };
 
 export default function AdminUsersPage() {
-  const { tenantId, tenants, setTenantId, loading: tenantLoading } = useTenantSelection();
+  const { tenantId, tenants } = useTenantSelection();
   const [admins, setAdmins] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -55,6 +55,11 @@ export default function AdminUsersPage() {
     resolver: zodResolver(adminSchema),
     defaultValues: { role: "TENANT_ADMIN" },
   });
+
+  const activeTenant = useMemo(
+    () => tenants.find((tenant) => tenant.id === tenantId) ?? null,
+    [tenantId, tenants]
+  );
 
   useEffect(() => {
     if (!tenantId) {
@@ -171,27 +176,11 @@ export default function AdminUsersPage() {
         <div>
           <h1 className="text-2xl font-semibold">Admin users</h1>
           <p className="mt-1 text-sm text-muted-foreground">Provision tenant-scoped admin access.</p>
+          <p className="mt-2 text-xs text-muted-foreground">
+            {activeTenant ? `Active tenant: ${activeTenant.name}` : "Select a tenant from the header to continue."}
+          </p>
         </div>
         <div className="flex flex-wrap items-end gap-3">
-          <div className="space-y-1">
-            <label htmlFor="tenant" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Tenant
-            </label>
-            <select
-              id="tenant"
-              className="h-10 rounded-md border border-input bg-background px-3 text-sm"
-              value={tenantId ?? ""}
-              onChange={(event) => setTenantId(event.target.value)}
-              disabled={tenantLoading || tenants.length === 0}
-            >
-              {tenants.length === 0 && <option value="">No tenants available</option>}
-              {tenants.map((tenant) => (
-                <option key={tenant.id} value={tenant.id}>
-                  {tenant.name}
-                </option>
-              ))}
-            </select>
-          </div>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
               <Button disabled={!tenantId}>New admin</Button>

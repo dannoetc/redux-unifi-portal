@@ -11,7 +11,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
@@ -20,6 +20,10 @@ from app.models import (
     AdminMembership,
     AdminRole,
     AdminUser,
+    AuthEvent,
+    AuthMethod,
+    AuthResult,
+    GuestIdentity,
     OidcProvider,
     Site,
     SiteOidcSetting,
@@ -77,6 +81,17 @@ def login(payload: AdminLoginRequest, db: Session = Depends(get_db)) -> JSONResp
         httponly=True,
         samesite="lax",
         max_age=settings.ADMIN_SESSION_MAX_AGE_SECONDS,
+        secure=settings.ADMIN_SESSION_COOKIE_SECURE,
+    )
+    return response
+
+
+@router.post("/logout")
+def logout() -> JSONResponse:
+    response = JSONResponse({"ok": True, "data": {"signed_out": True}})
+    response.delete_cookie(
+        key=ADMIN_SESSION_COOKIE,
+        samesite="lax",
         secure=settings.ADMIN_SESSION_COOKIE_SECURE,
     )
     return response
@@ -303,9 +318,19 @@ def create_tenant(
             detail={"ok": False, "error": {"code": "INVALID_STATUS", "message": "Invalid tenant status."}},
         ) from exc
 
+    normalized_slug = payload.slug.strip()
+    existing_slug = db.execute(
+        select(Tenant).where(func.lower(Tenant.slug) == normalized_slug.lower())
+    ).scalar_one_or_none()
+    if existing_slug:
+        raise HTTPException(
+            status_code=409,
+            detail={"ok": False, "error": {"code": "SLUG_TAKEN", "message": "Tenant slug is already in use."}},
+        )
+
     tenant = Tenant(
         id=uuid.uuid4(),
-        slug=payload.slug,
+        slug=normalized_slug,
         name=payload.name,
         status=status,
         unifi_base_url=_empty_to_none(payload.unifi_base_url),
@@ -355,7 +380,19 @@ def update_tenant(
     if payload.name is not None:
         tenant.name = payload.name
     if payload.slug is not None:
-        tenant.slug = payload.slug
+        normalized_slug = payload.slug.strip()
+        existing_slug = db.execute(
+            select(Tenant).where(
+                func.lower(Tenant.slug) == normalized_slug.lower(),
+                Tenant.id != tenant_id,
+            )
+        ).scalar_one_or_none()
+        if existing_slug:
+            raise HTTPException(
+                status_code=409,
+                detail={"ok": False, "error": {"code": "SLUG_TAKEN", "message": "Tenant slug is already in use."}},
+            )
+        tenant.slug = normalized_slug
     if payload.unifi_base_url is not None:
         tenant.unifi_base_url = _empty_to_none(payload.unifi_base_url)
     if payload.unifi_api_key_ref is not None:
@@ -1091,6 +1128,74 @@ def export_voucher_batch(
     return StreamingResponse(output, media_type="text/csv", headers=headers)
 
 
+@router.get("/tenants/{tenant_id}/auth-events")
+def list_auth_events(
+    tenant_id: uuid.UUID,
+    method: str | None = None,
+    result: str | None = None,
+    search: str | None = None,
+    db: Session = Depends(get_db),
+    _admin: AdminUser = Depends(require_tenant_role([AdminRole.TENANT_VIEWER, AdminRole.TENANT_ADMIN])),
+) -> dict:
+    query = _auth_events_query(tenant_id, method, result, search)
+    events = db.execute(query).scalars().all()
+    payload = [
+        {
+            "id": str(event.id),
+            "site_id": str(event.site_id),
+            "method": event.method.value.lower(),
+            "result": event.result.value.lower(),
+            "reason": event.reason,
+            "portal_session_id": str(event.portal_session_id) if event.portal_session_id else None,
+            "guest_identity_id": str(event.guest_identity_id) if event.guest_identity_id else None,
+            "created_at": event.created_at.isoformat(),
+        }
+        for event in events
+    ]
+    return {"ok": True, "data": {"events": payload}}
+
+
+@router.get("/tenants/{tenant_id}/auth-events/export.csv")
+def export_auth_events(
+    tenant_id: uuid.UUID,
+    method: str | None = None,
+    result: str | None = None,
+    search: str | None = None,
+    db: Session = Depends(get_db),
+    _admin: AdminUser = Depends(require_tenant_role([AdminRole.TENANT_VIEWER, AdminRole.TENANT_ADMIN])),
+) -> StreamingResponse:
+    query = _auth_events_query(tenant_id, method, result, search)
+    events = db.execute(query).scalars().all()
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(
+        [
+            "timestamp",
+            "site_id",
+            "method",
+            "result",
+            "reason",
+            "portal_session_id",
+            "guest_identity_id",
+        ]
+    )
+    for event in events:
+        writer.writerow(
+            [
+                event.created_at.isoformat(),
+                str(event.site_id),
+                event.method.value.lower(),
+                event.result.value.lower(),
+                event.reason or "",
+                str(event.portal_session_id) if event.portal_session_id else "",
+                str(event.guest_identity_id) if event.guest_identity_id else "",
+            ]
+        )
+    output.seek(0)
+    headers = {"Content-Disposition": "attachment; filename=auth-events.csv"}
+    return StreamingResponse(output, media_type="text/csv", headers=headers)
+
+
 def _generate_codes(count: int, length: int) -> list[str]:
     alphabet = string.ascii_uppercase + string.digits
     codes: set[str] = set()
@@ -1170,3 +1275,76 @@ def _site_response(site: Site) -> SiteResponse:
         default_rx_kbps=site.default_rx_kbps,
         default_tx_kbps=site.default_tx_kbps,
     )
+
+
+def _parse_auth_method(value: str | None) -> AuthMethod | None:
+    if not value:
+        return None
+    normalized = value.strip().upper()
+    if not normalized:
+        return None
+    try:
+        return AuthMethod(normalized)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"ok": False, "error": {"code": "INVALID_METHOD", "message": "Invalid auth method."}},
+        ) from exc
+
+
+def _parse_auth_result(value: str | None) -> AuthResult | None:
+    if not value:
+        return None
+    normalized = value.strip().upper()
+    if not normalized:
+        return None
+    try:
+        return AuthResult(normalized)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"ok": False, "error": {"code": "INVALID_RESULT", "message": "Invalid auth result."}},
+        ) from exc
+
+
+def _auth_events_query(
+    tenant_id: uuid.UUID,
+    method: str | None,
+    result: str | None,
+    search: str | None,
+):
+    query = select(AuthEvent).where(AuthEvent.tenant_id == tenant_id)
+    parsed_method = _parse_auth_method(method)
+    parsed_result = _parse_auth_result(result)
+    if parsed_method is not None:
+        query = query.where(AuthEvent.method == parsed_method)
+    if parsed_result is not None:
+        query = query.where(AuthEvent.result == parsed_result)
+    if search:
+        trimmed = search.strip()
+        if trimmed:
+            try:
+                search_uuid = uuid.UUID(trimmed)
+            except ValueError:
+                search_uuid = None
+            if search_uuid:
+                query = query.where(
+                    or_(
+                        AuthEvent.portal_session_id == search_uuid,
+                        AuthEvent.guest_identity_id == search_uuid,
+                    )
+                )
+            else:
+                like = f"%{trimmed.lower()}%"
+                query = query.join(
+                    GuestIdentity,
+                    GuestIdentity.id == AuthEvent.guest_identity_id,
+                    isouter=True,
+                ).where(
+                    or_(
+                        func.lower(GuestIdentity.email).like(like),
+                        func.lower(GuestIdentity.display_name).like(like),
+                        func.lower(AuthEvent.reason).like(like),
+                    )
+                )
+    return query.order_by(AuthEvent.created_at.desc())

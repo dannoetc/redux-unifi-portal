@@ -36,12 +36,13 @@ type ProviderList = { providers: Provider[] };
 type ProviderCreate = z.infer<typeof schema>;
 
 export default function OidcProvidersPage() {
-  const { tenantId, tenants, setTenantId, loading: tenantLoading } = useTenantSelection();
+  const { tenantId, tenants } = useTenantSelection();
   const [providers, setProviders] = useState<Provider[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
 
   const form = useForm<ProviderCreate>({ resolver: zodResolver(schema) });
+  const activeTenant = tenants.find((tenant) => tenant.id === tenantId) ?? null;
 
   useEffect(() => {
     if (!tenantId) {
@@ -117,27 +118,11 @@ export default function OidcProvidersPage() {
         <div>
           <h1 className="text-2xl font-semibold">OIDC providers</h1>
           <p className="mt-1 text-sm text-muted-foreground">Tenant-wide SSO definitions.</p>
+          <p className="mt-2 text-xs text-muted-foreground">
+            {activeTenant ? `Active tenant: ${activeTenant.name}` : "Select a tenant from the header to continue."}
+          </p>
         </div>
         <div className="flex flex-wrap items-end gap-3">
-          <div className="space-y-1">
-            <label htmlFor="tenant" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Tenant
-            </label>
-            <select
-              id="tenant"
-              className="h-10 rounded-md border border-input bg-background px-3 text-sm"
-              value={tenantId ?? ""}
-              onChange={(event) => setTenantId(event.target.value)}
-              disabled={tenantLoading || tenants.length === 0}
-            >
-              {tenants.length === 0 && <option value="">No tenants available</option>}
-              {tenants.map((tenant) => (
-                <option key={tenant.id} value={tenant.id}>
-                  {tenant.name}
-                </option>
-              ))}
-            </select>
-          </div>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
               <Button>New provider</Button>

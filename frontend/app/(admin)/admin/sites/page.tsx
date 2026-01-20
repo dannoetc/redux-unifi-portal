@@ -65,7 +65,7 @@ const siteSchema = z.object({
 type CreateSite = z.infer<typeof siteSchema>;
 
 export default function SitesPage() {
-  const { tenantId, tenants, setTenantId, loading: tenantLoading } = useTenantSelection();
+  const { tenantId, tenants } = useTenantSelection();
   const [sites, setSites] = useState<Site[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -81,6 +81,10 @@ export default function SitesPage() {
     defaultValues: { enabled: true, default_time_limit_minutes: 60 },
   });
 
+  const activeTenant = useMemo(
+    () => tenants.find((tenant) => tenant.id === tenantId) ?? null,
+    [tenantId, tenants]
+  );
   const tenantSlug = useMemo(
     () => tenants.find((tenant) => tenant.id === tenantId)?.slug ?? null,
     [tenantId, tenants]
@@ -283,27 +287,11 @@ export default function SitesPage() {
         <div>
           <h1 className="text-2xl font-semibold">Sites</h1>
           <p className="mt-1 text-sm text-muted-foreground">Configure branding, policies, and UniFi connection.</p>
+          <p className="mt-2 text-xs text-muted-foreground">
+            {activeTenant ? `Active tenant: ${activeTenant.name}` : "Select a tenant from the header to continue."}
+          </p>
         </div>
         <div className="flex flex-wrap items-end gap-3">
-          <div className="space-y-1">
-            <label htmlFor="tenant" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Tenant
-            </label>
-            <select
-              id="tenant"
-              className="h-10 rounded-md border border-input bg-background px-3 text-sm"
-              value={tenantId ?? ""}
-              onChange={(event) => setTenantId(event.target.value)}
-              disabled={tenantLoading || tenants.length === 0}
-            >
-              {tenants.length === 0 && <option value="">No tenants available</option>}
-              {tenants.map((tenant) => (
-                <option key={tenant.id} value={tenant.id}>
-                  {tenant.name}
-                </option>
-              ))}
-            </select>
-          </div>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
               <Button disabled={!tenantId}>New site</Button>

@@ -40,6 +40,7 @@ REBUILD=0
 WIPE_VOLUMES=0
 RUN_CERTBOT=0
 SKIP_PULL=0
+FORCE_PULL=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -48,6 +49,7 @@ while [[ $# -gt 0 ]]; do
     --wipe-volumes) WIPE_VOLUMES=1; shift ;;
     --certbot) RUN_CERTBOT=1; shift ;;
     --skip-pull) SKIP_PULL=1; shift ;;
+    --force) FORCE_PULL=1; shift ;;
     --status|--logs)
       break
       ;;
@@ -58,13 +60,30 @@ while [[ $# -gt 0 ]]; do
 done
 
 update_repo() {
-  if ! git -C "${ROOT_DIR}" diff --quiet || ! git -C "${ROOT_DIR}" diff --cached --quiet; then
-    echo "[WARN] Working tree is dirty; skipping git pull."
-    return 0
+  local stash_ref=""
+  local dirty
+  dirty="$(git -C "${ROOT_DIR}" status --porcelain)"
+  if [[ -n "${dirty}" ]]; then
+    if [[ "${FORCE_PULL}" -eq 1 ]]; then
+      echo "[WARN] Working tree is dirty; stashing changes for --force."
+      git -C "${ROOT_DIR}" stash push -u -m "deploy.sh --force $(date -u +%Y%m%d%H%M%S)" >/dev/null || true
+      stash_ref="$(git -C "${ROOT_DIR}" stash list -n 1 --format=%H || true)"
+    else
+      echo "[WARN] Working tree is dirty; skipping git pull."
+      return 0
+    fi
   fi
   echo "[INFO] Updating repo (git pull --ff-only)."
   git -C "${ROOT_DIR}" fetch --prune
   git -C "${ROOT_DIR}" pull --ff-only
+  if [[ -n "${stash_ref}" ]]; then
+    echo "[INFO] Restoring stashed changes."
+    if ! git -C "${ROOT_DIR}" stash pop "${stash_ref}"; then
+      echo "[WARN] Stash pop reported conflicts; changes remain stashed."
+      echo "[INFO] Run: git stash list"
+      echo "[INFO] Then: git stash apply ${stash_ref}"
+    fi
+  fi
 }
 
 clean_images() {

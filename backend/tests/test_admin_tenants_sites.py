@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 
-from app.models import AdminMembership, AdminRole, AdminUser, Tenant, TenantStatus
+from app.models import AdminMembership, AdminRole, AdminUser, PortalSession, PortalSessionStatus, Site, Tenant, TenantStatus
 from app.security import create_session_token, hash_password
 
 
@@ -29,6 +29,62 @@ def test_superadmin_can_delete_tenant(client, db_session):
 
     remaining = db_session.get(Tenant, tenant.id)
     assert remaining is None
+
+
+def test_superadmin_create_tenant_duplicate_slug_returns_conflict(client, db_session):
+    admin = AdminUser(
+        id=uuid.uuid4(),
+        email="superadmin@example.com",
+        password_hash=hash_password("secret"),
+        is_superadmin=True,
+    )
+    existing = Tenant(id=uuid.uuid4(), slug="acme", name="Acme", status=TenantStatus.ACTIVE)
+    db_session.add_all([admin, existing])
+    db_session.commit()
+
+    _login_as(client, admin)
+    response = client.post(
+        "/api/admin/tenants",
+        json={"slug": "acme", "name": "Acme Two", "status": "ACTIVE"},
+    )
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "SLUG_TAKEN"
+
+
+def test_superadmin_can_delete_tenant_with_portal_sessions(client, db_session):
+    admin = AdminUser(
+        id=uuid.uuid4(),
+        email="superadmin@example.com",
+        password_hash=hash_password("secret"),
+        is_superadmin=True,
+    )
+    tenant = Tenant(id=uuid.uuid4(), slug="acme", name="Acme", status=TenantStatus.ACTIVE)
+    site = Site(
+        id=uuid.uuid4(),
+        tenant_id=tenant.id,
+        slug="hq",
+        display_name="HQ",
+        enabled=True,
+        unifi_site_id="default",
+        default_time_limit_minutes=60,
+    )
+    session = PortalSession(
+        id=uuid.uuid4(),
+        tenant_id=tenant.id,
+        site_id=site.id,
+        client_mac="AA:BB:CC:DD:EE:FF",
+        ap_mac="11:22:33:44:55:66",
+        ssid="Guest",
+        orig_url="http://example.com",
+        status=PortalSessionStatus.STARTED,
+    )
+    db_session.add_all([admin, tenant, site, session])
+    db_session.commit()
+
+    _login_as(client, admin)
+    response = client.delete(f"/api/admin/tenants/{tenant.id}")
+    assert response.status_code == 200
+    assert response.json()["data"]["deleted"] is True
 
 
 def test_tenant_admin_can_create_and_delete_site(client, db_session):
