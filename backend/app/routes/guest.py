@@ -52,7 +52,14 @@ def resolve_site(
             detail={"ok": False, "error": {"code": "INVALID_MAC", "message": "Invalid client MAC address."}},
         ) from exc
 
-    site, tenant = _resolve_site_by_unifi(db, normalized_client)
+    normalized_ap = None
+    if payload.ap:
+        try:
+            normalized_ap = normalize_mac(payload.ap)
+        except ValueError:
+            normalized_ap = None
+
+    site, tenant = _resolve_site_by_unifi(db, normalized_client, normalized_ap)
     if not site.enabled:
         raise HTTPException(
             status_code=404,
@@ -514,7 +521,7 @@ def _get_site(db: Session, tenant_slug: str, site_slug: str) -> Site:
     return site
 
 
-def _resolve_site_by_unifi(db: Session, client_mac: str) -> tuple[Site, Tenant]:
+def _resolve_site_by_unifi(db: Session, client_mac: str, ap_mac: str | None) -> tuple[Site, Tenant]:
     tenant_results = db.execute(select(Tenant)).scalars().all()
     for tenant in tenant_results:
         sites = db.execute(select(Site).where(Site.tenant_id == tenant.id)).scalars().all()
@@ -546,6 +553,37 @@ def _resolve_site_by_unifi(db: Session, client_mac: str) -> tuple[Site, Tenant]:
                 continue
             if clients:
                 return site, tenant
+    if ap_mac:
+        for tenant in tenant_results:
+            sites = db.execute(select(Site).where(Site.tenant_id == tenant.id)).scalars().all()
+            for site in sites:
+                if not site.enabled:
+                    continue
+                base_url = site.unifi_base_url or tenant.unifi_base_url
+                api_key_ref = site.unifi_api_key_ref or tenant.unifi_api_key_ref
+                if not base_url or not api_key_ref:
+                    continue
+                try:
+                    client = UnifiClient(
+                        base_url,
+                        api_key_ref,
+                        site.unifi_site_id,
+                        tenant_id=str(site.tenant_id),
+                        site_uuid=str(site.id),
+                        timeout_s=3.0,
+                        verify_ssl=settings.UNIFI_VERIFY_SSL,
+                    )
+                    devices = client.get_devices_by_mac(ap_mac)
+                except Exception as exc:
+                    logger.warning(
+                        "unifi_ap_lookup_failed",
+                        tenant_id=str(site.tenant_id),
+                        site_id=str(site.id),
+                        error=str(exc),
+                    )
+                    continue
+                if devices:
+                    return site, tenant
     raise HTTPException(
         status_code=404,
         detail={"ok": False, "error": {"code": "SITE_RESOLVE_FAILED", "message": "Unable to resolve site."}},

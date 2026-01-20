@@ -296,10 +296,7 @@ def discover_unifi_sites(
             },
         ) from exc
 
-    existing = {
-        site.unifi_site_id
-        for site in db.execute(select(Site.unifi_site_id).where(Site.tenant_id == tenant_id)).scalars().all()
-    }
+    existing = set(db.execute(select(Site.unifi_site_id).where(Site.tenant_id == tenant_id)).scalars().all())
 
     data = []
     for site in sites:

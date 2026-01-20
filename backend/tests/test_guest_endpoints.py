@@ -373,3 +373,32 @@ def test_tos_only_rate_limit(client, db_session, monkeypatch):
         json={"portal_session_id": str(session_data.portal_session_id)},
     )
     assert response.status_code == 429
+
+
+def test_resolve_site_uses_ap_mac_fallback(client, db_session, monkeypatch):
+    tenant, site = _seed_site(db_session)
+    redis_client = FakeRedis()
+    from app import routes as _routes
+
+    monkeypatch.setattr(_routes.guest, "get_redis_client", lambda: redis_client)
+
+    class StubUnifi:
+        def __init__(self, *args, **kwargs) -> None:
+            return None
+
+        def get_clients_by_mac(self, mac: str):
+            return []
+
+        def get_devices_by_mac(self, mac: str):
+            return [{"id": "ap-1"}]
+
+    monkeypatch.setattr(_routes.guest, "UnifiClient", StubUnifi)
+
+    response = client.post(
+        "/api/guest/resolve",
+        json={"id": "AA:BB:CC:DD:EE:FF", "ap": "11:22:33:44:55:66"},
+    )
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["tenant_slug"] == tenant.slug
+    assert payload["site_slug"] == site.slug
