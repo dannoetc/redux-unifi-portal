@@ -116,17 +116,17 @@ export default function AuthEventsPage() {
             {activeTenant ? `Active tenant: ${activeTenant.name}` : "Select a tenant from the sidebar to continue."}
           </p>
         </div>
-        <Button variant="outline" onClick={exportCsv}>
+        <Button variant="secondary" onClick={exportCsv}>
           Export CSV
         </Button>
       </div>
-      <Card className="p-4">
+      <Card className="rounded-xl border bg-card p-6 shadow-soft">
         <div className="grid gap-4 md:grid-cols-4">
           <div className="space-y-2">
             <Label htmlFor="method">Method</Label>
             <select
               id="method"
-              className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+              className="h-10 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2 focus:ring-offset-white"
               value={filters.method}
               onChange={(event) => setFilters((prev) => ({ ...prev, method: event.target.value }))}
             >
@@ -140,7 +140,7 @@ export default function AuthEventsPage() {
             <Label htmlFor="result">Result</Label>
             <select
               id="result"
-              className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+              className="h-10 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2 focus:ring-offset-white"
               value={filters.result}
               onChange={(event) => setFilters((prev) => ({ ...prev, result: event.target.value }))}
             >

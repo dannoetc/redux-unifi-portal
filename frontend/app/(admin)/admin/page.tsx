@@ -49,7 +49,7 @@ export default function AdminHome() {
         </p>
       </div>
       <div className="grid gap-4 md:grid-cols-3">
-        <Card>
+        <Card className="rounded-xl border bg-card shadow-soft">
           <CardHeader>
             <CardTitle>Admin session</CardTitle>
             <CardDescription>Signed in details</CardDescription>
@@ -69,7 +69,7 @@ export default function AdminHome() {
             )}
           </CardContent>
         </Card>
-        <Card>
+        <Card className="rounded-xl border bg-card shadow-soft">
           <CardHeader>
             <CardTitle>Tenants</CardTitle>
             <CardDescription>Membership count</CardDescription>
@@ -78,7 +78,7 @@ export default function AdminHome() {
             {me?.admin_user.memberships.length ?? 0}
           </CardContent>
         </Card>
-        <Card>
+        <Card className="rounded-xl border bg-card shadow-soft">
           <CardHeader>
             <CardTitle>Next actions</CardTitle>
             <CardDescription>Common admin tasks</CardDescription>

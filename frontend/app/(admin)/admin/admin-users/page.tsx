@@ -183,7 +183,9 @@ export default function AdminUsersPage() {
         <div className="flex flex-wrap items-end gap-3">
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
-              <Button disabled={!tenantId}>New admin</Button>
+              <Button variant="primary" disabled={!tenantId}>
+                New admin
+              </Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
@@ -203,7 +205,7 @@ export default function AdminUsersPage() {
                   <Label htmlFor="role">Role</Label>
                   <select
                     id="role"
-                    className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                    className="h-10 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2 focus:ring-offset-white"
                     {...form.register("role")}
                   >
                     <option value="TENANT_ADMIN">Tenant admin</option>
@@ -211,14 +213,16 @@ export default function AdminUsersPage() {
                   </select>
                 </div>
                 <DialogFooter>
-                  <Button type="submit">Create admin</Button>
+                  <Button type="submit" variant="primary">
+                    Create admin
+                  </Button>
                 </DialogFooter>
               </form>
             </DialogContent>
           </Dialog>
         </div>
       </div>
-      <Card className="p-4">
+      <Card className="rounded-xl border bg-card p-6 shadow-soft">
         {loading ? (
           <div className="text-sm text-muted-foreground">Loading admins...</div>
         ) : (
@@ -234,7 +238,7 @@ export default function AdminUsersPage() {
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setDeleteOpen(false)}>
+            <Button variant="secondary" onClick={() => setDeleteOpen(false)}>
               Cancel
             </Button>
             <Button variant="destructive" onClick={deleteAdmin} disabled={deleting}>

@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import StatusPill from "@/components/ui/StatusPill";
 
 type Site = {
   id: string;
@@ -53,7 +54,7 @@ const siteSchema = z.object({
   display_name: z.string().min(2),
   slug: z.string().min(2),
   enabled: z.boolean().default(true),
-  unifi_base_url: z.string().url().optional().or(z.literal("")),
+  unifi_base_url: z.string().optional().or(z.literal("")),
   unifi_site_id: z.string().min(1),
   unifi_api_key_ref: z.string().optional().or(z.literal("")),
   default_time_limit_minutes: z.coerce.number().min(1),
@@ -63,6 +64,20 @@ const siteSchema = z.object({
 });
 
 type CreateSite = z.infer<typeof siteSchema>;
+
+const UNIFI_INTEGRATION_PATH = "/proxy/network/integration";
+
+const normalizeUnifiBaseUrl = (value: string | undefined | null) => {
+  const trimmed = value?.trim() ?? "";
+  if (!trimmed) {
+    return "";
+  }
+  const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  if (withProtocol.includes(UNIFI_INTEGRATION_PATH)) {
+    return withProtocol;
+  }
+  return `${withProtocol.replace(/\/+$/, "")}${UNIFI_INTEGRATION_PATH}`;
+};
 
 export default function SitesPage() {
   const { tenantId, tenants } = useTenantSelection();
@@ -170,7 +185,9 @@ export default function SitesPage() {
       {
         accessorKey: "enabled",
         header: "Status",
-        cell: ({ row }) => (row.original.enabled ? "Enabled" : "Disabled"),
+        cell: ({ row }) => (
+          <StatusPill status={row.original.enabled ? "active" : "inactive"} />
+        ),
       },
       {
         accessorKey: "unifi_site_id",
@@ -182,7 +199,7 @@ export default function SitesPage() {
         header: "",
         cell: ({ row }) => (
           <div className="flex items-center justify-end gap-2">
-            <Button asChild variant="ghost" size="sm">
+            <Button asChild variant="secondary" size="sm">
               <a
                 href={
                   tenantSlug ? `/guest/s/${tenantSlug}/${row.original.slug}?preview=1` : "#"
@@ -193,7 +210,7 @@ export default function SitesPage() {
                 Preview
               </a>
             </Button>
-            <Button asChild variant="outline" size="sm">
+            <Button asChild variant="secondary" size="sm">
               <a href={`/admin/sites/${row.original.id}?tenant=${tenantId ?? ""}`}>Edit</a>
             </Button>
             <Button
@@ -219,9 +236,13 @@ export default function SitesPage() {
       return;
     }
     try {
+      const payload = {
+        ...values,
+        unifi_base_url: normalizeUnifiBaseUrl(values.unifi_base_url),
+      };
       const data = await apiFetch<{ site: Site }>(`/api/admin/tenants/${tenantId}/sites`, {
         method: "POST",
-        body: JSON.stringify(values),
+        body: JSON.stringify(payload),
       });
       setSites((prev) => [data.site, ...prev]);
       toast.success("Site created.");
@@ -294,7 +315,9 @@ export default function SitesPage() {
         <div className="flex flex-wrap items-end gap-3">
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
-              <Button disabled={!tenantId}>New site</Button>
+              <Button variant="primary" disabled={!tenantId}>
+                New site
+              </Button>
             </DialogTrigger>
             <DialogContent className="max-w-2xl">
               <DialogHeader>
@@ -311,8 +334,8 @@ export default function SitesPage() {
                   <Input id="slug" {...form.register("slug")} />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="unifi_base_url">UniFi base URL (optional override)</Label>
-                  <Input id="unifi_base_url" placeholder="Use tenant controller" {...form.register("unifi_base_url")} />
+                  <Label htmlFor="unifi_base_url">UniFi controller IP (optional override)</Label>
+                  <Input id="unifi_base_url" placeholder="71.162.143.124" {...form.register("unifi_base_url")} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="unifi_site_id">UniFi site ID</Label>
@@ -320,7 +343,7 @@ export default function SitesPage() {
                 </div>
                 <div className="space-y-2 md:col-span-2">
                   <Label htmlFor="unifi_api_key_ref">UniFi API key reference (optional override)</Label>
-                  <Input id="unifi_api_key_ref" placeholder="Use tenant controller" {...form.register("unifi_api_key_ref")} />
+                  <Input id="unifi_api_key_ref" type="password" placeholder="Use tenant controller" {...form.register("unifi_api_key_ref")} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="default_time_limit_minutes">Time limit (minutes)</Label>
@@ -344,14 +367,16 @@ export default function SitesPage() {
                   </p>
                 </div>
                 <DialogFooter className="md:col-span-2">
-                  <Button type="submit">Create site</Button>
+                  <Button type="submit" variant="primary">
+                    Create site
+                  </Button>
                 </DialogFooter>
               </form>
             </DialogContent>
           </Dialog>
           <Dialog open={discoverOpen} onOpenChange={setDiscoverOpen}>
             <DialogTrigger asChild>
-              <Button variant="outline" disabled={!tenantId}>
+              <Button variant="secondary" disabled={!tenantId}>
                 Discover sites
               </Button>
             </DialogTrigger>
@@ -396,7 +421,7 @@ export default function SitesPage() {
                           <div className="font-medium text-foreground">{site.name}</div>
                           <div className="text-xs text-muted-foreground">
                             {site.internalReference ?? site.id}
-                            {site.provisioned ? " · Already provisioned" : ""}
+                            {site.provisioned ? " - Already provisioned" : ""}
                           </div>
                         </div>
                         <Input
@@ -432,10 +457,10 @@ export default function SitesPage() {
                 </div>
               )}
               <DialogFooter className="gap-2">
-                <Button variant="outline" onClick={() => setDiscoverOpen(false)}>
+                <Button variant="secondary" onClick={() => setDiscoverOpen(false)}>
                   Cancel
                 </Button>
-                <Button onClick={provisionSites} disabled={discoverLoading}>
+                <Button variant="primary" onClick={provisionSites} disabled={discoverLoading}>
                   Provision selected
                 </Button>
               </DialogFooter>
@@ -443,7 +468,7 @@ export default function SitesPage() {
           </Dialog>
         </div>
       </div>
-      <Card className="p-4">
+      <Card className="rounded-xl border bg-card p-6 shadow-soft">
         {loading ? (
           <div className="text-sm text-muted-foreground">Loading sites...</div>
         ) : (
@@ -459,7 +484,7 @@ export default function SitesPage() {
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setDeleteOpen(false)}>
+            <Button variant="secondary" onClick={() => setDeleteOpen(false)}>
               Cancel
             </Button>
             <Button variant="destructive" onClick={deleteSite} disabled={deleting}>
@@ -471,3 +496,5 @@ export default function SitesPage() {
     </div>
   );
 }
+
+

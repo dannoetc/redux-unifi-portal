@@ -117,7 +117,7 @@ export default function VouchersPage() {
           {activeTenant ? `Active tenant: ${activeTenant.name}` : "Select a tenant from the sidebar to continue."}
         </p>
       </div>
-      <Card>
+      <Card className="rounded-xl border bg-card shadow-soft">
         <CardHeader>
           <CardTitle>Create batch</CardTitle>
           <CardDescription>Generate vouchers for a single site.</CardDescription>
@@ -128,7 +128,7 @@ export default function VouchersPage() {
               <Label htmlFor="site">Site</Label>
               <select
                 id="site"
-                className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                className="h-10 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2 focus:ring-offset-white"
                 value={siteId}
                 onChange={(event) => setSiteId(event.target.value)}
                 disabled={!tenantId || sites.length === 0}
@@ -164,12 +164,14 @@ export default function VouchersPage() {
               <Input id="expires_at" placeholder="2026-01-15T12:00:00" {...form.register("expires_at")} />
             </div>
             <div className="flex items-end">
-              <Button type="submit">Generate vouchers</Button>
+              <Button type="submit" variant="primary">
+                Generate vouchers
+              </Button>
             </div>
           </form>
         </CardContent>
       </Card>
-      <Card>
+      <Card className="rounded-xl border bg-card shadow-soft">
         <CardHeader>
           <CardTitle>Export vouchers</CardTitle>
           <CardDescription>Download CSV for an existing batch.</CardDescription>
@@ -184,7 +186,7 @@ export default function VouchersPage() {
               placeholder="UUID"
             />
           </div>
-          <Button variant="outline" onClick={() => exportCsv(batchId)}>
+          <Button variant="secondary" onClick={() => exportCsv(batchId)}>
             Export CSV
           </Button>
         </CardContent>
