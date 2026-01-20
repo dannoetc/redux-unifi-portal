@@ -696,7 +696,10 @@ def _resolve_site_by_unifi(db: Session, client_mac: str, ap_mac: str | None) -> 
                     timeout_s=3.0,
                     verify_ssl=settings.UNIFI_VERIFY_SSL,
                 )
-                unifi_client = client.find_client_by_mac(client_mac)
+                if ap_mac:
+                    unifi_client = client.find_client_by_mac(client_mac, attempts=2, backoff_s=0.3)
+                else:
+                    unifi_client = client.find_client_by_mac(client_mac)
             except Exception as exc:
                 logger.warning(
                     "unifi_site_lookup_failed",
