@@ -677,39 +677,6 @@ def _get_site(db: Session, tenant_slug: str, site_slug: str) -> Site:
 
 def _resolve_site_by_unifi(db: Session, client_mac: str, ap_mac: str | None) -> tuple[Site, Tenant]:
     tenant_results = db.execute(select(Tenant)).scalars().all()
-    for tenant in tenant_results:
-        sites = db.execute(select(Site).where(Site.tenant_id == tenant.id)).scalars().all()
-        for site in sites:
-            if not site.enabled:
-                continue
-            base_url = site.unifi_base_url or tenant.unifi_base_url
-            api_key_ref = site.unifi_api_key_ref or tenant.unifi_api_key_ref
-            if not base_url or not api_key_ref:
-                continue
-            try:
-                client = UnifiClient(
-                    base_url,
-                    api_key_ref,
-                    site.unifi_site_id,
-                    tenant_id=str(site.tenant_id),
-                    site_uuid=str(site.id),
-                    timeout_s=3.0,
-                    verify_ssl=settings.UNIFI_VERIFY_SSL,
-                )
-                if ap_mac:
-                    unifi_client = client.find_client_by_mac(client_mac, attempts=2, backoff_s=0.3)
-                else:
-                    unifi_client = client.find_client_by_mac(client_mac)
-            except Exception as exc:
-                logger.warning(
-                    "unifi_site_lookup_failed",
-                    tenant_id=str(site.tenant_id),
-                    site_id=str(site.id),
-                    error=str(exc),
-                )
-                continue
-            if unifi_client:
-                return site, tenant
     if ap_mac:
         for tenant in tenant_results:
             sites = db.execute(select(Site).where(Site.tenant_id == tenant.id)).scalars().all()
@@ -763,6 +730,37 @@ def _resolve_site_by_unifi(db: Session, client_mac: str, ap_mac: str | None) -> 
                         if matched_site:
                             return matched_site, tenant
                     return site, tenant
+
+    for tenant in tenant_results:
+        sites = db.execute(select(Site).where(Site.tenant_id == tenant.id)).scalars().all()
+        for site in sites:
+            if not site.enabled:
+                continue
+            base_url = site.unifi_base_url or tenant.unifi_base_url
+            api_key_ref = site.unifi_api_key_ref or tenant.unifi_api_key_ref
+            if not base_url or not api_key_ref:
+                continue
+            try:
+                client = UnifiClient(
+                    base_url,
+                    api_key_ref,
+                    site.unifi_site_id,
+                    tenant_id=str(site.tenant_id),
+                    site_uuid=str(site.id),
+                    timeout_s=3.0,
+                    verify_ssl=settings.UNIFI_VERIFY_SSL,
+                )
+                unifi_client = client.find_client_by_mac(client_mac)
+            except Exception as exc:
+                logger.warning(
+                    "unifi_site_lookup_failed",
+                    tenant_id=str(site.tenant_id),
+                    site_id=str(site.id),
+                    error=str(exc),
+                )
+                continue
+            if unifi_client:
+                return site, tenant
     raise HTTPException(
         status_code=404,
         detail={"ok": False, "error": {"code": "SITE_RESOLVE_FAILED", "message": "Unable to resolve site."}},
