@@ -16,6 +16,9 @@ export class ApiError extends Error {
 
 const resolveApiBaseUrl = () => {
   if (typeof window !== "undefined") {
+    if (window.location.origin.startsWith("http://")) {
+      return window.location.origin;
+    }
     const runtimeEnv = (window as Window & {
       __ENV__?: { NEXT_PUBLIC_API_BASE_URL?: string };
     }).__ENV__;
