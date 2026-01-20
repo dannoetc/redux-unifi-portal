@@ -59,6 +59,18 @@ class UnifiClient:
     def _log_context(self) -> dict[str, Any]:
         return {"unifi_site_id": self.site_id, "tenant_id": self.tenant_id, "site_id": self.site_uuid}
 
+    def _parse_json(self, response: httpx.Response, *, endpoint: str) -> Any:
+        try:
+            return response.json()
+        except ValueError as exc:
+            logger.error(
+                "unifi_response_invalid_json",
+                **self._log_context(),
+                endpoint=endpoint,
+                status_code=response.status_code,
+            )
+            raise UnifiApiError("UniFi returned invalid JSON.", status_code=response.status_code) from exc
+
     def get_clients_by_mac(self, mac: str) -> list[dict]:
         params = {"filter": f"macAddress.eq('{mac}')"}
         endpoint = f"/v1/sites/{self.site_id}/clients"
@@ -75,7 +87,7 @@ class UnifiClient:
                 status_code=response.status_code,
             )
             raise UnifiApiError("UniFi returned an error.", status_code=response.status_code)
-        payload = response.json()
+        payload = self._parse_json(response, endpoint="GET clients")
         return payload.get("data", payload.get("results", []))
 
     def find_client_by_mac(self, mac: str, attempts: int = 5, backoff_s: float = 0.3) -> dict | None:
@@ -137,7 +149,7 @@ class UnifiClient:
                 status_code=response.status_code,
             )
             raise UnifiApiError("UniFi returned an error.", status_code=response.status_code)
-        return response.json()
+        return self._parse_json(response, endpoint="GET client")
 
     def get_site(self) -> dict:
         endpoint = f"/v1/sites/{self.site_id}"
@@ -154,4 +166,4 @@ class UnifiClient:
                 status_code=response.status_code,
             )
             raise UnifiApiError("UniFi returned an error.", status_code=response.status_code)
-        return response.json()
+        return self._parse_json(response, endpoint="GET site")
