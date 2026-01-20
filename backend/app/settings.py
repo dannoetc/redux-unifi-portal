@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     SMTP_FROM_EMAIL: str = "wifi@reduxtc.com"
     SMTP_FROM_NAME: str = "ReduxTC WiFi"
 
+    # UniFi
+    UNIFI_VERIFY_SSL: bool = True
+
     # CORS
     CORS_ALLOW_ORIGINS: str = "http://localhost:3000"
 

@@ -30,12 +30,14 @@ class UnifiClient:
         tenant_id: str | None = None,
         site_uuid: str | None = None,
         timeout_s: float = 10.0,
+        verify_ssl: bool = True,
         http_client: httpx.Client | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.site_id = site_id
         self.timeout = timeout_s
+        self.verify_ssl = verify_ssl
         self.tenant_id = tenant_id
         self.site_uuid = site_uuid
         self._http_client = http_client
@@ -45,6 +47,7 @@ class UnifiClient:
             base_url=self.base_url,
             headers={"X-API-KEY": self.api_key, "Accept": "application/json"},
             timeout=self.timeout,
+            verify=self.verify_ssl,
         )
 
     def _request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:

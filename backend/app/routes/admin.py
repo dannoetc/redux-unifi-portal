@@ -457,6 +457,7 @@ def test_unifi_connection(
         site.unifi_site_id,
         tenant_id=str(site.tenant_id),
         site_uuid=str(site.id),
+        verify_ssl=settings.UNIFI_VERIFY_SSL,
     )
     try:
         payload = client.get_site()

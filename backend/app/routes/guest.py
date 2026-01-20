@@ -533,6 +533,7 @@ def _resolve_site_by_unifi(db: Session, client_mac: str) -> tuple[Site, Tenant]:
                     tenant_id=str(site.tenant_id),
                     site_uuid=str(site.id),
                     timeout_s=3.0,
+                    verify_ssl=settings.UNIFI_VERIFY_SSL,
                 )
                 clients = client.get_clients_by_mac(client_mac)
             except Exception as exc:
@@ -586,6 +587,7 @@ def _authorize_unifi(site: Site, tenant: Tenant | None, client_mac: str) -> tupl
         site.unifi_site_id,
         tenant_id=str(site.tenant_id),
         site_uuid=str(site.id),
+        verify_ssl=settings.UNIFI_VERIFY_SSL,
     )
     try:
         unifi_client = client.find_client_by_mac(client_mac)

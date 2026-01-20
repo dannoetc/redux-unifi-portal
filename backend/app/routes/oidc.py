@@ -271,6 +271,7 @@ def _authorize_unifi(site: Site, tenant: Tenant, client_mac: str) -> tuple[bool,
         site.unifi_site_id,
         tenant_id=str(site.tenant_id),
         site_uuid=str(site.id),
+        verify_ssl=settings.UNIFI_VERIFY_SSL,
     )
     try:
         unifi_client = client.find_client_by_mac(client_mac)
