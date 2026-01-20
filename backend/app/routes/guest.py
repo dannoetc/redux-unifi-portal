@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import uuid
+from typing import Dict
+from urllib.parse import parse_qs, unquote, unquote_plus
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -38,26 +41,137 @@ logger = structlog.get_logger(__name__)
 
 router = APIRouter()
 
+
+def _first_or_none(values):
+    return values[0] if values else None
+
+
+def parse_malformed_guest_params(request: Request) -> Dict[str, str]:
+    """
+    Read X-Original-URI or raw_path and return canonical params merged from
+    the encoded path fragment (after /guest%3F) and the normal query string.
+    """
+    original = request.headers.get("X-Original-URI")
+    if not original:
+        raw_path = request.scope.get("raw_path") or ""
+        if isinstance(raw_path, bytes):
+            original = raw_path.decode("utf-8", errors="ignore")
+        else:
+            original = raw_path
+        qs = request.scope.get("query_string")
+        if qs:
+            if isinstance(qs, bytes):
+                qs = qs.decode("utf-8", errors="ignore")
+            if qs:
+                original += ("?" + qs) if "?" not in original else "&" + qs
+    original = original or ""
+
+    lower = original.lower()
+    token = "/guest%3f"
+    encoded_params = None
+    if token in lower:
+        idx = lower.index(token)
+        start = idx + len(token)
+        encoded_params = original[start:]
+        if encoded_params.startswith("/"):
+            encoded_params = encoded_params[1:]
+
+    path_params = {}
+    if encoded_params:
+        try:
+            decoded_once = unquote(encoded_params)
+        except Exception:
+            decoded_once = encoded_params
+        if "%25" in decoded_once:
+            try:
+                decoded_once = unquote(decoded_once)
+            except Exception:
+                pass
+        qs_map = parse_qs(decoded_once, keep_blank_values=True)
+        for key, values in qs_map.items():
+            path_params[key] = _first_or_none(values)
+
+    query_params = {}
+    try:
+        for key, value in request.query_params.multi_items():
+            if key not in query_params:
+                query_params[key] = value
+    except Exception:
+        url_qs = request.url.query or ""
+        if url_qs:
+            for key, values in parse_qs(url_qs, keep_blank_values=True).items():
+                query_params[key] = _first_or_none(values)
+
+    merged = {}
+    for source in (path_params, query_params):
+        for key, value in source.items():
+            if key not in merged and value is not None:
+                decoded_value = value
+                if "%25" in decoded_value:
+                    try:
+                        decoded_value = unquote(decoded_value)
+                    except Exception:
+                        pass
+                try:
+                    decoded_value = unquote_plus(decoded_value)
+                except Exception:
+                    pass
+                merged[key] = decoded_value
+
+    if encoded_params:
+        logger.debug("parsed_malformed_guest_params", original=original, merged=merged)
+
+    return merged
+
+
 @router.post("/resolve")
 def resolve_site(
     payload: GuestSessionInitRequest,
     request: Request,
     db: Session = Depends(get_db),
 ) -> dict:
-    try:
-        normalized_client = normalize_mac(payload.id)
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=400,
-            detail={"ok": False, "error": {"code": "INVALID_MAC", "message": "Invalid client MAC address."}},
-        ) from exc
+    parsed_params = None
+    normalized_client = None
+    if payload.id:
+        try:
+            normalized_client = normalize_mac(payload.id)
+        except ValueError:
+            normalized_client = None
+
+    if not normalized_client:
+        if parsed_params is None:
+            parsed_params = parse_malformed_guest_params(request)
+        client_val = parsed_params.get("id") or parsed_params.get("client") or parsed_params.get("mac")
+        if not client_val:
+            raise HTTPException(
+                status_code=400,
+                detail={"ok": False, "error": {"code": "INVALID_MAC", "message": "Invalid client MAC address."}},
+            )
+        try:
+            normalized_client = normalize_mac(client_val)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail={"ok": False, "error": {"code": "INVALID_MAC", "message": "Invalid client MAC address."}},
+            ) from exc
 
     normalized_ap = None
+    ap_candidate = None
     if payload.ap:
         try:
-            normalized_ap = normalize_mac(payload.ap)
+            ap_candidate = normalize_mac(payload.ap)
         except ValueError:
-            normalized_ap = None
+            ap_candidate = None
+    if not ap_candidate:
+        if parsed_params is None:
+            parsed_params = parse_malformed_guest_params(request)
+        ap_raw = parsed_params.get("ap")
+        if ap_raw:
+            try:
+                ap_candidate = normalize_mac(ap_raw)
+            except ValueError:
+                ap_candidate = None
+    normalized_ap = ap_candidate
 
     site, tenant = _resolve_site_by_unifi(db, normalized_client, normalized_ap)
     if not site.enabled:
@@ -168,18 +282,52 @@ def init_session(
     redis_client = get_redis_client()
     user_agent = payload.user_agent or request.headers.get("user-agent")
     client_ip = request.client.host if request.client else None
+    parsed_params = None
+    normalized_client = None
+    if payload.id:
+        try:
+            normalized_client = normalize_mac(payload.id)
+        except ValueError:
+            normalized_client = None
+    if not normalized_client:
+        if parsed_params is None:
+            parsed_params = parse_malformed_guest_params(request)
+        client_val = parsed_params.get("id") or parsed_params.get("client") or parsed_params.get("mac")
+        if not client_val:
+            raise HTTPException(
+                status_code=400,
+                detail={"ok": False, "error": {"code": "INVALID_MAC", "message": "Invalid client MAC address."}},
+            )
+        try:
+            normalized_client = normalize_mac(client_val)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail={"ok": False, "error": {"code": "INVALID_MAC", "message": "Invalid client MAC address."}},
+            ) from exc
     normalized_ap = None
+    ap_candidate = None
     if payload.ap:
         try:
-            normalized_ap = normalize_mac(payload.ap)
+            ap_candidate = normalize_mac(payload.ap)
         except ValueError:
-            normalized_ap = None
+            ap_candidate = None
+    if not ap_candidate:
+        if parsed_params is None:
+            parsed_params = parse_malformed_guest_params(request)
+        ap_raw = parsed_params.get("ap")
+        if ap_raw:
+            try:
+                ap_candidate = normalize_mac(ap_raw)
+            except ValueError:
+                ap_candidate = None
+    normalized_ap = ap_candidate
     session = create_or_reuse_session(
         db,
         redis_client,
         tenant_id=site.tenant_id,
         site=site,
-        client_mac=payload.id,
+        client_mac=normalized_client,
         ap_mac=normalized_ap,
         ssid=payload.ssid,
         orig_url=payload.url,
