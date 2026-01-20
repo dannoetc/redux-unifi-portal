@@ -580,6 +580,10 @@ def _resolve_site_by_unifi(db: Session, client_mac: str, ap_mac: str | None) -> 
                         verify_ssl=settings.UNIFI_VERIFY_SSL,
                     )
                     devices = client.get_devices_by_mac(ap_mac)
+                    if not devices:
+                        lowered = ap_mac.lower()
+                        if lowered != ap_mac:
+                            devices = client.get_devices_by_mac(lowered)
                 except Exception as exc:
                     logger.warning(
                         "unifi_ap_lookup_failed",
