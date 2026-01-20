@@ -16,6 +16,22 @@ complete an authentication flow, and are authorized on the UniFi controller.
 - **Admin console** for managing sites, policies, voucher batches, and authentication providers.
 - **Audit and exports** for auth events and voucher usage history.
 
+## Who should use this guide
+
+- **MSP operators** who manage multiple customer tenants and sites.
+- **Tenant admins** who configure guest access methods and policies.
+- **Front desk or hospitality staff** who issue vouchers and assist guests.
+
+## Platform overview
+
+ReduxTC has two main experiences:
+
+- **Guest portal** — the WiFi splash page where visitors authenticate.
+- **Admin console** — the operations center for managing tenants, sites, and policies.
+
+The portal resolves the correct tenant and site automatically using the UniFi redirect parameters,
+so one external portal URL can serve all sites.
+
 ## Documentation map
 
 - [Guest Experience](guest-experience.md) — how visitors connect and authenticate.

@@ -9,6 +9,11 @@ reporting. Access is scoped to the tenant(s) you belong to.
 - **Sites** are the physical or logical locations under a tenant.
 - Each site stores branding and UniFi policy defaults for guest sessions.
 
+## Admin roles
+
+- **Superadmins** can manage all tenants and platform settings.
+- **Tenant admins** can configure sites, authentication methods, and reporting for their tenant.
+
 ## Site configuration
 
 Administrators can configure per-site settings including:
@@ -42,3 +47,11 @@ Each site can enable one or more methods:
 - View guest authorization events per tenant/site.
 - Filter events by site, method, and time range.
 - Export audit logs to CSV for reporting.
+
+## Common admin workflows
+
+1. **Create a tenant and site** for each customer location.
+2. **Configure UniFi settings** and a default access policy for the site.
+3. **Enable authentication methods** and set branding/terms for the guest portal.
+4. **Issue vouchers or configure SSO** depending on guest access needs.
+5. **Monitor auth events** to validate usage and detect issues.

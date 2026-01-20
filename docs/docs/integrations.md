@@ -14,6 +14,12 @@ ReduxTC uses the official UniFi Network API to:
 The portal resolves the correct site based on the incoming client details so UniFi can use a single
 external portal URL for all sites.
 
+### External portal URL
+
+UniFi should be configured to use a single external portal URL. ReduxTC handles mapping the incoming
+redirect to the correct tenant and site automatically, which keeps UniFi controller configuration
+consistent across sites.
+
 ## Identity providers (OIDC)
 
 OIDC providers enable single sign-on for guests and staff identities, depending on your deployment.
@@ -27,3 +33,8 @@ Supported workflows include:
 
 Email OTP relies on your configured SMTP provider. Ensure that sender domains are authorized and
 that outbound email is allowed from the deployment environment.
+
+## Redis and background jobs
+
+- OTP codes and portal sessions are cached in Redis for quick authorization and retries.
+- Background jobs (Celery) handle email delivery and async tasks.

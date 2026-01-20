@@ -13,6 +13,11 @@ This section highlights operational considerations and built-in controls.
 - Guest MAC addresses are retained for authorization and audit trails.
 - Email addresses are collected only for OTP or SSO flows.
 
+## Reliability safeguards
+
+- Portal sessions are cached to handle reconnects without re-authentication.
+- Duplicate portal requests are safely handled to prevent double authorizations.
+
 ## Rate limiting and reliability
 
 - OTP and voucher endpoints are rate-limited to prevent abuse.
@@ -28,3 +33,4 @@ This section highlights operational considerations and built-in controls.
 - Use HTTPS and keep certificates up to date.
 - Limit admin access to trusted staff.
 - Review auth event exports regularly for unusual activity.
+- Monitor SMTP deliverability to avoid OTP failures.

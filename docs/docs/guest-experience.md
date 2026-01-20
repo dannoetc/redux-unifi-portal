@@ -11,6 +11,12 @@ presents the site’s branding, terms, and available authentication options.
 4. The guest selects an authentication method and completes it.
 5. ReduxTC authorizes the guest on the UniFi controller and shows a success screen.
 
+## Guest-friendly features
+
+- **Captive portal readiness** with clear status steps for slow or walled-garden browsers.
+- **Branding and terms** supplied by each site for a consistent experience.
+- **Automatic return** to the original URL when UniFi provides a destination.
+
 ## Authentication options
 
 ### Voucher code
@@ -35,6 +41,12 @@ presents the site’s branding, terms, and available authentication options.
 
 - Guests accept the site’s terms.
 - Access is granted without collecting additional identity details.
+
+## Troubleshooting tips for guests
+
+- **Portal does not load**: disconnect and reconnect to the WiFi SSID.
+- **Email code not received**: check spam folders or ask staff to verify the address.
+- **SSO not opening**: use the “Open in browser” link if the captive browser is limited.
 
 ## Success and access
 
