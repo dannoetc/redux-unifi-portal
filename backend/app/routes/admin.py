@@ -460,7 +460,7 @@ def test_unifi_connection(
         verify_ssl=settings.UNIFI_VERIFY_SSL,
     )
     try:
-        payload = client.get_site()
+        sites = client.list_sites()
     except UnifiApiError as exc:
         raise HTTPException(
             status_code=502,
@@ -471,9 +471,18 @@ def test_unifi_connection(
         ) from exc
 
     latency_ms = int((time.monotonic() - start) * 1000)
-    data = payload.get("data") if isinstance(payload, dict) else None
-    if isinstance(data, list):
-        data = data[0] if data else None
+    data = next((item for item in sites if item.get("id") == site.unifi_site_id), None)
+    if not data:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "ok": False,
+                "error": {
+                    "code": "UNIFI_SITE_NOT_FOUND",
+                    "message": "UniFi site id not found. Use the site id from /v1/sites.",
+                },
+            },
+        )
     return {
         "ok": True,
         "data": {

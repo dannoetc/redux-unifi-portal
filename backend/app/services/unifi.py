@@ -90,6 +90,24 @@ class UnifiClient:
         payload = self._parse_json(response, endpoint="GET clients")
         return payload.get("data", payload.get("results", []))
 
+    def list_sites(self) -> list[dict]:
+        endpoint = "/v1/sites"
+        try:
+            response = self._request("GET", endpoint)
+        except httpx.HTTPError as exc:
+            logger.error("unifi_request_failed", **self._log_context(), endpoint="LIST sites", error=str(exc))
+            raise UnifiApiError("UniFi request failed.") from exc
+        if response.status_code >= 400:
+            logger.error(
+                "unifi_request_error",
+                **self._log_context(),
+                endpoint="LIST sites",
+                status_code=response.status_code,
+            )
+            raise UnifiApiError("UniFi returned an error.", status_code=response.status_code)
+        payload = self._parse_json(response, endpoint="LIST sites")
+        return payload.get("data", payload.get("results", []))
+
     def find_client_by_mac(self, mac: str, attempts: int = 5, backoff_s: float = 0.3) -> dict | None:
         for attempt in range(1, attempts + 1):
             clients = self.get_clients_by_mac(mac)
