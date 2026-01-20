@@ -1,5 +1,6 @@
 import { AdminShellControls } from "@/components/admin/admin-shell-controls";
 import { SidebarTenantSwitcher } from "@/components/admin/sidebar-tenant-switcher";
+import { SidebarNav } from "@/components/admin/sidebar-nav";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -27,15 +28,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
             Navigation
           </div>
-          <ul className="mt-3 space-y-2 text-sm">
-            <li><a className="flex items-center justify-between rounded-md px-2 py-1.5 hover:bg-accent" href="/admin">Dashboard</a></li>
-            <li><a className="flex items-center justify-between rounded-md px-2 py-1.5 hover:bg-accent" href="/admin/tenants">Tenants</a></li>
-            <li><a className="flex items-center justify-between rounded-md px-2 py-1.5 hover:bg-accent" href="/admin/sites">Sites</a></li>
-            <li><a className="flex items-center justify-between rounded-md px-2 py-1.5 hover:bg-accent" href="/admin/admin-users">Admins</a></li>
-            <li><a className="flex items-center justify-between rounded-md px-2 py-1.5 hover:bg-accent" href="/admin/oidc-providers">OIDC</a></li>
-            <li><a className="flex items-center justify-between rounded-md px-2 py-1.5 hover:bg-accent" href="/admin/vouchers">Vouchers</a></li>
-            <li><a className="flex items-center justify-between rounded-md px-2 py-1.5 hover:bg-accent" href="/admin/auth-events">Auth Events</a></li>
-          </ul>
+          <SidebarNav />
         </aside>
         <main className="rounded-xl border bg-card p-6 shadow-soft">{children}</main>
       </div>

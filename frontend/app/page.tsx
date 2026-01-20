@@ -1,3 +1,5 @@
+import { Button } from "@/components/ui/button";
+
 export default function Home() {
   return (
     <main className="surface-grid min-h-screen px-4 py-12 sm:px-6">
@@ -12,18 +14,12 @@ export default function Home() {
             vouchers, and OIDC from a UniFi-adjacent console.
           </p>
           <div className="mt-6 flex flex-wrap gap-3">
-            <a
-              className="inline-flex items-center rounded-md bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2 focus:ring-offset-white"
-              href="/admin"
-            >
-              Open admin console
-            </a>
-            <a
-              className="inline-flex items-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2 focus:ring-offset-white"
-              href="/guest/s/demo/main"
-            >
-              Preview guest portal
-            </a>
+            <Button asChild variant="primary">
+              <a href="/admin">Open admin console</a>
+            </Button>
+            <Button asChild variant="secondary">
+              <a href="/guest/s/demo/main">Preview guest portal</a>
+            </Button>
           </div>
         </div>
         <div className="grid gap-4 md:grid-cols-3">

@@ -16,7 +16,7 @@ export default function TenantSwitcher({
 }) {
   return (
     <div className="mb-4 px-2">
-      <label className="sr-only" htmlFor="tenant-switcher">
+      <label className="mb-2 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground" htmlFor="tenant-switcher">
         Tenant
       </label>
       <select

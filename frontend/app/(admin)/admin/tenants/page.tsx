@@ -14,6 +14,7 @@ import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import StatusPill from "@/components/ui/StatusPill";
 
 const schema = z.object({
   name: z.string().min(2),
@@ -40,6 +41,17 @@ type Tenant = {
 type TenantList = { tenants: Tenant[] };
 
 type CreateTenant = z.infer<typeof schema>;
+
+const formatStatus = (status?: string) => {
+  const normalized = (status ?? "ACTIVE").toLowerCase();
+  if (normalized === "active") {
+    return "active";
+  }
+  if (normalized === "suspended" || normalized === "inactive") {
+    return "inactive";
+  }
+  return "unknown";
+};
 
 export default function TenantsPage() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
@@ -94,9 +106,7 @@ export default function TenantsPage() {
         accessorKey: "status",
         header: "Status",
         cell: ({ row }) => (
-          <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold uppercase text-emerald-600">
-            {row.original.status ?? "active"}
-          </span>
+          <StatusPill status={formatStatus(row.original.status)} />
         ),
       },
       {
@@ -105,9 +115,8 @@ export default function TenantsPage() {
         cell: ({ row }) => (
           <div className="flex items-center justify-end gap-2">
             <Button
-              variant="outline"
+              variant="secondary"
               size="sm"
-              className="h-8 px-3 text-xs"
               onClick={() => {
                 setTenantToConfigure(row.original);
                 controllerForm.reset({
@@ -122,7 +131,6 @@ export default function TenantsPage() {
             <Button
               variant="destructive"
               size="sm"
-              className="h-8 px-3 text-xs"
               onClick={() => {
                 setTenantToDelete(row.original);
                 setDeleteOpen(true);
@@ -199,7 +207,9 @@ export default function TenantsPage() {
         </div>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
-            <Button className="shadow-sm">New tenant</Button>
+            <Button variant="primary" className="shadow-sm">
+              New tenant
+            </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
@@ -234,7 +244,7 @@ export default function TenantsPage() {
           </DialogContent>
         </Dialog>
       </div>
-      <Card className="rounded-xl border bg-card p-6 shadow-soft">
+      <Card className="rounded-xl border bg-muted/40 p-6 shadow-soft">
         <h2 className="text-sm font-semibold text-foreground">Provisioning checklist</h2>
         <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
           <li>1. Create a tenant and capture the tenant slug.</li>

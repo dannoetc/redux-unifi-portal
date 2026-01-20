@@ -55,11 +55,18 @@ export function AdminShellControls() {
                 : activeRole === "TENANT_VIEWER"
                   ? "Tenant viewer"
                   : "Tenant admin"}
-            </span>
+              </span>
           </div>
-          <span className="text-[10px] text-muted-foreground">v</span>
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 20 20"
+            className="h-3 w-3 text-muted-foreground"
+            fill="currentColor"
+          >
+            <path d="M5.5 7.5a1 1 0 0 1 1.4 0L10 10.6l3.1-3.1a1 1 0 1 1 1.4 1.4l-3.8 3.8a1 1 0 0 1-1.4 0L5.5 8.9a1 1 0 0 1 0-1.4Z" />
+          </svg>
         </summary>
-        <div className="absolute right-0 z-20 mt-2 w-64 rounded-lg border border-border bg-white p-3 text-xs shadow-soft">
+        <div className="absolute right-0 z-20 mt-2 min-w-[220px] rounded-lg border border-border bg-white p-3 text-xs shadow-soft">
           <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
             Signed in
           </div>
