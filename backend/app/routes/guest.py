@@ -415,10 +415,7 @@ def voucher_auth(
             reason=reason,
             unifi_client_id=unifi_client_id,
         )
-        raise HTTPException(
-            status_code=502,
-            detail={"ok": False, "error": {"code": "UNIFI_ERROR", "message": "Authorization failed."}},
-        )
+        _raise_unifi_auth_error(reason)
 
     set_status(db, redis_client, site_id=site.id, client_mac=portal_session.client_mac, status=PortalSessionStatus.AUTHORIZED)
     _log_auth_event(
@@ -539,10 +536,7 @@ def otp_verify(
             unifi_client_id=unifi_client_id,
             guest_identity=identity,
         )
-        raise HTTPException(
-            status_code=502,
-            detail={"ok": False, "error": {"code": "UNIFI_ERROR", "message": "Authorization failed."}},
-        )
+        _raise_unifi_auth_error(auth_reason)
 
     set_status(db, redis_client, site_id=site.id, client_mac=portal_session.client_mac, status=PortalSessionStatus.AUTHORIZED)
     _log_auth_event(
@@ -636,10 +630,7 @@ def tos_accept(
             reason=reason,
             unifi_client_id=unifi_client_id,
         )
-        raise HTTPException(
-            status_code=502,
-            detail={"ok": False, "error": {"code": "UNIFI_ERROR", "message": "Authorization failed."}},
-        )
+        _raise_unifi_auth_error(reason)
 
     set_status(
         db,
@@ -764,6 +755,32 @@ def _resolve_site_by_unifi(db: Session, client_mac: str, ap_mac: str | None) -> 
     raise HTTPException(
         status_code=404,
         detail={"ok": False, "error": {"code": "SITE_RESOLVE_FAILED", "message": "Unable to resolve site."}},
+    )
+
+
+def _raise_unifi_auth_error(reason: str | None) -> None:
+    if reason == "CLIENT_NOT_FOUND":
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "ok": False,
+                "error": {
+                    "code": "CLIENT_NOT_FOUND",
+                    "message": "Client not yet connected. Please retry.",
+                },
+            },
+        )
+    if reason == "UNIFI_CONFIG_MISSING":
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "ok": False,
+                "error": {"code": "UNIFI_CONFIG_MISSING", "message": "Authorization unavailable."},
+            },
+        )
+    raise HTTPException(
+        status_code=502,
+        detail={"ok": False, "error": {"code": "UNIFI_ERROR", "message": "Authorization failed."}},
     )
 
 
