@@ -26,7 +26,7 @@ server {
   }
 
   location /guest/s/ {
-    rewrite ^/guest/s/.*$ /guest break;
+    rewrite ^/guest/s/.*$ /guest$is_args$args break;
     proxy_pass http://frontend:3000;
     proxy_http_version 1.1;
     proxy_set_header Host $host;
@@ -116,7 +116,7 @@ server {
   }
 
   location /guest/s/ {
-    rewrite ^/guest/s/.*$ /guest break;
+    rewrite ^/guest/s/.*$ /guest$is_args$args break;
     proxy_pass http://frontend:3000;
     proxy_http_version 1.1;
     proxy_set_header Host $host;
