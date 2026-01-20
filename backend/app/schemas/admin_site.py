@@ -2,6 +2,24 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
+class UnifiSiteDiscoveryResponse(BaseModel):
+    id: str
+    name: str | None
+    internal_reference: str | None
+    provisioned: bool
+    suggested_slug: str | None
+
+
+class SiteProvisionItem(BaseModel):
+    unifi_site_id: str
+    slug: str | None = None
+    display_name: str | None = None
+    enabled: bool = True
+
+
+class SiteProvisionRequest(BaseModel):
+    sites: list[SiteProvisionItem]
+
 
 class SiteCreateRequest(BaseModel):
     display_name: str

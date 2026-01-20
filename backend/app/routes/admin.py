@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import io
+import re
 import secrets
 import string
 import time
@@ -34,7 +35,13 @@ from app.schemas.admin_oidc import (
     SiteOidcResponse,
     SiteOidcUpdateRequest,
 )
-from app.schemas.admin_site import SiteCreateRequest, SiteResponse, SiteUpdateRequest
+from app.schemas.admin_site import (
+    SiteCreateRequest,
+    SiteProvisionRequest,
+    SiteResponse,
+    SiteUpdateRequest,
+    UnifiSiteDiscoveryResponse,
+)
 from app.schemas.admin_tenant import TenantCreateRequest, TenantResponse, TenantUpdateRequest
 from app.schemas.admin_voucher import VoucherBatchCreateRequest
 from app.security import create_session_token, verify_password
@@ -249,6 +256,179 @@ def delete_tenant(
     db.delete(tenant)
     db.commit()
     return {"ok": True, "data": {"deleted": True}}
+
+
+@router.get("/tenants/{tenant_id}/unifi/sites")
+def discover_unifi_sites(
+    tenant_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    _admin: AdminUser = Depends(require_tenant_role([AdminRole.TENANT_VIEWER, AdminRole.TENANT_ADMIN])),
+) -> dict:
+    tenant = db.execute(select(Tenant).where(Tenant.id == tenant_id)).scalar_one_or_none()
+    if not tenant:
+        raise HTTPException(
+            status_code=404,
+            detail={"ok": False, "error": {"code": "NOT_FOUND", "message": "Tenant not found."}},
+        )
+    if not tenant.unifi_base_url or not tenant.unifi_api_key_ref:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "ok": False,
+                "error": {"code": "UNIFI_CONFIG_REQUIRED", "message": "UniFi controller settings are required."},
+            },
+        )
+    client = UnifiClient(
+        tenant.unifi_base_url,
+        tenant.unifi_api_key_ref,
+        "tenant",
+        tenant_id=str(tenant.id),
+        verify_ssl=settings.UNIFI_VERIFY_SSL,
+    )
+    try:
+        sites = client.list_sites()
+    except UnifiApiError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "ok": False,
+                "error": {"code": "UNIFI_ERROR", "message": "UniFi site discovery failed."},
+            },
+        ) from exc
+
+    existing = {
+        site.unifi_site_id
+        for site in db.execute(select(Site.unifi_site_id).where(Site.tenant_id == tenant_id)).scalars().all()
+    }
+
+    data = []
+    for site in sites:
+        site_id = site.get("id") or site.get("siteId")
+        if not site_id:
+            continue
+        name = site.get("name")
+        internal = site.get("internalReference")
+        suggested = _slugify(name or internal or site_id)
+        data.append(
+            UnifiSiteDiscoveryResponse(
+                id=site_id,
+                name=name,
+                internal_reference=internal,
+                provisioned=site_id in existing,
+                suggested_slug=suggested,
+            ).model_dump(mode="json")
+        )
+    return {"ok": True, "data": {"sites": data}}
+
+
+@router.post("/tenants/{tenant_id}/sites/provision")
+def provision_sites(
+    tenant_id: uuid.UUID,
+    payload: SiteProvisionRequest,
+    db: Session = Depends(get_db),
+    _admin: AdminUser = Depends(require_tenant_role([AdminRole.TENANT_ADMIN])),
+) -> dict:
+    tenant = db.execute(select(Tenant).where(Tenant.id == tenant_id)).scalar_one_or_none()
+    if not tenant:
+        raise HTTPException(
+            status_code=404,
+            detail={"ok": False, "error": {"code": "NOT_FOUND", "message": "Tenant not found."}},
+        )
+    if not tenant.unifi_base_url or not tenant.unifi_api_key_ref:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "ok": False,
+                "error": {"code": "UNIFI_CONFIG_REQUIRED", "message": "UniFi controller settings are required."},
+            },
+        )
+
+    client = UnifiClient(
+        tenant.unifi_base_url,
+        tenant.unifi_api_key_ref,
+        "tenant",
+        tenant_id=str(tenant.id),
+        verify_ssl=settings.UNIFI_VERIFY_SSL,
+    )
+    try:
+        unifi_sites = {site.get("id") or site.get("siteId"): site for site in client.list_sites()}
+    except UnifiApiError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "ok": False,
+                "error": {"code": "UNIFI_ERROR", "message": "UniFi site discovery failed."},
+            },
+        ) from exc
+
+    existing_sites = db.execute(select(Site).where(Site.tenant_id == tenant_id)).scalars().all()
+    existing_unifi_ids = {site.unifi_site_id for site in existing_sites}
+    existing_slugs = {site.slug for site in existing_sites}
+
+    desired_slugs: set[str] = set()
+    to_create: list[Site] = []
+
+    for item in payload.sites:
+        site_id = item.unifi_site_id.strip()
+        if site_id in existing_unifi_ids:
+            continue
+        unifi_site = unifi_sites.get(site_id)
+        if not unifi_site:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "ok": False,
+                    "error": {"code": "UNIFI_SITE_NOT_FOUND", "message": "UniFi site id not found."},
+                },
+            )
+        display_name = (
+            _empty_to_none(item.display_name)
+            or unifi_site.get("name")
+            or unifi_site.get("internalReference")
+            or site_id
+        )
+        slug = _empty_to_none(item.slug) or _slugify(display_name)
+        if not slug:
+            raise HTTPException(
+                status_code=400,
+                detail={"ok": False, "error": {"code": "INVALID_SLUG", "message": "Site slug is required."}},
+            )
+        if slug in existing_slugs or slug in desired_slugs:
+            raise HTTPException(
+                status_code=409,
+                detail={"ok": False, "error": {"code": "SLUG_TAKEN", "message": f"Slug '{slug}' is already in use."}},
+            )
+        desired_slugs.add(slug)
+        to_create.append(
+            Site(
+                tenant_id=tenant_id,
+                slug=slug,
+                display_name=display_name,
+                enabled=item.enabled,
+                logo_url=None,
+                primary_color=None,
+                terms_html=None,
+                support_contact=None,
+                success_url=None,
+                enable_tos_only=False,
+                unifi_base_url=None,
+                unifi_site_id=site_id,
+                unifi_api_key_ref=None,
+                default_time_limit_minutes=60,
+                default_data_limit_mb=None,
+                default_rx_kbps=None,
+                default_tx_kbps=None,
+            )
+        )
+
+    if not to_create:
+        return {"ok": True, "data": {"sites": []}}
+
+    db.add_all(to_create)
+    db.commit()
+    for site in to_create:
+        db.refresh(site)
+    return {"ok": True, "data": {"sites": [_site_response(site).model_dump(mode="json") for site in to_create]}}
 
 
 @router.post("/tenants/{tenant_id}/sites")
@@ -804,6 +984,13 @@ def _empty_to_none(value: str | None) -> str | None:
     if value == "":
         return None
     return value
+
+
+def _slugify(value: str | None) -> str | None:
+    if not value:
+        return None
+    slug = re.sub(r"[^a-zA-Z0-9]+", "-", value.strip().lower()).strip("-")
+    return slug or None
 
 
 def _resolve_unifi_credentials(site: Site, tenant: Tenant) -> tuple[str, str]:

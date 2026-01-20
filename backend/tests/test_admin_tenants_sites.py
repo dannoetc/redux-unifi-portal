@@ -68,3 +68,80 @@ def test_tenant_admin_can_create_and_delete_site(client, db_session):
     delete_response = client.delete(f"/api/admin/tenants/{tenant.id}/sites/{site_id}")
     assert delete_response.status_code == 200
     assert delete_response.json()["data"]["deleted"] is True
+
+
+def test_tenant_admin_can_discover_unifi_sites(client, db_session, monkeypatch):
+    tenant = Tenant(
+        id=uuid.uuid4(),
+        slug="acme",
+        name="Acme",
+        status=TenantStatus.ACTIVE,
+        unifi_base_url="https://unifi.local/proxy/network/integration",
+        unifi_api_key_ref="unifi-key",
+    )
+    admin = AdminUser(
+        id=uuid.uuid4(),
+        email="admin@example.com",
+        password_hash=hash_password("secret"),
+        is_superadmin=False,
+    )
+    membership = AdminMembership(
+        id=uuid.uuid4(),
+        admin_user_id=admin.id,
+        tenant_id=tenant.id,
+        role=AdminRole.TENANT_ADMIN,
+    )
+    db_session.add_all([tenant, admin, membership])
+    db_session.commit()
+
+    def fake_list_sites(self):
+        return [{"id": "site-1", "name": "Main Office", "internalReference": "default"}]
+
+    monkeypatch.setattr("app.services.unifi.UnifiClient.list_sites", fake_list_sites)
+
+    _login_as(client, admin)
+    response = client.get(f"/api/admin/tenants/{tenant.id}/unifi/sites")
+    assert response.status_code == 200
+    data = response.json()["data"]["sites"]
+    assert data[0]["id"] == "site-1"
+    assert data[0]["suggested_slug"] == "main-office"
+
+
+def test_tenant_admin_can_provision_sites_from_unifi(client, db_session, monkeypatch):
+    tenant = Tenant(
+        id=uuid.uuid4(),
+        slug="acme",
+        name="Acme",
+        status=TenantStatus.ACTIVE,
+        unifi_base_url="https://unifi.local/proxy/network/integration",
+        unifi_api_key_ref="unifi-key",
+    )
+    admin = AdminUser(
+        id=uuid.uuid4(),
+        email="admin@example.com",
+        password_hash=hash_password("secret"),
+        is_superadmin=False,
+    )
+    membership = AdminMembership(
+        id=uuid.uuid4(),
+        admin_user_id=admin.id,
+        tenant_id=tenant.id,
+        role=AdminRole.TENANT_ADMIN,
+    )
+    db_session.add_all([tenant, admin, membership])
+    db_session.commit()
+
+    def fake_list_sites(self):
+        return [{"id": "site-1", "name": "Main Office"}]
+
+    monkeypatch.setattr("app.services.unifi.UnifiClient.list_sites", fake_list_sites)
+
+    _login_as(client, admin)
+    response = client.post(
+        f"/api/admin/tenants/{tenant.id}/sites/provision",
+        json={"sites": [{"unifi_site_id": "site-1"}]},
+    )
+    assert response.status_code == 200
+    sites = response.json()["data"]["sites"]
+    assert sites[0]["unifi_site_id"] == "site-1"
+    assert sites[0]["slug"] == "main-office"
