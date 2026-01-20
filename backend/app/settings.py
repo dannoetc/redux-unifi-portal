@@ -37,6 +37,8 @@ class Settings(BaseSettings):
 
     # UniFi
     UNIFI_VERIFY_SSL: bool = True
+    UNIFI_CLIENT_LOOKUP_ATTEMPTS: int = 6
+    UNIFI_CLIENT_LOOKUP_BACKOFF_SECONDS: float = 0.6
 
     # CORS
     CORS_ALLOW_ORIGINS: str = "http://localhost:3000"

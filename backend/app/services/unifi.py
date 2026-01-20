@@ -128,8 +128,13 @@ class UnifiClient:
         return payload.get("data", payload.get("results", []))
 
     def find_client_by_mac(self, mac: str, attempts: int = 5, backoff_s: float = 0.3) -> dict | None:
+        alt_mac = mac.lower()
+        if alt_mac == mac:
+            alt_mac = None
         for attempt in range(1, attempts + 1):
             clients = self.get_clients_by_mac(mac)
+            if not clients and alt_mac:
+                clients = self.get_clients_by_mac(alt_mac)
             if clients:
                 return clients[0]
             if attempt < attempts:

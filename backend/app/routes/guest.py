@@ -826,7 +826,11 @@ def _authorize_unifi(site: Site, tenant: Tenant | None, client_mac: str) -> tupl
         verify_ssl=settings.UNIFI_VERIFY_SSL,
     )
     try:
-        unifi_client = client.find_client_by_mac(client_mac)
+        unifi_client = client.find_client_by_mac(
+            client_mac,
+            attempts=settings.UNIFI_CLIENT_LOOKUP_ATTEMPTS,
+            backoff_s=settings.UNIFI_CLIENT_LOOKUP_BACKOFF_SECONDS,
+        )
         if not unifi_client:
             return False, "CLIENT_NOT_FOUND", None
         client_id = unifi_client.get("id") or unifi_client.get("clientId")

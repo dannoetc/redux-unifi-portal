@@ -57,6 +57,28 @@ def test_find_client_by_mac_retries():
     assert result == {"id": "client-2"}
 
 
+def test_find_client_by_mac_falls_back_to_lowercase():
+    seen_filters = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        filter_value = request.url.params.get("filter")
+        seen_filters.append(filter_value)
+        if filter_value == "macAddress.eq('aa:bb:cc:dd:ee:ff')":
+            return httpx.Response(200, json={"data": [{"id": "client-lower"}]})
+        return httpx.Response(200, json={"data": []})
+
+    transport = httpx.MockTransport(handler)
+    client = httpx.Client(base_url="https://unifi.local", transport=transport)
+
+    api = UnifiClient("https://unifi.local", "key", "default", http_client=client)
+    result = api.find_client_by_mac("AA:BB:CC:DD:EE:FF", attempts=1, backoff_s=0)
+    assert result == {"id": "client-lower"}
+    assert seen_filters == [
+        "macAddress.eq('AA:BB:CC:DD:EE:FF')",
+        "macAddress.eq('aa:bb:cc:dd:ee:ff')",
+    ]
+
+
 def test_get_site():
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/v1/sites/default"
