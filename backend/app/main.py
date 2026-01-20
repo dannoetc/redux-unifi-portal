@@ -37,7 +37,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 # CORS: allow frontend in dev; lock down in prod
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ALLOW_ORIGINS,
+    allow_origins=settings.cors_allow_origins_list(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

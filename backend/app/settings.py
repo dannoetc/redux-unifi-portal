@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
@@ -37,14 +36,10 @@ class Settings(BaseSettings):
     SMTP_FROM_NAME: str = "ReduxTC WiFi"
 
     # CORS
-    CORS_ALLOW_ORIGINS: list[str] = ["http://localhost:3000"]
+    CORS_ALLOW_ORIGINS: str = "http://localhost:3000"
 
-    @field_validator("CORS_ALLOW_ORIGINS", mode="before")
-    @classmethod
-    def split_cors_origins(cls, value: object) -> list[str]:
-        if isinstance(value, str):
-            return [item.strip() for item in value.split(",") if item.strip()]
-        return value  # type: ignore[return-value]
+    def cors_allow_origins_list(self) -> list[str]:
+        return [item.strip() for item in self.CORS_ALLOW_ORIGINS.split(",") if item.strip()]
 
     # Optional
     SENTRY_DSN: str | None = None
