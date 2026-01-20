@@ -177,7 +177,7 @@ export default function AdminUsersPage() {
           <h1 className="text-2xl font-semibold">Admin users</h1>
           <p className="mt-1 text-sm text-muted-foreground">Provision tenant-scoped admin access.</p>
           <p className="mt-2 text-xs text-muted-foreground">
-            {activeTenant ? `Active tenant: ${activeTenant.name}` : "Select a tenant from the header to continue."}
+            {activeTenant ? `Active tenant: ${activeTenant.name}` : "Select a tenant from the sidebar to continue."}
           </p>
         </div>
         <div className="flex flex-wrap items-end gap-3">

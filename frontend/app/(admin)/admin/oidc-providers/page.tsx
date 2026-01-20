@@ -119,7 +119,7 @@ export default function OidcProvidersPage() {
           <h1 className="text-2xl font-semibold">OIDC providers</h1>
           <p className="mt-1 text-sm text-muted-foreground">Tenant-wide SSO definitions.</p>
           <p className="mt-2 text-xs text-muted-foreground">
-            {activeTenant ? `Active tenant: ${activeTenant.name}` : "Select a tenant from the header to continue."}
+            {activeTenant ? `Active tenant: ${activeTenant.name}` : "Select a tenant from the sidebar to continue."}
           </p>
         </div>
         <div className="flex flex-wrap items-end gap-3">

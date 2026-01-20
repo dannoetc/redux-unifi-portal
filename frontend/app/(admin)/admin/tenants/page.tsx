@@ -94,7 +94,7 @@ export default function TenantsPage() {
         accessorKey: "status",
         header: "Status",
         cell: ({ row }) => (
-          <span className="rounded-full bg-emerald-500/10 px-2 py-1 text-xs font-semibold uppercase text-emerald-600">
+          <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold uppercase text-emerald-600">
             {row.original.status ?? "active"}
           </span>
         ),
@@ -107,6 +107,7 @@ export default function TenantsPage() {
             <Button
               variant="outline"
               size="sm"
+              className="h-8 px-3 text-xs"
               onClick={() => {
                 setTenantToConfigure(row.original);
                 controllerForm.reset({
@@ -121,6 +122,7 @@ export default function TenantsPage() {
             <Button
               variant="destructive"
               size="sm"
+              className="h-8 px-3 text-xs"
               onClick={() => {
                 setTenantToDelete(row.original);
                 setDeleteOpen(true);
@@ -192,12 +194,12 @@ export default function TenantsPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">Tenants</h1>
+          <h1 className="text-xl font-semibold">Tenants</h1>
           <p className="mt-1 text-sm text-muted-foreground">Manage customer tenants and status.</p>
         </div>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
-            <Button>New tenant</Button>
+            <Button className="shadow-sm">New tenant</Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
@@ -232,7 +234,7 @@ export default function TenantsPage() {
           </DialogContent>
         </Dialog>
       </div>
-      <Card className="p-4">
+      <Card className="rounded-xl border bg-card p-6 shadow-soft">
         <h2 className="text-sm font-semibold text-foreground">Provisioning checklist</h2>
         <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
           <li>1. Create a tenant and capture the tenant slug.</li>
@@ -244,11 +246,13 @@ export default function TenantsPage() {
           </li>
         </ul>
       </Card>
-      <Card className="p-4">
+      <Card className="rounded-xl border bg-card p-6 shadow-soft">
         {loading ? (
           <div className="text-sm text-muted-foreground">Loading tenants...</div>
         ) : (
-          <DataTable columns={columns} data={tenants} />
+          <div className="[&_td]:py-2 [&_th]:h-10 [&_th]:text-[11px]">
+            <DataTable columns={columns} data={tenants} />
+          </div>
         )}
       </Card>
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>

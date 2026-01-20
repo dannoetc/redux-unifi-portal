@@ -113,7 +113,7 @@ export default function AuthEventsPage() {
           <h1 className="text-2xl font-semibold">Auth events</h1>
           <p className="mt-1 text-sm text-muted-foreground">Audit guest authentications across sites.</p>
           <p className="mt-2 text-xs text-muted-foreground">
-            {activeTenant ? `Active tenant: ${activeTenant.name}` : "Select a tenant from the header to continue."}
+            {activeTenant ? `Active tenant: ${activeTenant.name}` : "Select a tenant from the sidebar to continue."}
           </p>
         </div>
         <Button variant="outline" onClick={exportCsv}>

@@ -114,7 +114,7 @@ export default function VouchersPage() {
         <h1 className="text-2xl font-semibold">Voucher batches</h1>
         <p className="mt-1 text-sm text-muted-foreground">Generate access codes and export CSVs.</p>
         <p className="mt-2 text-xs text-muted-foreground">
-          {activeTenant ? `Active tenant: ${activeTenant.name}` : "Select a tenant from the header to continue."}
+          {activeTenant ? `Active tenant: ${activeTenant.name}` : "Select a tenant from the sidebar to continue."}
         </p>
       </div>
       <Card>
