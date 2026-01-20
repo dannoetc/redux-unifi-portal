@@ -20,12 +20,12 @@ const schema = z.object({
   name: z.string().min(2),
   slug: z.string().min(2),
   status: z.string().optional(),
-  unifi_base_url: z.string().url().optional().or(z.literal("")),
+  unifi_base_url: z.string().optional().or(z.literal("")),
   unifi_api_key_ref: z.string().optional().or(z.literal("")),
 });
 
 const controllerSchema = z.object({
-  unifi_base_url: z.string().url().optional().or(z.literal("")),
+  unifi_base_url: z.string().optional().or(z.literal("")),
   unifi_api_key_ref: z.string().optional().or(z.literal("")),
 });
 
@@ -53,6 +53,28 @@ const formatStatus = (status?: string) => {
   return "unknown";
 };
 
+const UNIFI_INTEGRATION_PATH = "/proxy/network/integration";
+
+const normalizeUnifiBaseUrl = (value: string | undefined | null) => {
+  const trimmed = value?.trim() ?? "";
+  if (!trimmed) {
+    return "";
+  }
+  const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  if (withProtocol.includes(UNIFI_INTEGRATION_PATH)) {
+    return withProtocol;
+  }
+  return `${withProtocol.replace(/\/+$/, "")}${UNIFI_INTEGRATION_PATH}`;
+};
+
+const displayUnifiHost = (value?: string | null) => {
+  if (!value) {
+    return "";
+  }
+  const withoutProtocol = value.replace(/^https?:\/\//i, "");
+  return withoutProtocol.split("/")[0] ?? "";
+};
+
 export default function TenantsPage() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [loading, setLoading] = useState(true);
@@ -63,7 +85,10 @@ export default function TenantsPage() {
   const [tenantToDelete, setTenantToDelete] = useState<Tenant | null>(null);
   const [tenantToConfigure, setTenantToConfigure] = useState<Tenant | null>(null);
 
-  const form = useForm<CreateTenant>({ resolver: zodResolver(schema) });
+  const form = useForm<CreateTenant>({
+    resolver: zodResolver(schema),
+    defaultValues: { status: "ACTIVE" },
+  });
   const controllerForm = useForm<z.infer<typeof controllerSchema>>({
     resolver: zodResolver(controllerSchema),
   });
@@ -120,7 +145,7 @@ export default function TenantsPage() {
               onClick={() => {
                 setTenantToConfigure(row.original);
                 controllerForm.reset({
-                  unifi_base_url: row.original.unifi_base_url ?? "",
+                  unifi_base_url: displayUnifiHost(row.original.unifi_base_url),
                   unifi_api_key_ref: row.original.unifi_api_key_ref ?? "",
                 });
                 setControllerOpen(true);
@@ -147,9 +172,14 @@ export default function TenantsPage() {
 
   const onSubmit = async (values: CreateTenant) => {
     try {
+      const payload = {
+        ...values,
+        status: values.status ?? "ACTIVE",
+        unifi_base_url: normalizeUnifiBaseUrl(values.unifi_base_url),
+      };
       const data = await apiFetch<{ tenant: Tenant }>("/api/admin/tenants", {
         method: "POST",
-        body: JSON.stringify(values),
+        body: JSON.stringify(payload),
       });
       setTenants((prev) => [data.tenant, ...prev]);
       toast.success("Tenant created.");
@@ -183,9 +213,13 @@ export default function TenantsPage() {
       return;
     }
     try {
+      const payload = {
+        ...values,
+        unifi_base_url: normalizeUnifiBaseUrl(values.unifi_base_url),
+      };
       const data = await apiFetch<{ tenant: Tenant }>(`/api/admin/tenants/${tenantToConfigure.id}`, {
         method: "PUT",
-        body: JSON.stringify(values),
+        body: JSON.stringify(payload),
       });
       setTenants((prev) =>
         prev.map((tenant) => (tenant.id === data.tenant.id ? data.tenant : tenant))
@@ -225,20 +259,39 @@ export default function TenantsPage() {
                 <Label htmlFor="slug">Slug</Label>
                 <Input id="slug" {...form.register("slug")} />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="status">Status</Label>
-                <Input id="status" placeholder="active" {...form.register("status")} />
+              <div className="flex items-center justify-between rounded-lg border border-border/60 px-3 py-2">
+                <div>
+                  <div className="text-sm font-medium">Active</div>
+                  <div className="text-xs text-muted-foreground">Toggle tenant access.</div>
+                </div>
+                <label className="relative inline-flex cursor-pointer items-center">
+                  <input
+                    type="checkbox"
+                    className="peer sr-only"
+                    checked={form.watch("status") !== "SUSPENDED"}
+                    onChange={() =>
+                      form.setValue(
+                        "status",
+                        form.watch("status") === "SUSPENDED" ? "ACTIVE" : "SUSPENDED"
+                      )
+                    }
+                  />
+                  <span className="h-5 w-9 rounded-full bg-muted transition peer-checked:bg-primary" />
+                  <span className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition peer-checked:translate-x-4" />
+                </label>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="unifi_base_url">UniFi controller base URL</Label>
-                <Input id="unifi_base_url" placeholder="https://unifi.local" {...form.register("unifi_base_url")} />
+                <Label htmlFor="unifi_base_url">UniFi controller IP</Label>
+                <Input id="unifi_base_url" placeholder="71.162.143.124" {...form.register("unifi_base_url")} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="unifi_api_key_ref">UniFi API key reference</Label>
-                <Input id="unifi_api_key_ref" {...form.register("unifi_api_key_ref")} />
+                <Input id="unifi_api_key_ref" type="password" {...form.register("unifi_api_key_ref")} />
               </div>
               <DialogFooter>
-                <Button type="submit">Create tenant</Button>
+                <Button type="submit" variant="primary">
+                  Create tenant
+                </Button>
               </DialogFooter>
             </form>
           </DialogContent>
@@ -274,7 +327,7 @@ export default function TenantsPage() {
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setDeleteOpen(false)}>
+            <Button variant="secondary" onClick={() => setDeleteOpen(false)}>
               Cancel
             </Button>
             <Button variant="destructive" onClick={deleteTenant} disabled={deleting}>
@@ -293,15 +346,17 @@ export default function TenantsPage() {
           </DialogHeader>
           <form className="space-y-4" onSubmit={controllerForm.handleSubmit(saveController)}>
             <div className="space-y-2">
-              <Label htmlFor="controller_base_url">Base URL</Label>
-              <Input id="controller_base_url" {...controllerForm.register("unifi_base_url")} />
+              <Label htmlFor="controller_base_url">UniFi controller IP</Label>
+              <Input id="controller_base_url" placeholder="71.162.143.124" {...controllerForm.register("unifi_base_url")} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="controller_api_key_ref">API key reference</Label>
-              <Input id="controller_api_key_ref" {...controllerForm.register("unifi_api_key_ref")} />
+              <Input id="controller_api_key_ref" type="password" {...controllerForm.register("unifi_api_key_ref")} />
             </div>
             <DialogFooter>
-              <Button type="submit">Save controller</Button>
+              <Button type="submit" variant="primary">
+                Save controller
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>

@@ -56,6 +56,28 @@ type SiteOidcForm = {
   allowed_email_domains: string;
 };
 
+const UNIFI_INTEGRATION_PATH = "/proxy/network/integration";
+
+const normalizeUnifiBaseUrl = (value: string | undefined | null) => {
+  const trimmed = value?.trim() ?? "";
+  if (!trimmed) {
+    return "";
+  }
+  const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  if (withProtocol.includes(UNIFI_INTEGRATION_PATH)) {
+    return withProtocol;
+  }
+  return `${withProtocol.replace(/\/+$/, "")}${UNIFI_INTEGRATION_PATH}`;
+};
+
+const displayUnifiHost = (value?: string | null) => {
+  if (!value) {
+    return "";
+  }
+  const withoutProtocol = value.replace(/^https?:\/\//i, "");
+  return withoutProtocol.split("/")[0] ?? "";
+};
+
 export default function SiteDetailPage() {
   const searchParams = useSearchParams();
   const params = useParams<{ id: string }>();
@@ -99,8 +121,12 @@ export default function SiteDetailPage() {
         if (!active) {
           return;
         }
-        setSite(data.site);
-        siteForm.reset(data.site);
+        const normalizedSite = {
+          ...data.site,
+          unifi_base_url: displayUnifiHost(data.site.unifi_base_url),
+        };
+        setSite(normalizedSite);
+        siteForm.reset(normalizedSite);
         const providersData = await apiFetch<OidcProviderList>(
           `/api/admin/tenants/${tenantId}/oidc-providers`
         );
@@ -137,14 +163,21 @@ export default function SiteDetailPage() {
       return;
     }
     try {
+      const payload = {
+        ...values,
+        unifi_base_url: normalizeUnifiBaseUrl(values.unifi_base_url),
+      };
       const data = await apiFetch<{ site: SiteResponse }>(
         `/api/admin/tenants/${tenantId}/sites/${params.id}`,
         {
           method: "PUT",
-          body: JSON.stringify(values),
+          body: JSON.stringify(payload),
         }
       );
-      setSite(data.site);
+      setSite({
+        ...data.site,
+        unifi_base_url: displayUnifiHost(data.site.unifi_base_url),
+      });
       toast.success("Site updated.");
     } catch (err: any) {
       const message = err?.message ?? "Unable to update site.";
@@ -246,7 +279,7 @@ export default function SiteDetailPage() {
           {site?.display_name ?? "Branding, policy defaults, and UniFi connection."}
         </p>
         {tenantSlug && site?.slug ? (
-          <Button asChild variant="ghost" size="sm" className="mt-3">
+          <Button asChild variant="secondary" size="sm" className="mt-3">
             <a
               href={`/guest/s/${tenantSlug}/${site.slug}?preview=1`}
               target="_blank"
@@ -262,7 +295,7 @@ export default function SiteDetailPage() {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-      <Card>
+      <Card className="rounded-xl border bg-card shadow-soft">
         <CardHeader>
           <CardTitle>Branding</CardTitle>
           <CardDescription>Guest-facing identity and support info.</CardDescription>
@@ -344,12 +377,14 @@ export default function SiteDetailPage() {
               <Label htmlFor="enable_tos_only">Enable TOS-only guest access</Label>
             </div>
             <div className="md:col-span-2">
-              <Button type="submit">Save site</Button>
+              <Button type="submit" variant="primary">
+                Save site
+              </Button>
             </div>
           </form>
         </CardContent>
       </Card>
-      <Card>
+      <Card className="rounded-xl border bg-card shadow-soft">
         <CardHeader>
           <CardTitle>Portal template</CardTitle>
           <CardDescription>
@@ -383,12 +418,14 @@ export default function SiteDetailPage() {
               />
             </div>
             <div>
-              <Button type="submit">Save template</Button>
+              <Button type="submit" variant="primary">
+                Save template
+              </Button>
             </div>
           </form>
         </CardContent>
       </Card>
-      <Card>
+      <Card className="rounded-xl border bg-card shadow-soft">
         <CardHeader>
           <CardTitle>Default policy</CardTitle>
           <CardDescription>Applied for voucher and OTP authorization.</CardDescription>
@@ -402,12 +439,14 @@ export default function SiteDetailPage() {
               </div>
             ))}
             <div className="md:col-span-2">
-              <Button type="submit">Save policy</Button>
+              <Button type="submit" variant="primary">
+                Save policy
+              </Button>
             </div>
           </form>
         </CardContent>
       </Card>
-      <Card>
+      <Card className="rounded-xl border bg-card shadow-soft">
         <CardHeader>
           <CardTitle>UniFi connection</CardTitle>
           <CardDescription>Store secret references in the backend.</CardDescription>
@@ -415,8 +454,8 @@ export default function SiteDetailPage() {
         <CardContent>
           <form className="grid gap-4 md:grid-cols-2" onSubmit={siteForm.handleSubmit(saveSite)}>
             <div className="space-y-2">
-              <Label htmlFor="unifi_base_url">UniFi base URL (optional override)</Label>
-              <Input id="unifi_base_url" {...siteForm.register("unifi_base_url")} />
+              <Label htmlFor="unifi_base_url">UniFi controller IP (optional override)</Label>
+              <Input id="unifi_base_url" placeholder="71.162.143.124" {...siteForm.register("unifi_base_url")} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="unifi_site_id">UniFi site ID</Label>
@@ -424,15 +463,17 @@ export default function SiteDetailPage() {
             </div>
             <div className="space-y-2 md:col-span-2">
               <Label htmlFor="unifi_api_key_ref">UniFi API key reference (optional override)</Label>
-              <Input id="unifi_api_key_ref" {...siteForm.register("unifi_api_key_ref")} />
+              <Input id="unifi_api_key_ref" type="password" {...siteForm.register("unifi_api_key_ref")} />
             </div>
             <div className="md:col-span-2">
-              <Button type="submit">Save UniFi settings</Button>
+              <Button type="submit" variant="primary">
+                Save UniFi settings
+              </Button>
             </div>
           </form>
         </CardContent>
       </Card>
-      <Card>
+      <Card className="rounded-xl border bg-card shadow-soft">
         <CardHeader>
           <CardTitle>UniFi API health check</CardTitle>
           <CardDescription>Verify that the controller can be reached with the configured credentials.</CardDescription>
@@ -441,7 +482,7 @@ export default function SiteDetailPage() {
           {testStatus ? (
             <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700">
               Connected in {testStatus.latencyMs}ms
-              {testStatus.siteName ? ` · ${testStatus.siteName}` : null}
+              {testStatus.siteName ? ` - ${testStatus.siteName}` : null}
             </div>
           ) : (
             <div className="text-sm text-muted-foreground">Run a quick request to validate UniFi API access.</div>
@@ -451,12 +492,12 @@ export default function SiteDetailPage() {
               {testError}
             </div>
           ) : null}
-          <Button onClick={runUnifiTest} disabled={testing}>
+          <Button variant="secondary" onClick={runUnifiTest} disabled={testing}>
             {testing ? "Testing..." : "Run test"}
           </Button>
         </CardContent>
       </Card>
-      <Card>
+      <Card className="rounded-xl border bg-card shadow-soft">
         <CardHeader>
           <CardTitle>OIDC enablement</CardTitle>
           <CardDescription>Allow guest SSO by tenant provider.</CardDescription>
@@ -467,7 +508,7 @@ export default function SiteDetailPage() {
               <Label htmlFor="oidc_provider">OIDC provider</Label>
               <select
                 id="oidc_provider"
-                className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                className="h-10 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2 focus:ring-offset-white"
                 value={oidcForm.oidc_provider_id}
                 onChange={(event) =>
                   setOidcForm((prev) => ({ ...prev, oidc_provider_id: event.target.value }))
@@ -505,9 +546,12 @@ export default function SiteDetailPage() {
               <Label htmlFor="oidc_enabled">Enable OIDC for this site</Label>
             </div>
           </div>
-          <Button onClick={saveOidc}>Save OIDC settings</Button>
+          <Button variant="primary" onClick={saveOidc}>
+            Save OIDC settings
+          </Button>
         </CardContent>
       </Card>
     </div>
   );
 }
+

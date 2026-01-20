@@ -125,7 +125,7 @@ export default function OidcProvidersPage() {
         <div className="flex flex-wrap items-end gap-3">
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
-              <Button>New provider</Button>
+              <Button variant="primary">New provider</Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
@@ -143,21 +143,23 @@ export default function OidcProvidersPage() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="client_secret_ref">Client secret ref</Label>
-                  <Input id="client_secret_ref" {...form.register("client_secret_ref")} />
+                  <Input id="client_secret_ref" type="password" {...form.register("client_secret_ref")} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="scopes">Scopes</Label>
                   <Input id="scopes" placeholder="openid email profile" {...form.register("scopes")} />
                 </div>
                 <DialogFooter>
-                  <Button type="submit">Create provider</Button>
+                  <Button type="submit" variant="primary">
+                    Create provider
+                  </Button>
                 </DialogFooter>
               </form>
             </DialogContent>
           </Dialog>
         </div>
       </div>
-      <Card className="p-4">
+      <Card className="rounded-xl border bg-card p-6 shadow-soft">
         {loading ? (
           <div className="text-sm text-muted-foreground">Loading providers...</div>
         ) : (
