@@ -184,7 +184,7 @@ def oidc_callback(
             unifi_client_id=unifi_client_id,
             guest_identity=identity,
         )
-        return _error_redirect(tenant_slug, site_slug, str(portal_session_id), "UNIFI_ERROR")
+        return _error_redirect(tenant_slug, site_slug, str(portal_session_id), reason or "UNIFI_ERROR")
 
     set_status(
         db,
