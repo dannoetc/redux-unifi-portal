@@ -104,10 +104,15 @@ services:
       - certbot-etc:/etc/letsencrypt
       - certbot-var:/var/www/certbot
     command: >
-      certonly --webroot --webroot-path=/var/www/certbot
-      --email ${LETSENCRYPT_EMAIL}
-      --agree-tos --no-eff-email
-      -d ${DOMAIN}
+      /bin/sh -c "
+      CERT_DIR=/etc/letsencrypt/live/${DOMAIN};
+      if [ -f $$CERT_DIR/fullchain.pem ] && [ -f $$CERT_DIR/privkey.pem ]; then
+        certbot renew --webroot -w /var/www/certbot --non-interactive;
+      else
+        certbot certonly --webroot -w /var/www/certbot
+          --email ${LETSENCRYPT_EMAIL} --agree-tos --no-eff-email --non-interactive
+          --keep-until-expiring -d ${DOMAIN};
+      fi"
     depends_on:
       - nginx
 
