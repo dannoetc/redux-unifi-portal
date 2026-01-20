@@ -28,6 +28,8 @@ class SiteCreateRequest(BaseModel):
     logo_url: str | None = None
     primary_color: str | None = None
     terms_html: str | None = None
+    portal_template_html: str | None = None
+    portal_template_enabled: bool = False
     support_contact: str | None = None
     success_url: str | None = None
     enable_tos_only: bool = False
@@ -47,6 +49,8 @@ class SiteUpdateRequest(BaseModel):
     logo_url: str | None = None
     primary_color: str | None = None
     terms_html: str | None = None
+    portal_template_html: str | None = None
+    portal_template_enabled: bool | None = None
     support_contact: str | None = None
     success_url: str | None = None
     enable_tos_only: bool | None = None
@@ -67,6 +71,8 @@ class SiteResponse(BaseModel):
     logo_url: str | None
     primary_color: str | None
     terms_html: str | None
+    portal_template_html: str | None
+    portal_template_enabled: bool
     support_contact: str | None
     success_url: str | None
     enable_tos_only: bool

@@ -461,6 +461,8 @@ def create_site(
         logo_url=_empty_to_none(payload.logo_url),
         primary_color=_empty_to_none(payload.primary_color),
         terms_html=_empty_to_none(payload.terms_html),
+        portal_template_html=_empty_to_none(payload.portal_template_html),
+        portal_template_enabled=payload.portal_template_enabled,
         support_contact=_empty_to_none(payload.support_contact),
         success_url=_empty_to_none(payload.success_url),
         enable_tos_only=payload.enable_tos_only,
@@ -551,6 +553,10 @@ def update_site(
         site.primary_color = _empty_to_none(payload.primary_color)
     if payload.terms_html is not None:
         site.terms_html = _empty_to_none(payload.terms_html)
+    if payload.portal_template_html is not None:
+        site.portal_template_html = _empty_to_none(payload.portal_template_html)
+    if payload.portal_template_enabled is not None:
+        site.portal_template_enabled = payload.portal_template_enabled
     if payload.support_contact is not None:
         site.support_contact = _empty_to_none(payload.support_contact)
     if payload.success_url is not None:
@@ -1013,6 +1019,8 @@ def _site_response(site: Site) -> SiteResponse:
         logo_url=site.logo_url,
         primary_color=site.primary_color,
         terms_html=site.terms_html,
+        portal_template_html=site.portal_template_html,
+        portal_template_enabled=site.portal_template_enabled,
         support_contact=site.support_contact,
         success_url=site.success_url,
         enable_tos_only=site.enable_tos_only,

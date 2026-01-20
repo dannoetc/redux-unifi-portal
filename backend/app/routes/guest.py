@@ -258,6 +258,10 @@ def get_site_config(
                 "support_contact": site.support_contact,
                 "display_name": site.display_name,
             },
+            "portal_template": {
+                "enabled": site.portal_template_enabled,
+                "html": site.portal_template_html,
+            },
             "methods": methods,
             "policy": policy,
         },

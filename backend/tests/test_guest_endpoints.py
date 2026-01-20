@@ -121,6 +121,20 @@ def test_guest_config_includes_oidc(client, db_session):
     assert "email_otp" in methods
 
 
+def test_guest_config_includes_portal_template(client, db_session):
+    tenant, site = _seed_site(db_session)
+    site.portal_template_enabled = True
+    site.portal_template_html = "<section>{{portal}}</section>"
+    db_session.add(site)
+    db_session.commit()
+
+    response = client.get(f"/api/guest/{tenant.slug}/{site.slug}/config")
+    assert response.status_code == 200
+    template = response.json()["data"]["portal_template"]
+    assert template["enabled"] is True
+    assert template["html"] == "<section>{{portal}}</section>"
+
+
 def test_voucher_endpoint_authorizes_unifi_httpx(client, db_session, monkeypatch):
     tenant, site = _seed_site(db_session)
     portal_session = _seed_portal_session(db_session, tenant, site)

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { ChangeEvent } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -18,9 +19,11 @@ const siteSchema = z.object({
   display_name: z.string().min(2),
   slug: z.string().min(2),
   enabled: z.boolean().default(true),
-  logo_url: z.string().url().optional().or(z.literal("")),
+  logo_url: z.string().optional().or(z.literal("")),
   primary_color: z.string().optional().or(z.literal("")),
   terms_html: z.string().optional().or(z.literal("")),
+  portal_template_html: z.string().optional().or(z.literal("")),
+  portal_template_enabled: z.boolean().default(false),
   support_contact: z.string().optional().or(z.literal("")),
   success_url: z.string().optional().or(z.literal("")),
   enable_tos_only: z.boolean().default(false),
@@ -64,6 +67,7 @@ export default function SiteDetailPage() {
   const [testError, setTestError] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
   const [tenantSlug, setTenantSlug] = useState<string | null>(null);
+  const logoInputRef = useRef<HTMLInputElement | null>(null);
 
   const siteForm = useForm<SiteFormValues>({
     resolver: zodResolver(siteSchema),
@@ -74,6 +78,8 @@ export default function SiteDetailPage() {
     oidc_provider_id: "",
     allowed_email_domains: "",
   });
+  const logoValue = siteForm.watch("logo_url");
+  const portalTemplateEnabled = siteForm.watch("portal_template_enabled");
 
   useEffect(() => {
     if (!tenantId) {
@@ -206,6 +212,32 @@ export default function SiteDetailPage() {
     []
   );
 
+  const handleLogoUpload = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+    const maxBytes = 512 * 1024;
+    if (file.size > maxBytes) {
+      toast.error("Logo file is too large. Use a file under 512KB.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        siteForm.setValue("logo_url", reader.result, { shouldDirty: true });
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const clearLogo = () => {
+    siteForm.setValue("logo_url", "", { shouldDirty: true });
+    if (logoInputRef.current) {
+      logoInputRef.current.value = "";
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -244,6 +276,30 @@ export default function SiteDetailPage() {
             <div className="space-y-2">
               <Label htmlFor="slug">Slug</Label>
               <Input id="slug" {...siteForm.register("slug")} />
+            </div>
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="logo_upload">Logo upload</Label>
+              <Input
+                id="logo_upload"
+                type="file"
+                accept="image/*"
+                ref={logoInputRef}
+                onChange={handleLogoUpload}
+              />
+              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                <span>Uploads are stored as data URLs. Use a small PNG/SVG.</span>
+                {logoValue ? (
+                  <Button type="button" variant="ghost" size="sm" onClick={clearLogo}>
+                    Clear logo
+                  </Button>
+                ) : null}
+              </div>
+              {logoValue ? (
+                <div className="flex items-center gap-3">
+                  <img src={logoValue} alt="Logo preview" className="h-12 w-12 rounded-md object-contain" />
+                  <span className="text-xs text-muted-foreground">Current logo preview</span>
+                </div>
+              ) : null}
             </div>
             <div className="space-y-2">
               <Label htmlFor="logo_url">Logo URL</Label>
@@ -289,6 +345,45 @@ export default function SiteDetailPage() {
             </div>
             <div className="md:col-span-2">
               <Button type="submit">Save site</Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Portal template</CardTitle>
+          <CardDescription>
+            Optional custom HTML wrapper. Use {"{{portal}}"} to insert the built-in portal card.
+            If omitted, the portal card is appended.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form className="grid gap-4" onSubmit={siteForm.handleSubmit(saveSite)}>
+            <div className="flex items-center gap-2">
+              <input
+                id="portal_template_enabled"
+                type="checkbox"
+                className="h-4 w-4 rounded border border-input"
+                {...siteForm.register("portal_template_enabled")}
+              />
+              <Label htmlFor="portal_template_enabled">Enable custom template</Label>
+            </div>
+            <div className="text-xs text-muted-foreground">
+              Tokens: {"{{display_name}}"}, {"{{logo_url}}"}, {"{{primary_color}}"}, {"{{terms_html}}"},{" "}
+              {"{{support_contact}}"}.
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="portal_template_html">HTML template</Label>
+              <textarea
+                id="portal_template_html"
+                className="min-h-[200px] w-full rounded-md border border-input bg-background p-3 text-sm"
+                placeholder="<section>{{portal}}</section>"
+                disabled={!portalTemplateEnabled}
+                {...siteForm.register("portal_template_html")}
+              />
+            </div>
+            <div>
+              <Button type="submit">Save template</Button>
             </div>
           </form>
         </CardContent>

@@ -89,9 +89,10 @@ Feel like an “extension” of the UniFi console by matching interaction patter
 - Tenant branding overlays:
   - logo + brand color used for highlights and login/guest pages
   - avoid tenant overrides that break component geometry
+- Sites can optionally define a custom HTML portal template; the built-in portal UI renders at `{{portal}}`.
 - Typography: Inter (or system fallback)
-- Radius: 10–12px for cards/dialogs, 8px for inputs
-- Density: “comfortable” (not condensed)
+- Radius: 10-12px for cards/dialogs, 8px for inputs
+- Density: "comfortable" (not condensed)
 
 ### Route groups (Next.js)
 - `/(guest)/guest/s/[tenant]/[site]/` … captive portal pages
@@ -168,7 +169,7 @@ Server actions:
 - `admin_memberships` (admin_user_id, tenant_id, role)
 
 ### Sites
-- `sites` (tenant_id, slug, display_name, enabled, unifi_site_id, branding, default policy)
+- `sites` (tenant_id, slug, display_name, enabled, unifi_site_id, branding, portal_template_html, portal_template_enabled, default policy)
 
 ### UniFi controller (tenant-level)
 - `tenants` includes `unifi_base_url`, `unifi_api_key_ref` for the shared controller per tenant.

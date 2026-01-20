@@ -3,12 +3,22 @@ from __future__ import annotations
 from pydantic import BaseModel
 
 
-class GuestConfigResponse(BaseModel):
+class GuestBranding(BaseModel):
     logo_url: str | None
     primary_color: str | None
     terms_html: str | None
     support_contact: str | None
     display_name: str
+
+
+class GuestPortalTemplate(BaseModel):
+    enabled: bool = False
+    html: str | None = None
+
+
+class GuestConfigResponse(BaseModel):
+    branding: GuestBranding
+    portal_template: GuestPortalTemplate
     methods: list[str]
     policy: dict
 

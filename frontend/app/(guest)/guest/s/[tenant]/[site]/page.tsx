@@ -12,6 +12,19 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
+const PORTAL_TEMPLATE_TOKEN = "{{portal}}";
+
+const applyTemplateTokens = (
+  template: string,
+  tokens: Record<string, string | null | undefined>
+) => {
+  let output = template;
+  Object.entries(tokens).forEach(([key, value]) => {
+    output = output.replaceAll(`{{${key}}}`, value ?? "");
+  });
+  return output;
+};
+
 type ConfigResponse = {
   branding: {
     logo_url?: string | null;
@@ -19,6 +32,10 @@ type ConfigResponse = {
     terms_html?: string | null;
     support_contact?: string | null;
     display_name?: string | null;
+  };
+  portal_template?: {
+    enabled?: boolean;
+    html?: string | null;
   };
   methods: string[];
   policy: {
@@ -64,6 +81,19 @@ export default function GuestLanding() {
       return undefined;
     }
     return { backgroundColor: config.branding.primary_color } as CSSProperties;
+  }, [config]);
+
+  const resolvedTemplate = useMemo(() => {
+    if (!config?.portal_template?.enabled || !config.portal_template.html) {
+      return null;
+    }
+    return applyTemplateTokens(config.portal_template.html, {
+      display_name: config.branding.display_name,
+      logo_url: config.branding.logo_url,
+      primary_color: config.branding.primary_color,
+      terms_html: config.branding.terms_html,
+      support_contact: config.branding.support_contact,
+    });
   }, [config]);
 
   useEffect(() => {
@@ -221,200 +251,242 @@ export default function GuestLanding() {
     ? `${API_BASE_URL}/api/oidc/${params.tenant}/${params.site}/start?portal_session_id=${portalSessionId}`
     : "";
 
+  const portalCard = (
+    <Card style={brandStyle}>
+      <CardHeader className="space-y-3">
+        <div className="flex items-center gap-3">
+          {config?.branding.logo_url ? (
+            <img
+              src={config.branding.logo_url}
+              alt={config.branding.display_name ?? "Site logo"}
+              className="h-12 w-12 rounded-lg object-contain"
+            />
+          ) : (
+            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary text-sm font-semibold text-primary-foreground">
+              WiFi
+            </div>
+          )}
+          <div>
+            <CardTitle>{config?.branding.display_name ?? "Connect to WiFi"}</CardTitle>
+            <CardDescription>Secure access for guests</CardDescription>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {loading ? (
+          <div className="text-sm text-muted-foreground">Loading portal session...</div>
+        ) : null}
+
+        {errorMessage && (
+          <Alert className="border-destructive/40">
+            <AlertDescription>{errorMessage}</AlertDescription>
+          </Alert>
+        )}
+
+        {errorParam && (
+          <Alert className="border-destructive/40">
+            <AlertDescription>SSO failed: {errorParam}</AlertDescription>
+          </Alert>
+        )}
+
+        {activePanel === "choose" && (
+          <div className="space-y-3">
+            {previewParam ? (
+              <div className="rounded-md border border-dashed border-input bg-muted/30 p-3 text-xs text-muted-foreground">
+                Preview mode. Authorization actions are disabled.
+              </div>
+            ) : null}
+            {methods.includes("tos_only") && (
+              <div className="space-y-3">
+                {config?.branding.terms_html ? (
+                  <label className="flex items-start gap-2 text-xs text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 h-4 w-4 rounded border border-input"
+                      checked={tosAccepted}
+                      onChange={(event) => setTosAccepted(event.target.checked)}
+                    />
+                    <span>I agree to the Terms of Service</span>
+                  </label>
+                ) : null}
+                <Button
+                  className="w-full"
+                  style={primaryButtonStyle}
+                  onClick={acceptTos}
+                  disabled={
+                    !portalSessionId ||
+                    Boolean(previewParam) ||
+                    (config?.branding.terms_html ? !tosAccepted : false)
+                  }
+                >
+                  Accept terms and connect
+                </Button>
+              </div>
+            )}
+            {methods.includes("oidc") && (
+              <Button
+                className="w-full"
+                style={primaryButtonStyle}
+                onClick={startSso}
+                disabled={!portalSessionId || Boolean(previewParam)}
+              >
+                Continue with SSO
+              </Button>
+            )}
+            {methods.includes("voucher") && (
+              <Button
+                className="w-full"
+                variant="outline"
+                onClick={() => setActivePanel("voucher")}
+                disabled={!portalSessionId || Boolean(previewParam)}
+              >
+                Use voucher code
+              </Button>
+            )}
+            {methods.includes("email_otp") && (
+              <Button
+                className="w-full"
+                variant="secondary"
+                onClick={() => setActivePanel("otp")}
+                disabled={!portalSessionId || Boolean(previewParam)}
+              >
+                Email me a code
+              </Button>
+            )}
+            {methods.includes("oidc") && openInBrowserUrl ? (
+              <a
+                className="block text-center text-xs text-muted-foreground underline"
+                href={openInBrowserUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Open in browser
+              </a>
+            ) : null}
+          </div>
+        )}
+
+        {activePanel === "voucher" && (
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <Label htmlFor="voucher">Voucher code</Label>
+              <Input
+                id="voucher"
+                placeholder="ABC123"
+                value={voucherCode}
+                onChange={(event) => setVoucherCode(event.target.value)}
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button className="flex-1" style={primaryButtonStyle} onClick={sendVoucher} disabled={!voucherCode}>
+                Connect
+              </Button>
+              <Button variant="ghost" onClick={() => setActivePanel("choose")}>Back</Button>
+            </div>
+          </div>
+        )}
+
+        {activePanel === "otp" && (
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <Label htmlFor="email">Email address</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="you@example.com"
+                value={otpEmail}
+                onChange={(event) => setOtpEmail(event.target.value)}
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button className="flex-1" style={primaryButtonStyle} onClick={startOtp} disabled={!otpEmail}>
+                Send code
+              </Button>
+              <Button variant="ghost" onClick={() => setActivePanel("choose")}>Back</Button>
+            </div>
+          </div>
+        )}
+
+        {activePanel === "otp-verify" && (
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <Label htmlFor="code">Verification code</Label>
+              <Input
+                id="code"
+                placeholder="123456"
+                value={otpCode}
+                onChange={(event) => setOtpCode(event.target.value)}
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button className="flex-1" style={primaryButtonStyle} onClick={verifyOtp} disabled={!otpCode}>
+                Verify
+              </Button>
+              <Button variant="ghost" onClick={() => setActivePanel("otp")}>Back</Button>
+            </div>
+          </div>
+        )}
+
+        {activePanel === "success" && (
+          <div className="space-y-3">
+            <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
+              Connected. Your access is ready.
+            </div>
+            {continueUrl ? (
+              <Button asChild className="w-full">
+                <a href={continueUrl}>Continue</a>
+              </Button>
+            ) : null}
+          </div>
+        )}
+
+        {config?.branding.terms_html ? (
+          <div
+            className="rounded-md border bg-white/70 p-3 text-xs text-muted-foreground"
+            dangerouslySetInnerHTML={{ __html: config.branding.terms_html }}
+          />
+        ) : (
+          <div className="text-xs text-muted-foreground">
+            By continuing, you agree to the network terms and acceptable use policy.
+          </div>
+        )}
+
+        {config?.branding.support_contact ? (
+          <div className="text-xs text-muted-foreground">Support: {config.branding.support_contact}</div>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+
+  const renderedTemplate = useMemo(() => {
+    if (!resolvedTemplate) {
+      return null;
+    }
+    const segments = resolvedTemplate.split(PORTAL_TEMPLATE_TOKEN);
+    if (segments.length === 1) {
+      return (
+        <div className="space-y-6">
+          <div dangerouslySetInnerHTML={{ __html: segments[0] }} />
+          {portalCard}
+        </div>
+      );
+    }
+    return (
+      <div className="space-y-6">
+        {segments.map((segment, index) => (
+          <div key={`segment-${index}`} className="space-y-6">
+            {segment ? <div dangerouslySetInnerHTML={{ __html: segment }} /> : null}
+            {index < segments.length - 1 ? portalCard : null}
+          </div>
+        ))}
+      </div>
+    );
+  }, [resolvedTemplate, portalCard]);
+
   return (
     <main className="surface-grid min-h-screen px-4 py-8">
-      <div className="mx-auto max-w-md">
-        <Card style={brandStyle}>
-          <CardHeader className="space-y-3">
-            <div className="flex items-center gap-3">
-              {config?.branding.logo_url ? (
-                <img
-                  src={config.branding.logo_url}
-                  alt={config.branding.display_name ?? "Site logo"}
-                  className="h-12 w-12 rounded-lg object-contain"
-                />
-              ) : (
-                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary text-sm font-semibold text-primary-foreground">
-                  WiFi
-                </div>
-              )}
-              <div>
-                <CardTitle>{config?.branding.display_name ?? "Connect to WiFi"}</CardTitle>
-                <CardDescription>Secure access for guests</CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {loading ? (
-              <div className="text-sm text-muted-foreground">Loading portal session...</div>
-            ) : null}
-
-            {errorMessage && (
-              <Alert className="border-destructive/40">
-                <AlertDescription>{errorMessage}</AlertDescription>
-              </Alert>
-            )}
-
-            {errorParam && (
-              <Alert className="border-destructive/40">
-                <AlertDescription>SSO failed: {errorParam}</AlertDescription>
-              </Alert>
-            )}
-
-            {activePanel === "choose" && (
-              <div className="space-y-3">
-                {previewParam ? (
-                  <div className="rounded-md border border-dashed border-input bg-muted/30 p-3 text-xs text-muted-foreground">
-                    Preview mode. Authorization actions are disabled.
-                  </div>
-                ) : null}
-                {methods.includes("tos_only") && (
-                  <div className="space-y-3">
-                    {config?.branding.terms_html ? (
-                      <label className="flex items-start gap-2 text-xs text-muted-foreground">
-                        <input
-                          type="checkbox"
-                          className="mt-0.5 h-4 w-4 rounded border border-input"
-                          checked={tosAccepted}
-                          onChange={(event) => setTosAccepted(event.target.checked)}
-                        />
-                        <span>I agree to the Terms of Service</span>
-                      </label>
-                    ) : null}
-                    <Button
-                      className="w-full"
-                      style={primaryButtonStyle}
-                      onClick={acceptTos}
-                      disabled={
-                        !portalSessionId ||
-                        Boolean(previewParam) ||
-                        (config?.branding.terms_html ? !tosAccepted : false)
-                      }
-                    >
-                      Accept terms and connect
-                    </Button>
-                  </div>
-                )}
-                {methods.includes("oidc") && (
-                  <Button
-                    className="w-full"
-                    style={primaryButtonStyle}
-                    onClick={startSso}
-                    disabled={!portalSessionId || Boolean(previewParam)}
-                  >
-                    Continue with SSO
-                  </Button>
-                )}
-                {methods.includes("voucher") && (
-                  <Button className="w-full" variant="outline" onClick={() => setActivePanel("voucher")}
-                    disabled={!portalSessionId || Boolean(previewParam)}>
-                    Use voucher code
-                  </Button>
-                )}
-                {methods.includes("email_otp") && (
-                  <Button className="w-full" variant="secondary" onClick={() => setActivePanel("otp")}
-                    disabled={!portalSessionId || Boolean(previewParam)}>
-                    Email me a code
-                  </Button>
-                )}
-                {methods.includes("oidc") && openInBrowserUrl ? (
-                  <a className="block text-center text-xs text-muted-foreground underline" href={openInBrowserUrl} target="_blank" rel="noopener noreferrer">
-                    Open in browser
-                  </a>
-                ) : null}
-              </div>
-            )}
-
-            {activePanel === "voucher" && (
-              <div className="space-y-3">
-                <div className="space-y-2">
-                  <Label htmlFor="voucher">Voucher code</Label>
-                  <Input
-                    id="voucher"
-                    placeholder="ABC123"
-                    value={voucherCode}
-                    onChange={(event) => setVoucherCode(event.target.value)}
-                  />
-                </div>
-                <div className="flex gap-2">
-                  <Button className="flex-1" style={primaryButtonStyle} onClick={sendVoucher} disabled={!voucherCode}>
-                    Connect
-                  </Button>
-                  <Button variant="ghost" onClick={() => setActivePanel("choose")}>Back</Button>
-                </div>
-              </div>
-            )}
-
-            {activePanel === "otp" && (
-              <div className="space-y-3">
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email address</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="you@example.com"
-                    value={otpEmail}
-                    onChange={(event) => setOtpEmail(event.target.value)}
-                  />
-                </div>
-                <div className="flex gap-2">
-                  <Button className="flex-1" style={primaryButtonStyle} onClick={startOtp} disabled={!otpEmail}>
-                    Send code
-                  </Button>
-                  <Button variant="ghost" onClick={() => setActivePanel("choose")}>Back</Button>
-                </div>
-              </div>
-            )}
-
-            {activePanel === "otp-verify" && (
-              <div className="space-y-3">
-                <div className="space-y-2">
-                  <Label htmlFor="code">Verification code</Label>
-                  <Input
-                    id="code"
-                    placeholder="123456"
-                    value={otpCode}
-                    onChange={(event) => setOtpCode(event.target.value)}
-                  />
-                </div>
-                <div className="flex gap-2">
-                  <Button className="flex-1" style={primaryButtonStyle} onClick={verifyOtp} disabled={!otpCode}>
-                    Verify
-                  </Button>
-                  <Button variant="ghost" onClick={() => setActivePanel("otp")}>Back</Button>
-                </div>
-              </div>
-            )}
-
-            {activePanel === "success" && (
-              <div className="space-y-3">
-                <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
-                  Connected. Your access is ready.
-                </div>
-                {continueUrl ? (
-                  <Button asChild className="w-full">
-                    <a href={continueUrl}>Continue</a>
-                  </Button>
-                ) : null}
-              </div>
-            )}
-
-            {config?.branding.terms_html ? (
-              <div
-                className="rounded-md border bg-white/70 p-3 text-xs text-muted-foreground"
-                dangerouslySetInnerHTML={{ __html: config.branding.terms_html }}
-              />
-            ) : (
-              <div className="text-xs text-muted-foreground">
-                By continuing, you agree to the network terms and acceptable use policy.
-              </div>
-            )}
-
-            {config?.branding.support_contact ? (
-              <div className="text-xs text-muted-foreground">Support: {config.branding.support_contact}</div>
-            ) : null}
-          </CardContent>
-        </Card>
+      <div className={resolvedTemplate ? "mx-auto w-full max-w-4xl" : "mx-auto max-w-md"}>
+        {renderedTemplate ?? portalCard}
       </div>
     </main>
   );
