@@ -4,7 +4,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <header className="sticky top-0 z-10 border-b bg-white/80 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-sm font-semibold text-primary-foreground">
+            <div
+              className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-sm font-semibold text-primary-foreground"
+              aria-hidden="true"
+            >
               R
             </div>
             <div>
@@ -12,7 +15,20 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <div className="text-xs text-muted-foreground">Admin Console</div>
             </div>
           </div>
-          <div className="text-xs text-muted-foreground">MSP-first</div>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              className="inline-flex items-center rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2"
+            >
+              Demo tenant
+            </button>
+            <div
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-xs font-semibold text-muted-foreground"
+              aria-label="Admin user"
+            >
+              AD
+            </div>
+          </div>
         </div>
       </header>
       <div className="mx-auto grid max-w-6xl grid-cols-[220px_1fr] gap-6 px-6 py-8">
