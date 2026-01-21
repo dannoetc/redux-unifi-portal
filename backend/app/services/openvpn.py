@@ -49,8 +49,22 @@ def _apply_placeholders(profile: str, tenant: Tenant) -> str:
     return profile
 
 
+def profile_requires_remote_settings(profile: str) -> bool:
+    if _profile_uses_remote_placeholders(profile):
+        return True
+    return not _profile_has_remote_line(profile)
+
+
+def _profile_uses_remote_placeholders(profile: str) -> bool:
+    return "{{REMOTE_HOST}}" in profile or "{{REMOTE_PORT}}" in profile
+
+
+def _profile_has_remote_line(profile: str) -> bool:
+    return re.search(r"^remote\\s+", profile, flags=re.MULTILINE) is not None
+
+
 def _ensure_remote(profile: str, tenant: Tenant) -> str:
-    if re.search(r"^remote\\s+", profile, flags=re.MULTILINE):
+    if _profile_has_remote_line(profile):
         return profile
     if not tenant.openvpn_remote_host or not tenant.openvpn_remote_port:
         return profile

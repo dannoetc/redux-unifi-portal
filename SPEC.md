@@ -216,6 +216,7 @@ Server actions:
 - `POST /api/admin/tenants/{tenant_id}/sites/{site_id}/vouchers/batches`
 - `GET  /api/admin/tenants/{tenant_id}/sites/{site_id}/vouchers/batches/{batch_id}/export.csv`
 - `GET  /api/admin/tenants/{tenant_id}/auth-events` (+ export)
+- `GET  /api/admin/tenants/{tenant_id}/openvpn/profile` (returns `application/x-openvpn-profile`)
 
 ---
 
