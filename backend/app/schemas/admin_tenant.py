@@ -9,6 +9,13 @@ class TenantCreateRequest(BaseModel):
     status: str | None = None
     unifi_base_url: str | None = None
     unifi_api_key_ref: str | None = None
+    is_roaming: bool | None = None
+    openvpn_enabled: bool | None = None
+    openvpn_profile_ref: str | None = None
+    openvpn_auth_ref: str | None = None
+    openvpn_ca_ref: str | None = None
+    openvpn_remote_host: str | None = None
+    openvpn_remote_port: int | None = None
 
 
 class TenantUpdateRequest(BaseModel):
@@ -17,6 +24,13 @@ class TenantUpdateRequest(BaseModel):
     status: str | None = None
     unifi_base_url: str | None = None
     unifi_api_key_ref: str | None = None
+    is_roaming: bool | None = None
+    openvpn_enabled: bool | None = None
+    openvpn_profile_ref: str | None = None
+    openvpn_auth_ref: str | None = None
+    openvpn_ca_ref: str | None = None
+    openvpn_remote_host: str | None = None
+    openvpn_remote_port: int | None = None
 
 
 class TenantResponse(BaseModel):
@@ -26,3 +40,10 @@ class TenantResponse(BaseModel):
     status: str
     unifi_base_url: str | None
     unifi_api_key_ref: str | None
+    is_roaming: bool
+    openvpn_enabled: bool
+    openvpn_profile_ref: str | None
+    openvpn_auth_ref: str | None
+    openvpn_ca_ref: str | None
+    openvpn_remote_host: str | None
+    openvpn_remote_port: int | None
