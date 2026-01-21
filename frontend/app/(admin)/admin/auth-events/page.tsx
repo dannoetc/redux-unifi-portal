@@ -161,7 +161,26 @@ export default function AuthEventsPage() {
         </div>
         <div className="mt-4">
           {loading ? (
-            <div className="text-sm text-muted-foreground">Loading auth events...</div>
+            <div className="space-y-3">
+              {Array.from({ length: 6 }).map((_, index) => (
+                <div
+                  key={`events-skeleton-${index}`}
+                  className="grid animate-pulse grid-cols-[1.2fr_1fr_1fr_2fr] items-center gap-4"
+                >
+                  <div className="h-4 rounded bg-muted/60" />
+                  <div className="h-4 rounded bg-muted/60" />
+                  <div className="h-4 rounded bg-muted/60" />
+                  <div className="h-4 rounded bg-muted/60" />
+                </div>
+              ))}
+            </div>
+          ) : events.length === 0 ? (
+            <div className="flex flex-col items-start gap-2 rounded-lg bg-muted/30 p-4">
+              <div className="text-sm font-semibold">No auth events yet.</div>
+              <div className="text-sm text-muted-foreground">
+                Successful voucher, OTP, and OIDC activity will appear here.
+              </div>
+            </div>
           ) : (
             <DataTable columns={columns} data={events} />
           )}

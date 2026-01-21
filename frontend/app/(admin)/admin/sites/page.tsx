@@ -332,7 +332,7 @@ export default function SitesPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold">Sites</h1>
+          <h1 className="text-2xl font-semibold">Sites</h1>
           <p className="mt-1 text-sm text-muted-foreground">Configure branding, policies, and UniFi connection.</p>
           <p className="mt-2 text-xs text-muted-foreground">
             {activeTenant ? `Active tenant: ${activeTenant.name}` : "Select a tenant from the sidebar to continue."}
@@ -358,6 +358,22 @@ export default function SitesPage() {
                 <div className="space-y-2">
                   <Label htmlFor="slug">Slug</Label>
                   <Input id="slug" {...form.register("slug")} />
+                </div>
+                <div className="flex items-center justify-between rounded-lg border border-border/60 px-3 py-2 md:col-span-2">
+                  <div>
+                    <div className="text-sm font-medium">Site enabled</div>
+                    <div className="text-xs text-muted-foreground">Toggle guest access for this site.</div>
+                  </div>
+                  <label className="relative inline-flex cursor-pointer items-center">
+                    <input
+                      type="checkbox"
+                      className="peer sr-only"
+                      checked={Boolean(form.watch("enabled"))}
+                      onChange={() => form.setValue("enabled", !form.getValues("enabled"))}
+                    />
+                    <span className="h-5 w-9 rounded-full bg-muted transition peer-checked:bg-primary" />
+                    <span className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition peer-checked:translate-x-4" />
+                  </label>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="unifi_base_url">UniFi controller IP (optional override)</Label>

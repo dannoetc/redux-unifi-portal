@@ -161,7 +161,28 @@ export default function OidcProvidersPage() {
       </div>
       <Card className="rounded-xl border bg-card p-6 shadow-soft">
         {loading ? (
-          <div className="text-sm text-muted-foreground">Loading providers...</div>
+          <div className="space-y-3">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <div
+                key={`oidc-skeleton-${index}`}
+                className="grid animate-pulse grid-cols-[2fr_1fr_1fr] items-center gap-4"
+              >
+                <div className="h-4 rounded bg-muted/60" />
+                <div className="h-4 rounded bg-muted/60" />
+                <div className="h-4 rounded bg-muted/60" />
+              </div>
+            ))}
+          </div>
+        ) : providers.length === 0 ? (
+          <div className="flex flex-col items-start gap-2 rounded-lg bg-muted/30 p-4">
+            <div className="text-sm font-semibold">No providers yet.</div>
+            <div className="text-sm text-muted-foreground">
+              Add your first OIDC provider to enable SSO.
+            </div>
+            <Button variant="primary" onClick={() => setDialogOpen(true)}>
+              Create provider
+            </Button>
+          </div>
         ) : (
           <DataTable columns={columns} data={providers} />
         )}

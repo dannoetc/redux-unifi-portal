@@ -2,6 +2,8 @@
 
 import { usePathname } from "next/navigation";
 
+import { useTenantSelection } from "@/lib/use-tenant";
+
 const NAV_ITEMS = [
   { href: "/admin", label: "Dashboard" },
   { href: "/admin/tenants", label: "Tenants" },
@@ -14,10 +16,13 @@ const NAV_ITEMS = [
 
 export function SidebarNav() {
   const pathname = usePathname();
+  const { adminUser } = useTenantSelection();
+  const isSuperadmin = adminUser?.is_superadmin ?? false;
 
   return (
     <ul className="mt-3 space-y-2 text-sm">
-      {NAV_ITEMS.map((item) => {
+      {NAV_ITEMS.filter((item) => (item.href === "/admin/admin-users" ? isSuperadmin : true)).map(
+        (item) => {
         const isActive = pathname === item.href || pathname?.startsWith(`${item.href}/`);
         return (
           <li key={item.href}>

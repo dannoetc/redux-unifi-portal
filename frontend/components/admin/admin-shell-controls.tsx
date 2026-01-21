@@ -21,7 +21,6 @@ export function AdminShellControls() {
     }
     return adminUser.memberships.find((membership) => membership.tenant_id === tenantId)?.role ?? null;
   }, [adminUser, tenantId]);
-  const canManageTenant = adminUser?.is_superadmin || activeRole === "TENANT_ADMIN";
 
   const signOut = async () => {
     try {
@@ -107,7 +106,7 @@ export function AdminShellControls() {
                   Tenants
                 </a>
               ) : null}
-              {canManageTenant ? (
+              {adminUser?.is_superadmin ? (
                 <a className="rounded-md px-2 py-1 hover:bg-muted" href="/admin/admin-users">
                   Admin users
                 </a>

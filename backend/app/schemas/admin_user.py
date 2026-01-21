@@ -13,6 +13,13 @@ class AdminUserCreateRequest(BaseModel):
     role: AdminRole = AdminRole.TENANT_ADMIN
 
 
+class AdminUserUpdateRequest(BaseModel):
+    email: EmailStr | None = None
+    password: str | None = Field(default=None, min_length=8)
+    role: AdminRole | None = None
+    is_superadmin: bool | None = None
+
+
 class AdminUserResponse(BaseModel):
     id: str
     email: str

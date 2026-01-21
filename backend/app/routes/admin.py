@@ -40,7 +40,7 @@ from app.schemas.admin_oidc import (
     SiteOidcResponse,
     SiteOidcUpdateRequest,
 )
-from app.schemas.admin_user import AdminUserCreateRequest, AdminUserResponse
+from app.schemas.admin_user import AdminUserCreateRequest, AdminUserResponse, AdminUserUpdateRequest
 from app.schemas.admin_site import (
     SiteCreateRequest,
     SiteProvisionRequest,
@@ -171,7 +171,7 @@ def get_tenant(
 def list_admin_users(
     tenant_id: uuid.UUID,
     db: Session = Depends(get_db),
-    _admin: AdminUser = Depends(require_tenant_role([AdminRole.TENANT_ADMIN])),
+    _admin: AdminUser = Depends(require_superadmin),
 ) -> dict:
     stmt = (
         select(AdminUser, AdminMembership)
@@ -198,7 +198,7 @@ def create_admin_user(
     tenant_id: uuid.UUID,
     payload: AdminUserCreateRequest,
     db: Session = Depends(get_db),
-    _admin: AdminUser = Depends(require_tenant_role([AdminRole.TENANT_ADMIN])),
+    _admin: AdminUser = Depends(require_superadmin),
 ) -> dict:
     tenant = db.execute(select(Tenant).where(Tenant.id == tenant_id)).scalar_one_or_none()
     if not tenant:
@@ -259,12 +259,82 @@ def create_admin_user(
     }
 
 
+@router.put("/tenants/{tenant_id}/admins/{admin_user_id}")
+def update_admin_user(
+    tenant_id: uuid.UUID,
+    admin_user_id: uuid.UUID,
+    payload: AdminUserUpdateRequest,
+    db: Session = Depends(get_db),
+    _admin: AdminUser = Depends(require_superadmin),
+) -> dict:
+    membership = db.execute(
+        select(AdminMembership).where(
+            AdminMembership.admin_user_id == admin_user_id,
+            AdminMembership.tenant_id == tenant_id,
+        )
+    ).scalar_one_or_none()
+    if not membership:
+        raise HTTPException(
+            status_code=404,
+            detail={"ok": False, "error": {"code": "NOT_FOUND", "message": "Admin membership not found."}},
+        )
+
+    admin_user = db.execute(select(AdminUser).where(AdminUser.id == admin_user_id)).scalar_one_or_none()
+    if not admin_user:
+        raise HTTPException(
+            status_code=404,
+            detail={"ok": False, "error": {"code": "NOT_FOUND", "message": "Admin user not found."}},
+        )
+
+    if payload.email is not None:
+        normalized_email = payload.email.strip().lower()
+        existing = db.execute(
+            select(AdminUser).where(
+                func.lower(AdminUser.email) == normalized_email,
+                AdminUser.id != admin_user_id,
+            )
+        ).scalar_one_or_none()
+        if existing:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "ok": False,
+                    "error": {"code": "EMAIL_TAKEN", "message": "Admin email is already in use."},
+                },
+            )
+        admin_user.email = normalized_email
+    if payload.password is not None:
+        admin_user.password_hash = hash_password(payload.password)
+    if payload.is_superadmin is not None:
+        admin_user.is_superadmin = payload.is_superadmin
+    if payload.role is not None:
+        membership.role = payload.role
+
+    db.add(admin_user)
+    db.add(membership)
+    db.commit()
+    db.refresh(admin_user)
+
+    return {
+        "ok": True,
+        "data": {
+            "admin": AdminUserResponse(
+                id=str(admin_user.id),
+                email=admin_user.email,
+                role=membership.role.value,
+                is_superadmin=admin_user.is_superadmin,
+                created_at=admin_user.created_at,
+            ).model_dump(mode="json")
+        },
+    }
+
+
 @router.delete("/tenants/{tenant_id}/admins/{admin_user_id}")
 def delete_admin_user(
     tenant_id: uuid.UUID,
     admin_user_id: uuid.UUID,
     db: Session = Depends(get_db),
-    _admin: AdminUser = Depends(require_tenant_role([AdminRole.TENANT_ADMIN])),
+    _admin: AdminUser = Depends(require_superadmin),
 ) -> dict:
     membership = db.execute(
         select(AdminMembership).where(

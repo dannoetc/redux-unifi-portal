@@ -11,21 +11,15 @@ def _login_as(client, admin: AdminUser) -> None:
     client.cookies.set("admin_session", token)
 
 
-def test_tenant_admin_can_create_and_list_admins(client, db_session):
+def test_superadmin_can_create_list_update_admins(client, db_session):
     tenant = Tenant(id=uuid.uuid4(), slug="acme", name="Acme", status=TenantStatus.ACTIVE)
     admin = AdminUser(
         id=uuid.uuid4(),
         email="admin@example.com",
         password_hash=hash_password("secret"),
-        is_superadmin=False,
+        is_superadmin=True,
     )
-    membership = AdminMembership(
-        id=uuid.uuid4(),
-        admin_user_id=admin.id,
-        tenant_id=tenant.id,
-        role=AdminRole.TENANT_ADMIN,
-    )
-    db_session.add_all([tenant, admin, membership])
+    db_session.add_all([tenant, admin])
     db_session.commit()
 
     _login_as(client, admin)
@@ -44,3 +38,40 @@ def test_tenant_admin_can_create_and_list_admins(client, db_session):
     assert list_response.status_code == 200
     emails = {row["email"] for row in list_response.json()["data"]["admins"]}
     assert "new.admin@example.com" in emails
+
+    update_payload = {
+        "email": "updated.admin@example.com",
+        "role": "TENANT_ADMIN",
+        "is_superadmin": True,
+    }
+    update_response = client.put(
+        f"/api/admin/tenants/{tenant.id}/admins/{admin_data['id']}",
+        json=update_payload,
+    )
+    assert update_response.status_code == 200
+    updated = update_response.json()["data"]["admin"]
+    assert updated["email"] == "updated.admin@example.com"
+    assert updated["role"] == "TENANT_ADMIN"
+    assert updated["is_superadmin"] is True
+
+
+def test_tenant_admin_cannot_manage_admins(client, db_session):
+    tenant = Tenant(id=uuid.uuid4(), slug="beta", name="Beta", status=TenantStatus.ACTIVE)
+    admin = AdminUser(
+        id=uuid.uuid4(),
+        email="tenant.admin@example.com",
+        password_hash=hash_password("secret"),
+        is_superadmin=False,
+    )
+    membership = AdminMembership(
+        id=uuid.uuid4(),
+        admin_user_id=admin.id,
+        tenant_id=tenant.id,
+        role=AdminRole.TENANT_ADMIN,
+    )
+    db_session.add_all([tenant, admin, membership])
+    db_session.commit()
+
+    _login_as(client, admin)
+    list_response = client.get(f"/api/admin/tenants/{tenant.id}/admins")
+    assert list_response.status_code == 403
