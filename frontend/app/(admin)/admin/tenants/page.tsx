@@ -121,6 +121,14 @@ export default function TenantsPage() {
   const [setupOpen, setSetupOpen] = useState(true);
   const [setupInitialized, setSetupInitialized] = useState(false);
 
+  const isOpenVpnDownloadReady = (tenant: Tenant) =>
+    Boolean(
+      tenant.openvpn_enabled &&
+        tenant.openvpn_profile_ref &&
+        tenant.openvpn_remote_host &&
+        tenant.openvpn_remote_port
+    );
+
   const form = useForm<CreateTenant>({
     resolver: zodResolver(schema),
     defaultValues: { status: "ACTIVE" },
@@ -203,7 +211,7 @@ export default function TenantsPage() {
           >
             Configure UniFi
           </button>
-          {tenant.openvpn_enabled && tenant.openvpn_profile_ref ? (
+          {isOpenVpnDownloadReady(tenant) ? (
             <>
               <div className="my-1 h-px bg-border/70" />
               <button
@@ -593,18 +601,26 @@ export default function TenantsPage() {
                 <Label htmlFor="openvpn_profile_ref">OpenVPN profile template ref</Label>
                 <Input id="openvpn_profile_ref" {...controllerForm.register("openvpn_profile_ref")} />
                 <p className="text-xs text-muted-foreground">
-                  Reference an environment variable containing a .ovpn template (supports {`{{REMOTE_HOST}}`} and {`{{REMOTE_PORT}}`} tokens).
+                  Reference an environment variable containing the full .ovpn template. Include the
+                  required {`{{REMOTE_HOST}}`} and {`{{REMOTE_PORT}}`} tokens so the server can inject
+                  the tenant-specific remote address.
                 </p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="openvpn_ca_ref">CA bundle ref</Label>
                 <Input id="openvpn_ca_ref" {...controllerForm.register("openvpn_ca_ref")} />
-                <p className="text-xs text-muted-foreground">Optional: used to inline a &lt;ca&gt; block.</p>
+                <p className="text-xs text-muted-foreground">
+                  Optional: reference a CA bundle secret to append a &lt;ca&gt; block when the template
+                  does not already include one.
+                </p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="openvpn_auth_ref">Auth credentials ref</Label>
                 <Input id="openvpn_auth_ref" type="password" {...controllerForm.register("openvpn_auth_ref")} />
-                <p className="text-xs text-muted-foreground">Optional: adds an auth-user-pass block for gateways.</p>
+                <p className="text-xs text-muted-foreground">
+                  Optional: reference a username/password secret to inject an auth-user-pass block if the
+                  template does not already include one.
+                </p>
               </div>
             </div>
             <DialogFooter className="gap-2">
