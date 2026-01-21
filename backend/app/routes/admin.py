@@ -51,7 +51,12 @@ from app.schemas.admin_site import (
 from app.schemas.admin_tenant import TenantCreateRequest, TenantResponse, TenantUpdateRequest
 from app.schemas.admin_voucher import VoucherBatchCreateRequest
 from app.security import create_session_token, hash_password, verify_password
-from app.services.openvpn import OpenVpnError, build_openvpn_profile
+from app.services.openvpn import (
+    OpenVpnError,
+    build_openvpn_profile,
+    profile_requires_remote_settings,
+    resolve_openvpn_secret,
+)
 from app.services.unifi import UnifiApiError, UnifiClient
 from app.settings import settings
 
@@ -1424,12 +1429,25 @@ def _validate_openvpn_requirements(
     if not (is_roaming or openvpn_enabled):
         return
     missing_fields = []
+    profile_template = None
     if not openvpn_profile_ref:
         missing_fields.append("openvpn_profile_ref")
-    if not openvpn_remote_host:
-        missing_fields.append("openvpn_remote_host")
-    if not openvpn_remote_port:
-        missing_fields.append("openvpn_remote_port")
+    else:
+        try:
+            profile_template = resolve_openvpn_secret(openvpn_profile_ref)
+        except OpenVpnError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail={"ok": False, "error": {"code": exc.code, "message": str(exc)}},
+            ) from exc
+    needs_remote_settings = True
+    if profile_template is not None:
+        needs_remote_settings = profile_requires_remote_settings(profile_template)
+    if needs_remote_settings:
+        if not openvpn_remote_host:
+            missing_fields.append("openvpn_remote_host")
+        if not openvpn_remote_port:
+            missing_fields.append("openvpn_remote_port")
     if missing_fields:
         raise HTTPException(
             status_code=400,
