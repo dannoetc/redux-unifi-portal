@@ -16,7 +16,7 @@ services:
       - "6379:6379"
 
   openvpn:
-    image: kylemanna/openvpn:2.5
+    image: kylemanna/openvpn:2.4
     ports:
       - "1194:1194/udp"
     cap_add:
