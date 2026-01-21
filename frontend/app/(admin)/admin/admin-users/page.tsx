@@ -6,12 +6,12 @@ import { toast } from "sonner";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { MoreHorizontal } from "lucide-react";
 
 import { apiFetch } from "@/lib/api";
 import { useTenantSelection } from "@/lib/use-tenant";
 import { DataTable } from "@/components/data-table";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -88,6 +88,38 @@ export default function AdminUsersPage() {
     };
   }, [tenantId]);
 
+  const RowActions = ({ admin }: { admin: AdminUser }) => {
+    const [open, setOpen] = useState(false);
+
+    return (
+      <details
+        className="relative"
+        open={open}
+        onToggle={(event) => setOpen((event.target as HTMLDetailsElement).open)}
+      >
+        <summary
+          aria-label="Open row actions"
+          className="flex h-8 w-8 list-none items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+        >
+          <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+        </summary>
+        <div className="absolute right-0 z-20 mt-2 min-w-[180px] rounded-md border border-border bg-white p-1 shadow-soft">
+          <button
+            type="button"
+            className="w-full rounded-sm px-2 py-1.5 text-left text-sm text-destructive hover:bg-muted"
+            onClick={() => {
+              setAdminToDelete(admin);
+              setDeleteOpen(true);
+              setOpen(false);
+            }}
+          >
+            Remove admin
+          </button>
+        </div>
+      </details>
+    );
+  };
+
   const columns = useMemo<ColumnDef<AdminUser>[]>(
     () => [
       {
@@ -113,19 +145,10 @@ export default function AdminUsersPage() {
       },
       {
         id: "actions",
-        header: "",
+        header: () => <span className="sr-only">Actions</span>,
         cell: ({ row }) => (
-          <div className="flex items-center justify-end gap-2">
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={() => {
-                setAdminToDelete(row.original);
-                setDeleteOpen(true);
-              }}
-            >
-              Remove
-            </Button>
+          <div className="flex items-center justify-end">
+            <RowActions admin={row.original} />
           </div>
         ),
       },
@@ -174,7 +197,7 @@ export default function AdminUsersPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">Admin users</h1>
+          <h1 className="text-xl font-semibold">Admin users</h1>
           <p className="mt-1 text-sm text-muted-foreground">Provision tenant-scoped admin access.</p>
           <p className="mt-2 text-xs text-muted-foreground">
             {activeTenant ? `Active tenant: ${activeTenant.name}` : "Select a tenant from the sidebar to continue."}
@@ -205,7 +228,7 @@ export default function AdminUsersPage() {
                   <Label htmlFor="role">Role</Label>
                   <select
                     id="role"
-                    className="h-10 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2 focus:ring-offset-white"
+                    className="h-10 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                     {...form.register("role")}
                   >
                     <option value="TENANT_ADMIN">Tenant admin</option>
@@ -222,13 +245,19 @@ export default function AdminUsersPage() {
           </Dialog>
         </div>
       </div>
-      <Card className="rounded-xl border bg-card p-6 shadow-soft">
+      <div className="space-y-4">
         {loading ? (
-          <div className="text-sm text-muted-foreground">Loading admins...</div>
+          <div className="rounded-lg bg-muted/30 p-4 text-sm text-muted-foreground">
+            Loading admins...
+          </div>
+        ) : admins.length === 0 ? (
+          <div className="rounded-lg bg-muted/30 p-6 text-sm text-muted-foreground">
+            No admins yet.
+          </div>
         ) : (
           <DataTable columns={columns} data={admins} />
         )}
-      </Card>
+      </div>
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogContent>
           <DialogHeader>

@@ -6,11 +6,11 @@ import { toast } from "sonner";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { ChevronDown, MoreHorizontal } from "lucide-react";
 
 import { apiFetch } from "@/lib/api";
 import { DataTable } from "@/components/data-table";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -84,6 +84,8 @@ export default function TenantsPage() {
   const [deleting, setDeleting] = useState(false);
   const [tenantToDelete, setTenantToDelete] = useState<Tenant | null>(null);
   const [tenantToConfigure, setTenantToConfigure] = useState<Tenant | null>(null);
+  const [setupOpen, setSetupOpen] = useState(true);
+  const [setupInitialized, setSetupInitialized] = useState(false);
 
   const form = useForm<CreateTenant>({
     resolver: zodResolver(schema),
@@ -114,6 +116,61 @@ export default function TenantsPage() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!setupInitialized && !loading) {
+      setSetupOpen(tenants.length === 0);
+      setSetupInitialized(true);
+    }
+  }, [loading, setupInitialized, tenants.length]);
+
+  const RowActions = ({ tenant }: { tenant: Tenant }) => {
+    const [open, setOpen] = useState(false);
+
+    return (
+      <details
+        className="relative"
+        open={open}
+        onToggle={(event) => setOpen((event.target as HTMLDetailsElement).open)}
+      >
+        <summary
+          aria-label="Open row actions"
+          className="flex h-8 w-8 list-none items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+        >
+          <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+        </summary>
+        <div className="absolute right-0 z-20 mt-2 min-w-[180px] rounded-md border border-border bg-white p-1 shadow-soft">
+          <button
+            type="button"
+            className="w-full rounded-sm px-2 py-1.5 text-left text-sm text-foreground hover:bg-muted"
+            onClick={() => {
+              setTenantToConfigure(tenant);
+              controllerForm.reset({
+                unifi_base_url: displayUnifiHost(tenant.unifi_base_url),
+                unifi_api_key_ref: tenant.unifi_api_key_ref ?? "",
+              });
+              setControllerOpen(true);
+              setOpen(false);
+            }}
+          >
+            Configure UniFi
+          </button>
+          <div className="my-1 h-px bg-border/70" />
+          <button
+            type="button"
+            className="w-full rounded-sm px-2 py-1.5 text-left text-sm text-destructive hover:bg-muted"
+            onClick={() => {
+              setTenantToDelete(tenant);
+              setDeleteOpen(true);
+              setOpen(false);
+            }}
+          >
+            Remove tenant
+          </button>
+        </div>
+      </details>
+    );
+  };
+
   const columns = useMemo<ColumnDef<Tenant>[]>(
     () => [
       {
@@ -126,6 +183,9 @@ export default function TenantsPage() {
       {
         accessorKey: "slug",
         header: "Slug",
+        cell: ({ row }) => (
+          <span className="text-sm text-muted-foreground">{row.original.slug}</span>
+        ),
       },
       {
         accessorKey: "status",
@@ -136,33 +196,10 @@ export default function TenantsPage() {
       },
       {
         id: "actions",
-        header: "",
+        header: () => <span className="sr-only">Actions</span>,
         cell: ({ row }) => (
-          <div className="flex items-center justify-end gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => {
-                setTenantToConfigure(row.original);
-                controllerForm.reset({
-                  unifi_base_url: displayUnifiHost(row.original.unifi_base_url),
-                  unifi_api_key_ref: row.original.unifi_api_key_ref ?? "",
-                });
-                setControllerOpen(true);
-              }}
-            >
-              Configure UniFi
-            </Button>
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={() => {
-                setTenantToDelete(row.original);
-                setDeleteOpen(true);
-              }}
-            >
-              Remove
-            </Button>
+          <div className="flex items-center justify-end">
+            <RowActions tenant={row.original} />
           </div>
         ),
       },
@@ -249,114 +286,134 @@ export default function TenantsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold">Tenants</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Manage customer tenants and status.</p>
-        </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button variant="primary" className="shadow-sm">
-              New tenant
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Create tenant</DialogTitle>
-              <DialogDescription>Provision a new MSP tenant.</DialogDescription>
-            </DialogHeader>
-            <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
-              <div className="space-y-2">
-                <Label htmlFor="name">Name</Label>
-                <Input id="name" autoFocus {...form.register("name")} />
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
+        <section className="order-1 space-y-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h1 className="text-xl font-semibold">Tenants</h1>
+              <p className="mt-1 text-sm text-muted-foreground">Manage customer tenants and status.</p>
+            </div>
+            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="primary" className="shadow-sm">
+                  New tenant
+                </Button>
+              </DialogTrigger>
+          <DialogContent className="max-w-3xl">
+                <DialogHeader>
+                  <DialogTitle>Create tenant</DialogTitle>
+                  <DialogDescription>Provision a new MSP tenant.</DialogDescription>
+                </DialogHeader>
+                <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
+                  <div className="space-y-2">
+                    <Label htmlFor="name">Name</Label>
+                    <Input id="name" autoFocus {...form.register("name")} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="slug">Slug</Label>
+                    <Input id="slug" {...form.register("slug")} />
+                  </div>
+                  <div className="flex items-center justify-between rounded-lg border border-border/60 px-3 py-2">
+                    <div>
+                      <div className="text-sm font-medium">Active</div>
+                      <div className="text-xs text-muted-foreground">Toggle tenant access.</div>
+                    </div>
+                    <label className="relative inline-flex cursor-pointer items-center">
+                      <input
+                        type="checkbox"
+                        className="peer sr-only"
+                        checked={form.watch("status") !== "SUSPENDED"}
+                        onChange={() =>
+                          form.setValue(
+                            "status",
+                            form.watch("status") === "SUSPENDED" ? "ACTIVE" : "SUSPENDED"
+                          )
+                        }
+                      />
+                      <span className="h-5 w-9 rounded-full bg-muted transition peer-checked:bg-primary" />
+                      <span className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition peer-checked:translate-x-4" />
+                    </label>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="unifi_base_url">UniFi controller IP</Label>
+                    <Input
+                      id="unifi_base_url"
+                      placeholder="71.162.143.124"
+                      {...form.register("unifi_base_url")}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      We append {UNIFI_INTEGRATION_PATH} automatically.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="unifi_api_key_ref">UniFi API key reference</Label>
+                    <Input id="unifi_api_key_ref" type="password" {...form.register("unifi_api_key_ref")} />
+                    <p className="text-xs text-muted-foreground">Use a secret reference, not a raw key.</p>
+                  </div>
+                  <DialogFooter>
+                    <Button type="submit" variant="primary">
+                      Create tenant
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
+          </div>
+          <div className="space-y-4">
+            {loading ? (
+              <div className="space-y-3 rounded-lg bg-muted/30 p-4">
+                {Array.from({ length: 6 }).map((_, index) => (
+                  <div
+                    key={`tenant-skeleton-${index}`}
+                    className="grid animate-pulse grid-cols-[2fr_1fr_1fr_80px] items-center gap-4"
+                  >
+                    <div className="h-4 rounded bg-muted/60" />
+                    <div className="h-4 rounded bg-muted/60" />
+                    <div className="h-4 rounded bg-muted/60" />
+                    <div className="h-8 rounded bg-muted/60" />
+                  </div>
+                ))}
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="slug">Slug</Label>
-                <Input id="slug" {...form.register("slug")} />
-              </div>
-              <div className="flex items-center justify-between rounded-lg border border-border/60 px-3 py-2">
-                <div>
-                  <div className="text-sm font-medium">Active</div>
-                  <div className="text-xs text-muted-foreground">Toggle tenant access.</div>
+            ) : tenants.length === 0 ? (
+              <div className="flex flex-col items-start gap-2 rounded-lg bg-muted/30 p-6">
+                <div className="text-sm font-semibold">No tenants yet.</div>
+                <div className="text-sm text-muted-foreground">
+                  Create your first tenant to start provisioning sites.
                 </div>
-                <label className="relative inline-flex cursor-pointer items-center">
-                  <input
-                    type="checkbox"
-                    className="peer sr-only"
-                    checked={form.watch("status") !== "SUSPENDED"}
-                    onChange={() =>
-                      form.setValue(
-                        "status",
-                        form.watch("status") === "SUSPENDED" ? "ACTIVE" : "SUSPENDED"
-                      )
-                    }
-                  />
-                  <span className="h-5 w-9 rounded-full bg-muted transition peer-checked:bg-primary" />
-                  <span className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition peer-checked:translate-x-4" />
-                </label>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="unifi_base_url">UniFi controller IP</Label>
-                <Input id="unifi_base_url" placeholder="71.162.143.124" {...form.register("unifi_base_url")} />
-                <p className="text-xs text-muted-foreground">
-                  We append {UNIFI_INTEGRATION_PATH} automatically.
-                </p>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="unifi_api_key_ref">UniFi API key reference</Label>
-                <Input id="unifi_api_key_ref" type="password" {...form.register("unifi_api_key_ref")} />
-                <p className="text-xs text-muted-foreground">Use a secret reference, not a raw key.</p>
-              </div>
-              <DialogFooter>
-                <Button type="submit" variant="primary">
+                <Button variant="primary" onClick={() => setDialogOpen(true)}>
                   Create tenant
                 </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
-      </div>
-      <Card className="rounded-xl border bg-muted/40 p-6 shadow-soft">
-        <h2 className="text-sm font-semibold text-foreground">Provisioning checklist</h2>
-        <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
-          <li>1. Create a tenant and capture the tenant slug.</li>
-          <li>2. Add one or more sites with UniFi credentials and default access policy.</li>
-          <li>
-            3. Set the UniFi external portal URL to{" "}
-            <span className="font-medium text-foreground">https://wifi.reduxtc.com/guest/</span>. The
-            portal resolves the correct site using the UniFi Network API.
-          </li>
-        </ul>
-      </Card>
-      <Card className="rounded-xl border bg-card p-6 shadow-soft">
-        {loading ? (
-          <div className="space-y-3">
-            {Array.from({ length: 6 }).map((_, index) => (
-              <div
-                key={`tenant-skeleton-${index}`}
-                className="grid animate-pulse grid-cols-[2fr_1fr_1fr_120px] items-center gap-4"
-              >
-                <div className="h-4 rounded bg-muted/60" />
-                <div className="h-4 rounded bg-muted/60" />
-                <div className="h-4 rounded bg-muted/60" />
-                <div className="h-8 rounded bg-muted/60" />
               </div>
-            ))}
+            ) : (
+              <DataTable columns={columns} data={tenants} />
+            )}
           </div>
-        ) : tenants.length === 0 ? (
-          <div className="flex flex-col items-start gap-2">
-            <div className="text-sm font-semibold">No tenants yet.</div>
-            <div className="text-sm text-muted-foreground">
-              Create your first tenant to start provisioning sites.
-            </div>
-            <Button variant="primary" onClick={() => setDialogOpen(true)}>
-              Create tenant
-            </Button>
-          </div>
-        ) : (
-          <DataTable columns={columns} data={tenants} />
-        )}
-      </Card>
+        </section>
+        <aside className="order-2 lg:order-2">
+          <details
+            className="group rounded-lg bg-muted/40 p-4"
+            open={setupOpen}
+            onToggle={(event) => setSetupOpen((event.target as HTMLDetailsElement).open)}
+          >
+            <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-semibold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-white">
+              Setup checklist
+              <ChevronDown
+                className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180"
+                aria-hidden="true"
+              />
+            </summary>
+            <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
+              <li>1. Create a tenant and capture the tenant slug.</li>
+              <li>2. Add one or more sites with UniFi credentials and default access policy.</li>
+              <li>
+                3. Set the UniFi external portal URL to{" "}
+                <span className="font-medium text-foreground">https://wifi.reduxtc.com/guest/</span>. The
+                portal resolves the correct site using the UniFi Network API.
+              </li>
+            </ul>
+          </details>
+        </aside>
+      </div>
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogContent>
           <DialogHeader>
@@ -376,7 +433,7 @@ export default function TenantsPage() {
         </DialogContent>
       </Dialog>
       <Dialog open={controllerOpen} onOpenChange={setControllerOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle>UniFi controller</DialogTitle>
             <DialogDescription>

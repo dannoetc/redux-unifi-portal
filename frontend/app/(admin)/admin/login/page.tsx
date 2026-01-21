@@ -9,7 +9,6 @@ import { useRouter } from "next/navigation";
 
 import { apiFetch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -52,34 +51,32 @@ export default function AdminLoginPage() {
 
   return (
     <div className="mx-auto flex min-h-[80vh] max-w-md items-center px-4">
-      <Card className="w-full">
-        <CardHeader>
-          <CardTitle>Admin sign in</CardTitle>
-          <CardDescription>Use your MSP admin credentials.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" autoComplete="email" {...register("email")} />
-              {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input id="password" type="password" autoComplete="current-password" {...register("password")} />
-              {errors.password && <p className="text-xs text-destructive">{errors.password.message}</p>}
-            </div>
-            {error && (
-              <Alert className="border-destructive/40">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-            <Button className="w-full" type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Signing in..." : "Sign in"}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+      <div className="w-full rounded-xl bg-white p-6 shadow-sm">
+        <div>
+          <div className="text-lg font-semibold text-foreground">Admin sign in</div>
+          <div className="mt-1 text-sm text-muted-foreground">Use your MSP admin credentials.</div>
+        </div>
+        <form className="mt-6 space-y-4" onSubmit={handleSubmit(onSubmit)}>
+          <div className="space-y-2">
+            <Label htmlFor="email">Email</Label>
+            <Input id="email" type="email" autoComplete="email" {...register("email")} />
+            {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="password">Password</Label>
+            <Input id="password" type="password" autoComplete="current-password" {...register("password")} />
+            {errors.password && <p className="text-xs text-destructive">{errors.password.message}</p>}
+          </div>
+          {error && (
+            <Alert className="border-destructive/40">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+          <Button className="w-full" type="submit" disabled={isSubmitting}>
+            {isSubmitting ? "Signing in..." : "Sign in"}
+          </Button>
+        </form>
+      </div>
     </div>
   );
 }

@@ -8,7 +8,6 @@ import { apiDownloadCsv, apiFetch } from "@/lib/api";
 import { useTenantSelection } from "@/lib/use-tenant";
 import { DataTable } from "@/components/data-table";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
@@ -110,7 +109,7 @@ export default function AuthEventsPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">Auth events</h1>
+          <h1 className="text-xl font-semibold">Auth events</h1>
           <p className="mt-1 text-sm text-muted-foreground">Audit guest authentications across sites.</p>
           <p className="mt-2 text-xs text-muted-foreground">
             {activeTenant ? `Active tenant: ${activeTenant.name}` : "Select a tenant from the sidebar to continue."}
@@ -120,13 +119,13 @@ export default function AuthEventsPage() {
           Export CSV
         </Button>
       </div>
-      <Card className="rounded-xl border bg-card p-6 shadow-soft">
-        <div className="grid gap-4 md:grid-cols-4">
+      <div className="space-y-4">
+        <div className="grid gap-4 rounded-lg bg-muted/30 p-4 md:grid-cols-4">
           <div className="space-y-2">
             <Label htmlFor="method">Method</Label>
             <select
               id="method"
-              className="h-10 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2 focus:ring-offset-white"
+              className="h-10 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
               value={filters.method}
               onChange={(event) => setFilters((prev) => ({ ...prev, method: event.target.value }))}
             >
@@ -140,7 +139,7 @@ export default function AuthEventsPage() {
             <Label htmlFor="result">Result</Label>
             <select
               id="result"
-              className="h-10 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2 focus:ring-offset-white"
+              className="h-10 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
               value={filters.result}
               onChange={(event) => setFilters((prev) => ({ ...prev, result: event.target.value }))}
             >
@@ -159,14 +158,18 @@ export default function AuthEventsPage() {
             />
           </div>
         </div>
-        <div className="mt-4">
-          {loading ? (
-            <div className="text-sm text-muted-foreground">Loading auth events...</div>
-          ) : (
-            <DataTable columns={columns} data={events} />
-          )}
-        </div>
-      </Card>
+        {loading ? (
+          <div className="rounded-lg bg-muted/30 p-4 text-sm text-muted-foreground">
+            Loading auth events...
+          </div>
+        ) : events.length === 0 ? (
+          <div className="rounded-lg bg-muted/30 p-6 text-sm text-muted-foreground">
+            No auth events yet.
+          </div>
+        ) : (
+          <DataTable columns={columns} data={events} />
+        )}
+      </div>
     </div>
   );
 }
