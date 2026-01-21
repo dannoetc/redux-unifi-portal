@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class TenantCreateRequest(BaseModel):
@@ -11,9 +11,18 @@ class TenantCreateRequest(BaseModel):
     unifi_api_key_ref: str | None = None
     is_roaming: bool | None = None
     openvpn_enabled: bool | None = None
-    openvpn_profile_ref: str | None = None
-    openvpn_auth_ref: str | None = None
-    openvpn_ca_ref: str | None = None
+    openvpn_profile_ref: str | None = Field(
+        default=None,
+        description="Env var name that stores the tenant-specific OpenVPN profile template.",
+    )
+    openvpn_auth_ref: str | None = Field(
+        default=None,
+        description="Env var name containing auth-user-pass credentials (optional).",
+    )
+    openvpn_ca_ref: str | None = Field(
+        default=None,
+        description="Env var name containing a CA bundle to inline when missing from the profile.",
+    )
     openvpn_remote_host: str | None = None
     openvpn_remote_port: int | None = None
 
@@ -26,9 +35,18 @@ class TenantUpdateRequest(BaseModel):
     unifi_api_key_ref: str | None = None
     is_roaming: bool | None = None
     openvpn_enabled: bool | None = None
-    openvpn_profile_ref: str | None = None
-    openvpn_auth_ref: str | None = None
-    openvpn_ca_ref: str | None = None
+    openvpn_profile_ref: str | None = Field(
+        default=None,
+        description="Env var name that stores the tenant-specific OpenVPN profile template.",
+    )
+    openvpn_auth_ref: str | None = Field(
+        default=None,
+        description="Env var name containing auth-user-pass credentials (optional).",
+    )
+    openvpn_ca_ref: str | None = Field(
+        default=None,
+        description="Env var name containing a CA bundle to inline when missing from the profile.",
+    )
     openvpn_remote_host: str | None = None
     openvpn_remote_port: int | None = None
 
@@ -42,8 +60,14 @@ class TenantResponse(BaseModel):
     unifi_api_key_ref: str | None
     is_roaming: bool
     openvpn_enabled: bool
-    openvpn_profile_ref: str | None
-    openvpn_auth_ref: str | None
-    openvpn_ca_ref: str | None
+    openvpn_profile_ref: str | None = Field(
+        description="Env var name that stores the tenant-specific OpenVPN profile template.",
+    )
+    openvpn_auth_ref: str | None = Field(
+        description="Env var name containing auth-user-pass credentials (optional).",
+    )
+    openvpn_ca_ref: str | None = Field(
+        description="Env var name containing a CA bundle to inline when missing from the profile.",
+    )
     openvpn_remote_host: str | None
     openvpn_remote_port: int | None

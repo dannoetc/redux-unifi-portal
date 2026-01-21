@@ -141,17 +141,28 @@ docker compose run --rm openvpn easyrsa build-client-full site-a-gateway-1 nopas
 docker compose run --rm openvpn ovpn_getclient site-a-gateway-1 > site-a-gateway-1.ovpn
 ```
 
-Store the generated `.ovpn` profile in your secret manager.
+Store the generated `.ovpn` profile securely and load it into an environment variable for the API service.
 
-### 4) Set `openvpn_profile_ref` to the client profile secret
+### 4) Store tenant OpenVPN templates in env vars
 
-The tenant field `openvpn_profile_ref` should contain a **reference** (not raw secrets) to the stored `.ovpn`
-profile for the gateway, following the same pattern as other `*_ref` secrets. Example values:
+OpenVPN templates are stored as **environment variables** on the API service. Each tenant points to the correct
+template by saving the env var name in `openvpn_profile_ref`. The same pattern applies to optional
+`openvpn_ca_ref` and `openvpn_auth_ref`.
 
-- `aws-sm://redux/unifi/site-a-gateway-1-ovpn`
-- `vault://network/openvpn/site-a-gateway-1`
+Recommended pattern:
 
-The referenced secret should contain the full client profile text (the `.ovpn` file contents).
+- `OPENVPN_PROFILE_TENANT_ACME` contains the full `.ovpn` contents for tenant `acme`
+- `OPENVPN_CA_TENANT_ACME` contains the CA bundle (optional)
+- `OPENVPN_AUTH_TENANT_ACME` contains `auth-user-pass` credentials (optional)
+
+Then set the tenant fields:
+
+- `openvpn_profile_ref = "OPENVPN_PROFILE_TENANT_ACME"`
+- `openvpn_ca_ref = "OPENVPN_CA_TENANT_ACME"`
+- `openvpn_auth_ref = "OPENVPN_AUTH_TENANT_ACME"`
+
+At download time, the backend resolves these refs from the environment and injects `openvpn_remote_host` /
+`openvpn_remote_port` into the template (or adds a `remote` line if missing).
 
 ---
 
