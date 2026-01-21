@@ -94,6 +94,67 @@ In dev, `.env` is fine. In prod, store secrets in your secret manager and refere
 
 ---
 
+## OpenVPN setup for UniFi gateway access
+
+If you use OpenVPN to reach remote UniFi gateways/controllers, initialize the PKI and server config once and persist
+the OpenVPN state so keys survive container restarts. The steps below assume the `kylemanna/openvpn` image.
+
+### 1) Persist `/etc/openvpn` with the `openvpn_data` volume
+
+Add an OpenVPN service and volume mapping to `docker-compose.yml` so `/etc/openvpn` is stored in the
+`openvpn_data` Docker volume:
+
+```yaml
+services:
+  openvpn:
+    image: kylemanna/openvpn:2.5
+    ports:
+      - "1194:1194/udp"
+    cap_add:
+      - NET_ADMIN
+    volumes:
+      - openvpn_data:/etc/openvpn
+
+volumes:
+  openvpn_data:
+```
+
+### 2) Initialize server config + PKI
+
+From the repository root, run the OpenVPN init commands once (they write into `/etc/openvpn`, which is now
+persisted in `openvpn_data`):
+
+```bash
+docker compose run --rm openvpn ovpn_genconfig -u udp://vpn.example.com
+docker compose run --rm openvpn ovpn_initpki
+```
+
+If you need to re-run, delete the `openvpn_data` volume first to avoid mixing old and new keys.
+
+### 3) Create client certificates for UniFi gateways
+
+Give each UniFi gateway its own client certificate and profile. Example (replace `site-a-gateway-1` with your
+gateway name):
+
+```bash
+docker compose run --rm openvpn easyrsa build-client-full site-a-gateway-1 nopass
+docker compose run --rm openvpn ovpn_getclient site-a-gateway-1 > site-a-gateway-1.ovpn
+```
+
+Store the generated `.ovpn` profile in your secret manager.
+
+### 4) Set `openvpn_profile_ref` to the client profile secret
+
+The tenant field `openvpn_profile_ref` should contain a **reference** (not raw secrets) to the stored `.ovpn`
+profile for the gateway, following the same pattern as other `*_ref` secrets. Example values:
+
+- `aws-sm://redux/unifi/site-a-gateway-1-ovpn`
+- `vault://network/openvpn/site-a-gateway-1`
+
+The referenced secret should contain the full client profile text (the `.ovpn` file contents).
+
+---
+
 ## TLS / HTTPS
 
 Use HTTPS for the portal. Captive portals and redirects behave better when everything is cleanly HTTPS.
