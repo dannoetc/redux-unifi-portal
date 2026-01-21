@@ -6,12 +6,12 @@ import { toast } from "sonner";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { MoreHorizontal } from "lucide-react";
 
 import { apiFetch } from "@/lib/api";
 import { useTenantSelection } from "@/lib/use-tenant";
 import { DataTable } from "@/components/data-table";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -113,7 +113,39 @@ export default function AdminUsersPage() {
     return () => {
       active = false;
     };
-  }, [tenantId, adminUser, adminLoaded, canManageUsers]);
+  }, [tenantId]);
+
+  const RowActions = ({ admin }: { admin: AdminUser }) => {
+    const [open, setOpen] = useState(false);
+
+    return (
+      <details
+        className="relative"
+        open={open}
+        onToggle={(event) => setOpen((event.target as HTMLDetailsElement).open)}
+      >
+        <summary
+          aria-label="Open row actions"
+          className="flex h-8 w-8 list-none items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+        >
+          <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+        </summary>
+        <div className="absolute right-0 z-20 mt-2 min-w-[180px] rounded-md border border-border bg-white p-1 shadow-soft">
+          <button
+            type="button"
+            className="w-full rounded-sm px-2 py-1.5 text-left text-sm text-destructive hover:bg-muted"
+            onClick={() => {
+              setAdminToDelete(admin);
+              setDeleteOpen(true);
+              setOpen(false);
+            }}
+          >
+            Remove admin
+          </button>
+        </div>
+      </details>
+    );
+  };
 
   const columns = useMemo<ColumnDef<AdminUser>[]>(
     () => [
@@ -140,29 +172,12 @@ export default function AdminUsersPage() {
       },
       {
         id: "actions",
-        header: "",
+        header: () => <span className="sr-only">Actions</span>,
         cell: ({ row }) => (
           <div className="flex items-center justify-end gap-2">
             <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => {
-                setAdminToEdit(row.original);
-                editForm.reset({
-                  email: row.original.email,
-                  role: row.original.role as UpdateAdmin["role"],
-                  is_superadmin: row.original.is_superadmin,
-                  password: "",
-                });
-                setEditOpen(true);
-              }}
-            >
-              Edit
-            </Button>
-            <Button
               variant="destructive"
               size="sm"
-              disabled={row.original.is_superadmin}
               onClick={() => {
                 setAdminToDelete(row.original);
                 setDeleteOpen(true);
@@ -252,7 +267,7 @@ export default function AdminUsersPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">Admin users</h1>
+          <h1 className="text-xl font-semibold">Admin users</h1>
           <p className="mt-1 text-sm text-muted-foreground">Provision tenant-scoped admin access.</p>
           <p className="mt-2 text-xs text-muted-foreground">
             {activeTenant ? `Active tenant: ${activeTenant.name}` : "Select a tenant from the sidebar to continue."}
@@ -283,7 +298,7 @@ export default function AdminUsersPage() {
                   <Label htmlFor="role">Role</Label>
                   <select
                     id="role"
-                    className="h-10 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2 focus:ring-offset-white"
+                    className="h-10 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                     {...form.register("role")}
                   >
                     <option value="TENANT_ADMIN">Tenant admin</option>
@@ -301,38 +316,12 @@ export default function AdminUsersPage() {
         </div>
       </div>
       <Card className="rounded-xl border bg-card p-6 shadow-soft">
-        {!canManageUsers && adminLoaded ? (
-          <div className="text-sm text-muted-foreground">
-            Only superadmins can manage admin users.
-          </div>
-        ) : loading ? (
-          <div className="space-y-3">
-            {Array.from({ length: 6 }).map((_, index) => (
-              <div
-                key={`admin-skeleton-${index}`}
-                className="grid animate-pulse grid-cols-[2fr_1fr_1fr_120px] items-center gap-4"
-              >
-                <div className="h-4 rounded bg-muted/60" />
-                <div className="h-4 rounded bg-muted/60" />
-                <div className="h-4 rounded bg-muted/60" />
-                <div className="h-8 rounded bg-muted/60" />
-              </div>
-            ))}
-          </div>
-        ) : admins.length === 0 ? (
-          <div className="flex flex-col items-start gap-2 rounded-lg bg-muted/30 p-4">
-            <div className="text-sm font-semibold">No admins yet.</div>
-            <div className="text-sm text-muted-foreground">
-              Create the first admin for this tenant.
-            </div>
-            <Button variant="primary" onClick={() => setDialogOpen(true)}>
-              Create admin
-            </Button>
-          </div>
+        {loading ? (
+          <div className="text-sm text-muted-foreground">Loading admins...</div>
         ) : (
           <DataTable columns={columns} data={admins} />
         )}
-      </Card>
+      </div>
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogContent>
           <DialogHeader>

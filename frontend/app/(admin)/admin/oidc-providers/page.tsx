@@ -11,7 +11,6 @@ import { apiFetch } from "@/lib/api";
 import { useTenantSelection } from "@/lib/use-tenant";
 import { DataTable } from "@/components/data-table";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -116,7 +115,7 @@ export default function OidcProvidersPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">OIDC providers</h1>
+          <h1 className="text-xl font-semibold">OIDC providers</h1>
           <p className="mt-1 text-sm text-muted-foreground">Tenant-wide SSO definitions.</p>
           <p className="mt-2 text-xs text-muted-foreground">
             {activeTenant ? `Active tenant: ${activeTenant.name}` : "Select a tenant from the sidebar to continue."}
@@ -159,7 +158,7 @@ export default function OidcProvidersPage() {
           </Dialog>
         </div>
       </div>
-      <Card className="rounded-xl border bg-card p-6 shadow-soft">
+      <div className="space-y-4">
         {loading ? (
           <div className="space-y-3">
             {Array.from({ length: 6 }).map((_, index) => (
@@ -186,7 +185,7 @@ export default function OidcProvidersPage() {
         ) : (
           <DataTable columns={columns} data={providers} />
         )}
-      </Card>
+      </div>
     </div>
   );
 }

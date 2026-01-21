@@ -9,7 +9,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { apiDownloadCsv, apiFetch } from "@/lib/api";
 import { useTenantSelection } from "@/lib/use-tenant";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
@@ -111,72 +110,70 @@ export default function VouchersPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">Voucher batches</h1>
+        <h1 className="text-xl font-semibold">Voucher batches</h1>
         <p className="mt-1 text-sm text-muted-foreground">Generate access codes and export CSVs.</p>
         <p className="mt-2 text-xs text-muted-foreground">
           {activeTenant ? `Active tenant: ${activeTenant.name}` : "Select a tenant from the sidebar to continue."}
         </p>
       </div>
-      <Card className="rounded-xl border bg-card shadow-soft">
-        <CardHeader>
-          <CardTitle>Create batch</CardTitle>
-          <CardDescription>Generate vouchers for a single site.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="site">Site</Label>
-              <select
-                id="site"
-                className="h-10 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2 focus:ring-offset-white"
-                value={siteId}
-                onChange={(event) => setSiteId(event.target.value)}
-                disabled={!tenantId || sites.length === 0}
-              >
-                {sites.length === 0 && <option value="">No sites available</option>}
-                {sites.map((site) => (
-                  <option key={site.id} value={site.id}>
-                    {site.display_name}
-                  </option>
-                ))}
-              </select>
-            </div>
+      <section className="rounded-lg bg-muted/30 p-6">
+        <div>
+          <h2 className="text-sm font-semibold text-foreground">Create batch</h2>
+          <p className="mt-1 text-xs text-muted-foreground">Generate vouchers for a single site.</p>
+        </div>
+        <div className="mt-5 grid gap-4 md:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="site">Site</Label>
+            <select
+              id="site"
+              className="h-10 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+              value={siteId}
+              onChange={(event) => setSiteId(event.target.value)}
+              disabled={!tenantId || sites.length === 0}
+            >
+              {sites.length === 0 && <option value="">No sites available</option>}
+              {sites.map((site) => (
+                <option key={site.id} value={site.id}>
+                  {site.display_name}
+                </option>
+              ))}
+            </select>
           </div>
-          <form className="mt-6 grid gap-4 md:grid-cols-2" onSubmit={form.handleSubmit(onSubmit)}>
-            <div className="space-y-2">
-              <Label htmlFor="name">Batch name</Label>
-              <Input id="name" {...form.register("name")} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="count">Count</Label>
-              <Input id="count" type="number" {...form.register("count")} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="code_length">Code length</Label>
-              <Input id="code_length" type="number" {...form.register("code_length")} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="max_uses_per_code">Max uses per code</Label>
-              <Input id="max_uses_per_code" type="number" {...form.register("max_uses_per_code")} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="expires_at">Expires at (ISO)</Label>
-              <Input id="expires_at" placeholder="2026-01-15T12:00:00" {...form.register("expires_at")} />
-            </div>
-            <div className="flex items-end">
-              <Button type="submit" variant="primary">
-                Generate vouchers
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
-      <Card className="rounded-xl border bg-card shadow-soft">
-        <CardHeader>
-          <CardTitle>Export vouchers</CardTitle>
-          <CardDescription>Download CSV for an existing batch.</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-wrap items-end gap-3">
+        </div>
+        <form className="mt-6 grid gap-4 md:grid-cols-2" onSubmit={form.handleSubmit(onSubmit)}>
+          <div className="space-y-2">
+            <Label htmlFor="name">Batch name</Label>
+            <Input id="name" {...form.register("name")} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="count">Count</Label>
+            <Input id="count" type="number" {...form.register("count")} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="code_length">Code length</Label>
+            <Input id="code_length" type="number" {...form.register("code_length")} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="max_uses_per_code">Max uses per code</Label>
+            <Input id="max_uses_per_code" type="number" {...form.register("max_uses_per_code")} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="expires_at">Expires at (ISO)</Label>
+            <Input id="expires_at" placeholder="2026-01-15T12:00:00" {...form.register("expires_at")} />
+          </div>
+          <div className="flex items-end">
+            <Button type="submit" variant="primary">
+              Generate vouchers
+            </Button>
+          </div>
+        </form>
+      </section>
+      <section className="rounded-lg bg-muted/30 p-6">
+        <div>
+          <h2 className="text-sm font-semibold text-foreground">Export vouchers</h2>
+          <p className="mt-1 text-xs text-muted-foreground">Download CSV for an existing batch.</p>
+        </div>
+        <div className="mt-5 flex flex-wrap items-end gap-3">
           <div className="space-y-2">
             <Label htmlFor="batch_id">Batch ID</Label>
             <Input
@@ -189,8 +186,8 @@ export default function VouchersPage() {
           <Button variant="secondary" onClick={() => exportCsv(batchId)}>
             Export CSV
           </Button>
-        </CardContent>
-      </Card>
+        </div>
+      </section>
     </div>
   );
 }
