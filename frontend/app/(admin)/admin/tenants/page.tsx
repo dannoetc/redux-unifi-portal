@@ -299,7 +299,7 @@ export default function TenantsPage() {
                   New tenant
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-3xl">
                 <DialogHeader>
                   <DialogTitle>Create tenant</DialogTitle>
                   <DialogDescription>Provision a new MSP tenant.</DialogDescription>
@@ -433,7 +433,7 @@ export default function TenantsPage() {
         </DialogContent>
       </Dialog>
       <Dialog open={controllerOpen} onOpenChange={setControllerOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle>UniFi controller</DialogTitle>
             <DialogDescription>

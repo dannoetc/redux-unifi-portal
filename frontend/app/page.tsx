@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 export default function Home() {
   return (
     <main className="surface-grid min-h-screen px-4 py-12 sm:px-6">
-      <div className="mx-auto max-w-4xl space-y-8">
+      <div className="mx-auto max-w-6xl space-y-8">
         <div className="rounded-2xl border bg-white/90 p-8 shadow-soft backdrop-blur sm:p-10">
           <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">ReduxTC WiFi</p>
           <h1 className="mt-3 text-4xl font-extrabold leading-tight tracking-tight sm:text-4xl md:text-5xl">
@@ -46,4 +46,3 @@ export default function Home() {
     </main>
   );
 }
-
