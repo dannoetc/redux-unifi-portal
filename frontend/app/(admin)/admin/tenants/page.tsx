@@ -490,7 +490,7 @@ export default function TenantsPage() {
             </Button>
           </div>
         ) : (
-          <div className="rounded-lg border border-border/60 bg-background">
+          <div className="flex-1 overflow-visible rounded-lg border border-border/60 bg-background">
             <DataTable columns={columns} data={tenants} />
           </div>
         )}
