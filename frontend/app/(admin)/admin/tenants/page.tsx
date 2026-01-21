@@ -232,8 +232,19 @@ export default function TenantsPage() {
     }
   };
 
-  const testController = () => {
-    toast.message("UniFi connection test is not wired yet.");
+  const testController = async () => {
+    if (!tenantToConfigure) {
+      return;
+    }
+    try {
+      const data = await apiFetch<{ sites: Array<{ id: string }> }>(
+        `/api/admin/tenants/${tenantToConfigure.id}/unifi/sites`
+      );
+      const count = data.sites?.length ?? 0;
+      toast.success(`UniFi connection verified (${count} site${count === 1 ? "" : "s"} found).`);
+    } catch (error: any) {
+      toast.error(error?.message ?? "Unable to reach UniFi controller.");
+    }
   };
 
   return (
