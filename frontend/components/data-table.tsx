@@ -24,7 +24,7 @@ export function DataTable<TData, TValue>({ columns, data }: DataTableProps<TData
   });
 
   return (
-    <Table className="[&_th]:h-10 [&_th]:text-[11px] [&_th]:tracking-wide">
+    <Table className="min-w-[720px] [&_th]:h-10 [&_th]:text-[11px] [&_th]:tracking-wide">
       <TableHeader>
         {table.getHeaderGroups().map((headerGroup) => (
           <TableRow key={headerGroup.id}>

@@ -22,10 +22,10 @@ export function SidebarNav() {
         return (
           <li key={item.href}>
             <a
-              className={`flex items-center justify-between rounded-md border-l-4 px-2 py-1.5 text-sm ${
+              className={`flex items-center justify-between rounded-md border-l-4 px-2 py-2 text-sm ${
                 isActive
-                  ? "border-primary bg-muted/40 font-semibold text-foreground"
-                  : "border-transparent text-muted-foreground hover:border-primary/60 hover:text-foreground"
+                  ? "border-primary font-semibold text-foreground"
+                  : "border-transparent text-muted-foreground hover:border-primary/60 hover:text-foreground hover:bg-muted/20"
               }`}
               href={item.href}
               aria-current={isActive ? "page" : undefined}

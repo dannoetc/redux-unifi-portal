@@ -43,7 +43,12 @@ export function AdminShellControls() {
         open={menuOpen}
         onToggle={(event) => setMenuOpen((event.target as HTMLDetailsElement).open)}
       >
-        <summary className="flex cursor-pointer list-none items-center gap-3 rounded-full border border-input bg-background px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2 focus:ring-offset-white">
+        <summary
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+          aria-label="Account menu"
+          className="flex cursor-pointer list-none items-center gap-3 rounded-full border border-input bg-background px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2 focus:ring-offset-white"
+        >
           <Avatar name={adminUser?.email ?? "Admin user"} />
           <div className="hidden flex-col text-left sm:flex">
             <span className="text-xs font-semibold text-foreground">

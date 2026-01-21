@@ -127,7 +127,7 @@ export default function OidcProvidersPage() {
             <DialogTrigger asChild>
               <Button variant="primary">New provider</Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="max-w-2xl">
               <DialogHeader>
                 <DialogTitle>Create OIDC provider</DialogTitle>
                 <DialogDescription>Configure issuer + client credentials.</DialogDescription>
@@ -135,7 +135,7 @@ export default function OidcProvidersPage() {
               <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
                 <div className="space-y-2">
                   <Label htmlFor="issuer">Issuer URL</Label>
-                  <Input id="issuer" placeholder="https://login.example.com" {...form.register("issuer")} />
+                  <Input id="issuer" autoFocus placeholder="https://login.example.com" {...form.register("issuer")} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="client_id">Client ID</Label>

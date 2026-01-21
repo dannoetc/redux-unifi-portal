@@ -187,7 +187,7 @@ export default function AdminUsersPage() {
                 New admin
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="max-w-2xl">
               <DialogHeader>
                 <DialogTitle>Create admin user</DialogTitle>
                 <DialogDescription>Invite a new admin for the selected tenant.</DialogDescription>
@@ -195,7 +195,7 @@ export default function AdminUsersPage() {
               <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
                 <div className="space-y-2">
                   <Label htmlFor="email">Email</Label>
-                  <Input id="email" type="email" {...form.register("email")} />
+                  <Input id="email" type="email" autoFocus {...form.register("email")} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="password">Temporary password</Label>

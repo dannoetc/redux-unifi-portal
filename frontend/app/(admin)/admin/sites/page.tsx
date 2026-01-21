@@ -327,7 +327,7 @@ export default function SitesPage() {
               <form className="grid gap-4 md:grid-cols-2" onSubmit={form.handleSubmit(onSubmit)}>
                 <div className="space-y-2">
                   <Label htmlFor="display_name">Display name</Label>
-                  <Input id="display_name" {...form.register("display_name")} />
+                  <Input id="display_name" autoFocus {...form.register("display_name")} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="slug">Slug</Label>
@@ -336,6 +336,9 @@ export default function SitesPage() {
                 <div className="space-y-2">
                   <Label htmlFor="unifi_base_url">UniFi controller IP (optional override)</Label>
                   <Input id="unifi_base_url" placeholder="71.162.143.124" {...form.register("unifi_base_url")} />
+                  <p className="text-xs text-muted-foreground">
+                    We append {UNIFI_INTEGRATION_PATH} automatically.
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="unifi_site_id">UniFi site ID</Label>
@@ -344,6 +347,7 @@ export default function SitesPage() {
                 <div className="space-y-2 md:col-span-2">
                   <Label htmlFor="unifi_api_key_ref">UniFi API key reference (optional override)</Label>
                   <Input id="unifi_api_key_ref" type="password" placeholder="Use tenant controller" {...form.register("unifi_api_key_ref")} />
+                  <p className="text-xs text-muted-foreground">Use a secret reference, not a raw key.</p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="default_time_limit_minutes">Time limit (minutes)</Label>
@@ -470,7 +474,29 @@ export default function SitesPage() {
       </div>
       <Card className="rounded-xl border bg-card p-6 shadow-soft">
         {loading ? (
-          <div className="text-sm text-muted-foreground">Loading sites...</div>
+          <div className="space-y-3">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <div
+                key={`site-skeleton-${index}`}
+                className="grid animate-pulse grid-cols-[2fr_1fr_1fr_120px] items-center gap-4"
+              >
+                <div className="h-4 rounded bg-muted/60" />
+                <div className="h-4 rounded bg-muted/60" />
+                <div className="h-4 rounded bg-muted/60" />
+                <div className="h-8 rounded bg-muted/60" />
+              </div>
+            ))}
+          </div>
+        ) : sites.length === 0 ? (
+          <div className="flex flex-col items-start gap-2">
+            <div className="text-sm font-semibold">No sites yet.</div>
+            <div className="text-sm text-muted-foreground">
+              Create a site or discover sites from the controller.
+            </div>
+            <Button variant="primary" onClick={() => setDialogOpen(true)}>
+              Create site
+            </Button>
+          </div>
         ) : (
           <DataTable columns={columns} data={sites} />
         )}

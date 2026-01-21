@@ -304,7 +304,7 @@ export default function SiteDetailPage() {
           <form className="grid gap-4 md:grid-cols-2" onSubmit={siteForm.handleSubmit(saveSite)}>
             <div className="space-y-2">
               <Label htmlFor="display_name">Display name</Label>
-              <Input id="display_name" {...siteForm.register("display_name")} />
+              <Input id="display_name" autoFocus {...siteForm.register("display_name")} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="slug">Slug</Label>
@@ -346,7 +346,7 @@ export default function SiteDetailPage() {
               <Label htmlFor="terms_html">Terms HTML</Label>
               <textarea
                 id="terms_html"
-                className="min-h-[120px] w-full rounded-md border border-input bg-background p-3 text-sm"
+                className="min-h-[120px] w-full rounded-md border border-input bg-background p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2 focus:ring-offset-white"
                 {...siteForm.register("terms_html")}
               />
             </div>
@@ -411,7 +411,7 @@ export default function SiteDetailPage() {
               <Label htmlFor="portal_template_html">HTML template</Label>
               <textarea
                 id="portal_template_html"
-                className="min-h-[200px] w-full rounded-md border border-input bg-background p-3 text-sm"
+                className="min-h-[200px] w-full rounded-md border border-input bg-background p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2 focus:ring-offset-white"
                 placeholder="<section>{{portal}}</section>"
                 disabled={!portalTemplateEnabled}
                 {...siteForm.register("portal_template_html")}
@@ -456,6 +456,9 @@ export default function SiteDetailPage() {
             <div className="space-y-2">
               <Label htmlFor="unifi_base_url">UniFi controller IP (optional override)</Label>
               <Input id="unifi_base_url" placeholder="71.162.143.124" {...siteForm.register("unifi_base_url")} />
+              <p className="text-xs text-muted-foreground">
+                We append {UNIFI_INTEGRATION_PATH} automatically.
+              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="unifi_site_id">UniFi site ID</Label>
@@ -464,6 +467,7 @@ export default function SiteDetailPage() {
             <div className="space-y-2 md:col-span-2">
               <Label htmlFor="unifi_api_key_ref">UniFi API key reference (optional override)</Label>
               <Input id="unifi_api_key_ref" type="password" {...siteForm.register("unifi_api_key_ref")} />
+              <p className="text-xs text-muted-foreground">Use a secret reference, not a raw key.</p>
             </div>
             <div className="md:col-span-2">
               <Button type="submit" variant="primary">

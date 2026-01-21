@@ -15,7 +15,7 @@ export default function TenantSwitcher({
   onChange?: (value: string) => void;
 }) {
   return (
-    <div className="mb-4 px-2">
+    <div className="mb-3 px-2">
       <label className="mb-2 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground" htmlFor="tenant-switcher">
         Tenant
       </label>

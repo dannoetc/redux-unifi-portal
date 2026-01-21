@@ -232,6 +232,10 @@ export default function TenantsPage() {
     }
   };
 
+  const testController = () => {
+    toast.message("UniFi connection test is not wired yet.");
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -245,7 +249,7 @@ export default function TenantsPage() {
               New tenant
             </Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle>Create tenant</DialogTitle>
               <DialogDescription>Provision a new MSP tenant.</DialogDescription>
@@ -253,7 +257,7 @@ export default function TenantsPage() {
             <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
               <div className="space-y-2">
                 <Label htmlFor="name">Name</Label>
-                <Input id="name" {...form.register("name")} />
+                <Input id="name" autoFocus {...form.register("name")} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="slug">Slug</Label>
@@ -283,10 +287,14 @@ export default function TenantsPage() {
               <div className="space-y-2">
                 <Label htmlFor="unifi_base_url">UniFi controller IP</Label>
                 <Input id="unifi_base_url" placeholder="71.162.143.124" {...form.register("unifi_base_url")} />
+                <p className="text-xs text-muted-foreground">
+                  We append {UNIFI_INTEGRATION_PATH} automatically.
+                </p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="unifi_api_key_ref">UniFi API key reference</Label>
                 <Input id="unifi_api_key_ref" type="password" {...form.register("unifi_api_key_ref")} />
+                <p className="text-xs text-muted-foreground">Use a secret reference, not a raw key.</p>
               </div>
               <DialogFooter>
                 <Button type="submit" variant="primary">
@@ -311,11 +319,31 @@ export default function TenantsPage() {
       </Card>
       <Card className="rounded-xl border bg-card p-6 shadow-soft">
         {loading ? (
-          <div className="text-sm text-muted-foreground">Loading tenants...</div>
-        ) : (
-          <div className="[&_td]:py-2 [&_th]:h-10 [&_th]:text-[11px]">
-            <DataTable columns={columns} data={tenants} />
+          <div className="space-y-3">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <div
+                key={`tenant-skeleton-${index}`}
+                className="grid animate-pulse grid-cols-[2fr_1fr_1fr_120px] items-center gap-4"
+              >
+                <div className="h-4 rounded bg-muted/60" />
+                <div className="h-4 rounded bg-muted/60" />
+                <div className="h-4 rounded bg-muted/60" />
+                <div className="h-8 rounded bg-muted/60" />
+              </div>
+            ))}
           </div>
+        ) : tenants.length === 0 ? (
+          <div className="flex flex-col items-start gap-2">
+            <div className="text-sm font-semibold">No tenants yet.</div>
+            <div className="text-sm text-muted-foreground">
+              Create your first tenant to start provisioning sites.
+            </div>
+            <Button variant="primary" onClick={() => setDialogOpen(true)}>
+              Create tenant
+            </Button>
+          </div>
+        ) : (
+          <DataTable columns={columns} data={tenants} />
         )}
       </Card>
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
@@ -337,7 +365,7 @@ export default function TenantsPage() {
         </DialogContent>
       </Dialog>
       <Dialog open={controllerOpen} onOpenChange={setControllerOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>UniFi controller</DialogTitle>
             <DialogDescription>
@@ -348,12 +376,19 @@ export default function TenantsPage() {
             <div className="space-y-2">
               <Label htmlFor="controller_base_url">UniFi controller IP</Label>
               <Input id="controller_base_url" placeholder="71.162.143.124" {...controllerForm.register("unifi_base_url")} />
+              <p className="text-xs text-muted-foreground">
+                We append {UNIFI_INTEGRATION_PATH} automatically.
+              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="controller_api_key_ref">API key reference</Label>
               <Input id="controller_api_key_ref" type="password" {...controllerForm.register("unifi_api_key_ref")} />
+              <p className="text-xs text-muted-foreground">Use a secret reference, not a raw key.</p>
             </div>
-            <DialogFooter>
+            <DialogFooter className="gap-2">
+              <Button type="button" variant="secondary" size="sm" onClick={testController}>
+                Test UniFi connection
+              </Button>
               <Button type="submit" variant="primary">
                 Save controller
               </Button>
