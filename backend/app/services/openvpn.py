@@ -13,6 +13,7 @@ class OpenVpnError(RuntimeError):
 
 
 def resolve_openvpn_secret(ref: str) -> str:
+    """Resolve an OpenVPN secret from an environment variable reference."""
     value = os.environ.get(ref)
     if not value:
         raise OpenVpnError("OPENVPN_SECRET_MISSING", "OpenVPN secret is not configured.")
@@ -20,6 +21,7 @@ def resolve_openvpn_secret(ref: str) -> str:
 
 
 def build_openvpn_profile(tenant: Tenant) -> str:
+    """Build a tenant-specific OpenVPN profile from env-stored templates."""
     if not tenant.openvpn_profile_ref:
         raise OpenVpnError("OPENVPN_PROFILE_MISSING", "OpenVPN profile template is required.")
     profile = resolve_openvpn_secret(tenant.openvpn_profile_ref)
