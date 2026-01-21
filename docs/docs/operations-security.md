@@ -99,6 +99,16 @@ In dev, `.env` is fine. In prod, store secrets in your secret manager and refere
 If you use OpenVPN to reach remote UniFi gateways/controllers, initialize the PKI and server config once and persist
 the OpenVPN state so keys survive container restarts. The steps below assume the `kylemanna/openvpn` image.
 
+### Production topology (how it works)
+
+- The **OpenVPN server** runs as its own Docker service (`openvpn`) and listens on UDP `1194`.
+- Each **UniFi gateway** connects as a client using a unique `.ovpn` profile.
+- The **API server does not connect to OpenVPN directly**; it only **serves the client profile** to tenant admins.
+- Once a gateway is connected, the API server reaches the remote UniFi controller/gateway **over the tunnel**
+  using the controller hostname/IP set in the tenant (`unifi_base_url`).
+
+This keeps the VPN credentials out of the API container while still letting the API reach private UniFi networks.
+
 ### 1) Persist `/etc/openvpn` with the `openvpn_data` volume
 
 Add an OpenVPN service and volume mapping to `docker-compose.yml` so `/etc/openvpn` is stored in the
@@ -118,6 +128,8 @@ services:
 volumes:
   openvpn_data:
 ```
+
+**Required capabilities:** the OpenVPN container needs `NET_ADMIN` to configure the tun device and routing.
 
 ### 2) Initialize server config + PKI
 
@@ -163,6 +175,25 @@ Then set the tenant fields:
 
 At download time, the backend resolves these refs from the environment and injects `openvpn_remote_host` /
 `openvpn_remote_port` into the template (or adds a `remote` line if missing).
+
+### 5) Security notes (firewall, allowed clients, key rotation)
+
+- **Firewall rules**
+  - Allow inbound UDP `1194` **only** from expected gateway IP ranges.
+  - Deny all other inbound traffic to the OpenVPN service port.
+  - Restrict OpenVPN container egress to only what you need for routing to UniFi gateways/controllers.
+- **Allowed clients**
+  - Issue **one client certificate per gateway**; do not share profiles.
+  - Revoke a single gateway without impacting the rest of the fleet.
+  - Keep the `openvpn_data` volume backed up and protected (it contains the PKI).
+- **Key rotation**
+  - Rotate client certificates on a regular cadence (e.g., quarterly) and immediately if a gateway is decommissioned.
+  - If the CA/private keys are compromised, **rebuild the PKI**:
+    1) Stop OpenVPN.
+    2) Remove the `openvpn_data` volume.
+    3) Re-run `ovpn_genconfig` + `ovpn_initpki`.
+    4) Re-issue and redistribute all client profiles.
+  - Track certificate expiration dates to avoid sudden outages.
 
 ---
 
