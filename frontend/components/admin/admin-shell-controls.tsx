@@ -47,7 +47,7 @@ export function AdminShellControls() {
           aria-haspopup="menu"
           aria-expanded={menuOpen}
           aria-label="Account menu"
-          className="flex cursor-pointer list-none items-center gap-3 rounded-full border border-input bg-background px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2 focus:ring-offset-white"
+          className="flex cursor-pointer list-none items-center gap-3 rounded-full border border-input bg-background px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
         >
           <Avatar name={adminUser?.email ?? "Admin user"} />
           <div className="hidden flex-col text-left sm:flex">
