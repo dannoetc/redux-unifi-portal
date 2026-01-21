@@ -370,10 +370,10 @@ export default function TenantsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto w-full max-w-7xl space-y-6">
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
         <section className="order-1 space-y-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 pb-4">
             <div>
               <h1 className="text-2xl font-semibold">Tenants</h1>
               <p className="mt-1 text-sm text-muted-foreground">Manage customer tenants and status.</p>
@@ -384,7 +384,7 @@ export default function TenantsPage() {
                   New tenant
                 </Button>
               </DialogTrigger>
-          <DialogContent className="max-w-3xl">
+              <DialogContent className="max-w-3xl">
                 <DialogHeader>
                   <DialogTitle>Create tenant</DialogTitle>
                   <DialogDescription>Provision a new MSP tenant.</DialogDescription>
@@ -446,7 +446,7 @@ export default function TenantsPage() {
           </div>
           <div className="space-y-4">
             {loading ? (
-              <div className="space-y-3 rounded-lg bg-muted/30 p-4">
+              <div className="space-y-3 rounded-lg border border-border/60 bg-muted/20 p-4">
                 {Array.from({ length: 6 }).map((_, index) => (
                   <div
                     key={`tenant-skeleton-${index}`}
@@ -460,7 +460,7 @@ export default function TenantsPage() {
                 ))}
               </div>
             ) : tenants.length === 0 ? (
-              <div className="flex flex-col items-start gap-2 rounded-lg bg-muted/30 p-6">
+              <div className="flex flex-col items-start gap-2 rounded-lg border border-dashed border-border/60 bg-background/80 p-6">
                 <div className="text-sm font-semibold">No tenants yet.</div>
                 <div className="text-sm text-muted-foreground">
                   Create your first tenant to start provisioning sites.
@@ -470,13 +470,15 @@ export default function TenantsPage() {
                 </Button>
               </div>
             ) : (
-              <DataTable columns={columns} data={tenants} />
+              <div className="overflow-hidden rounded-lg border border-border/60 bg-background">
+                <DataTable columns={columns} data={tenants} />
+              </div>
             )}
           </div>
         </section>
         <aside className="order-2 lg:order-2">
           <details
-            className="group rounded-lg bg-muted/40 p-4"
+            className="group rounded-lg border border-border/60 bg-muted/30 p-4"
             open={setupOpen}
             onToggle={(event) => setSetupOpen((event.target as HTMLDetailsElement).open)}
           >
