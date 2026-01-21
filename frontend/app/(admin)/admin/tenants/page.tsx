@@ -8,7 +8,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ChevronDown, MoreHorizontal } from "lucide-react";
 
-import { apiFetch } from "@/lib/api";
+import { apiDownloadFile, apiFetch } from "@/lib/api";
 import { DataTable } from "@/components/data-table";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -16,17 +16,44 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import StatusPill from "@/components/ui/StatusPill";
 
+const optionalPort = z.preprocess(
+  (value) => {
+    if (value === "" || value === null || value === undefined) {
+      return undefined;
+    }
+    if (typeof value === "number" && Number.isNaN(value)) {
+      return undefined;
+    }
+    return value;
+  },
+  z.number().int().positive().optional()
+);
+
 const schema = z.object({
   name: z.string().min(2),
   slug: z.string().min(2),
   status: z.string().optional(),
   unifi_base_url: z.string().optional().or(z.literal("")),
   unifi_api_key_ref: z.string().optional().or(z.literal("")),
+  is_roaming: z.boolean().optional(),
+  openvpn_enabled: z.boolean().optional(),
+  openvpn_profile_ref: z.string().optional().or(z.literal("")),
+  openvpn_auth_ref: z.string().optional().or(z.literal("")),
+  openvpn_ca_ref: z.string().optional().or(z.literal("")),
+  openvpn_remote_host: z.string().optional().or(z.literal("")),
+  openvpn_remote_port: optionalPort,
 });
 
 const controllerSchema = z.object({
   unifi_base_url: z.string().optional().or(z.literal("")),
   unifi_api_key_ref: z.string().optional().or(z.literal("")),
+  is_roaming: z.boolean().optional(),
+  openvpn_enabled: z.boolean().optional(),
+  openvpn_profile_ref: z.string().optional().or(z.literal("")),
+  openvpn_auth_ref: z.string().optional().or(z.literal("")),
+  openvpn_ca_ref: z.string().optional().or(z.literal("")),
+  openvpn_remote_host: z.string().optional().or(z.literal("")),
+  openvpn_remote_port: optionalPort,
 });
 
 type Tenant = {
@@ -36,6 +63,13 @@ type Tenant = {
   status?: string;
   unifi_base_url?: string | null;
   unifi_api_key_ref?: string | null;
+  is_roaming?: boolean;
+  openvpn_enabled?: boolean;
+  openvpn_profile_ref?: string | null;
+  openvpn_auth_ref?: string | null;
+  openvpn_ca_ref?: string | null;
+  openvpn_remote_host?: string | null;
+  openvpn_remote_port?: number | null;
 };
 
 type TenantList = { tenants: Tenant[] };
@@ -93,6 +127,14 @@ export default function TenantsPage() {
   });
   const controllerForm = useForm<z.infer<typeof controllerSchema>>({
     resolver: zodResolver(controllerSchema),
+    defaultValues: {
+      is_roaming: false,
+      openvpn_enabled: false,
+      openvpn_profile_ref: "",
+      openvpn_auth_ref: "",
+      openvpn_ca_ref: "",
+      openvpn_remote_host: "",
+    },
   });
 
   useEffect(() => {
@@ -147,6 +189,13 @@ export default function TenantsPage() {
               controllerForm.reset({
                 unifi_base_url: displayUnifiHost(tenant.unifi_base_url),
                 unifi_api_key_ref: tenant.unifi_api_key_ref ?? "",
+                is_roaming: tenant.is_roaming ?? false,
+                openvpn_enabled: tenant.openvpn_enabled ?? false,
+                openvpn_profile_ref: tenant.openvpn_profile_ref ?? "",
+                openvpn_auth_ref: tenant.openvpn_auth_ref ?? "",
+                openvpn_ca_ref: tenant.openvpn_ca_ref ?? "",
+                openvpn_remote_host: tenant.openvpn_remote_host ?? "",
+                openvpn_remote_port: tenant.openvpn_remote_port ?? undefined,
               });
               setControllerOpen(true);
               setOpen(false);
@@ -154,6 +203,29 @@ export default function TenantsPage() {
           >
             Configure UniFi
           </button>
+          {tenant.openvpn_enabled && tenant.openvpn_profile_ref ? (
+            <>
+              <div className="my-1 h-px bg-border/70" />
+              <button
+                type="button"
+                className="w-full rounded-sm px-2 py-1.5 text-left text-sm text-foreground hover:bg-muted"
+                onClick={async () => {
+                  try {
+                    await apiDownloadFile(
+                      `/api/admin/tenants/${tenant.id}/openvpn/profile`,
+                      `${tenant.slug}-openvpn.ovpn`
+                    );
+                    toast.success("OpenVPN profile downloaded.");
+                  } catch (error: any) {
+                    toast.error(error?.message ?? "Unable to download OpenVPN profile.");
+                  }
+                  setOpen(false);
+                }}
+              >
+                Download OpenVPN profile
+              </button>
+            </>
+          ) : null}
           <div className="my-1 h-px bg-border/70" />
           <button
             type="button"
@@ -250,9 +322,14 @@ export default function TenantsPage() {
       return;
     }
     try {
+      const openvpnPort =
+        values.openvpn_remote_port && Number.isNaN(values.openvpn_remote_port)
+          ? undefined
+          : values.openvpn_remote_port;
       const payload = {
         ...values,
         unifi_base_url: normalizeUnifiBaseUrl(values.unifi_base_url),
+        openvpn_remote_port: openvpnPort,
       };
       const data = await apiFetch<{ tenant: Tenant }>(`/api/admin/tenants/${tenantToConfigure.id}`, {
         method: "PUT",
@@ -261,7 +338,7 @@ export default function TenantsPage() {
       setTenants((prev) =>
         prev.map((tenant) => (tenant.id === data.tenant.id ? data.tenant : tenant))
       );
-      toast.success("UniFi controller updated.");
+      toast.success("Tenant networking updated.");
       setControllerOpen(false);
       setTenantToConfigure(null);
     } catch (error: any) {
@@ -435,9 +512,9 @@ export default function TenantsPage() {
       <Dialog open={controllerOpen} onOpenChange={setControllerOpen}>
         <DialogContent className="max-w-3xl">
           <DialogHeader>
-            <DialogTitle>UniFi controller</DialogTitle>
+            <DialogTitle>Tenant networking</DialogTitle>
             <DialogDescription>
-              Configure the tenant-level UniFi controller used to resolve sites and authorize clients.
+              Configure the tenant-level UniFi controller and roaming OpenVPN profile.
             </DialogDescription>
           </DialogHeader>
           <form className="space-y-4" onSubmit={controllerForm.handleSubmit(saveController)}>
@@ -453,12 +530,89 @@ export default function TenantsPage() {
               <Input id="controller_api_key_ref" type="password" {...controllerForm.register("unifi_api_key_ref")} />
               <p className="text-xs text-muted-foreground">Use a secret reference, not a raw key.</p>
             </div>
+            <div className="space-y-3 rounded-lg border border-border/60 p-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-medium">Roaming tenant</div>
+                  <div className="text-xs text-muted-foreground">
+                    Enables OpenVPN-assisted UniFi API connectivity.
+                  </div>
+                </div>
+                <label className="relative inline-flex cursor-pointer items-center">
+                  <input
+                    type="checkbox"
+                    className="peer sr-only"
+                    checked={controllerForm.watch("is_roaming") ?? false}
+                    onChange={() =>
+                      controllerForm.setValue("is_roaming", !(controllerForm.watch("is_roaming") ?? false))
+                    }
+                  />
+                  <span className="h-5 w-9 rounded-full bg-muted transition peer-checked:bg-primary" />
+                  <span className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition peer-checked:translate-x-4" />
+                </label>
+              </div>
+              <div className="flex items-center justify-between rounded-md border border-border/60 px-3 py-2">
+                <div>
+                  <div className="text-sm font-medium">OpenVPN profile enabled</div>
+                  <div className="text-xs text-muted-foreground">
+                    Required to download a gateway-ready .ovpn file.
+                  </div>
+                </div>
+                <label className="relative inline-flex cursor-pointer items-center">
+                  <input
+                    type="checkbox"
+                    className="peer sr-only"
+                    checked={controllerForm.watch("openvpn_enabled") ?? false}
+                    onChange={() =>
+                      controllerForm.setValue(
+                        "openvpn_enabled",
+                        !(controllerForm.watch("openvpn_enabled") ?? false)
+                      )
+                    }
+                  />
+                  <span className="h-5 w-9 rounded-full bg-muted transition peer-checked:bg-primary" />
+                  <span className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition peer-checked:translate-x-4" />
+                </label>
+              </div>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="openvpn_remote_host">OpenVPN server host</Label>
+                  <Input id="openvpn_remote_host" placeholder="vpn.reduxtc.com" {...controllerForm.register("openvpn_remote_host")} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="openvpn_remote_port">OpenVPN server port</Label>
+                  <Input
+                    id="openvpn_remote_port"
+                    type="number"
+                    placeholder="1194"
+                    {...controllerForm.register("openvpn_remote_port", { valueAsNumber: true })}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="openvpn_profile_ref">OpenVPN profile template ref</Label>
+                <Input id="openvpn_profile_ref" {...controllerForm.register("openvpn_profile_ref")} />
+                <p className="text-xs text-muted-foreground">
+                  Reference an environment variable containing a .ovpn template (supports {`{{REMOTE_HOST}}`} and {`{{REMOTE_PORT}}`} tokens).
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="openvpn_ca_ref">CA bundle ref</Label>
+                <Input id="openvpn_ca_ref" {...controllerForm.register("openvpn_ca_ref")} />
+                <p className="text-xs text-muted-foreground">Optional: used to inline a &lt;ca&gt; block.</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="openvpn_auth_ref">Auth credentials ref</Label>
+                <Input id="openvpn_auth_ref" type="password" {...controllerForm.register("openvpn_auth_ref")} />
+                <p className="text-xs text-muted-foreground">Optional: adds an auth-user-pass block for gateways.</p>
+              </div>
+            </div>
             <DialogFooter className="gap-2">
               <Button type="button" variant="secondary" size="sm" onClick={testController}>
                 Test UniFi connection
               </Button>
               <Button type="submit" variant="primary">
-                Save controller
+                Save settings
               </Button>
             </DialogFooter>
           </form>

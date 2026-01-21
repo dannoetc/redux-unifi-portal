@@ -9,7 +9,7 @@ import time
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
@@ -51,6 +51,7 @@ from app.schemas.admin_site import (
 from app.schemas.admin_tenant import TenantCreateRequest, TenantResponse, TenantUpdateRequest
 from app.schemas.admin_voucher import VoucherBatchCreateRequest
 from app.security import create_session_token, hash_password, verify_password
+from app.services.openvpn import OpenVpnError, build_openvpn_profile
 from app.services.unifi import UnifiApiError, UnifiClient
 from app.settings import settings
 
@@ -133,6 +134,13 @@ def list_tenants(
                     status=tenant.status.value,
                     unifi_base_url=tenant.unifi_base_url,
                     unifi_api_key_ref=tenant.unifi_api_key_ref,
+                    is_roaming=tenant.is_roaming,
+                    openvpn_enabled=tenant.openvpn_enabled,
+                    openvpn_profile_ref=tenant.openvpn_profile_ref,
+                    openvpn_auth_ref=tenant.openvpn_auth_ref,
+                    openvpn_ca_ref=tenant.openvpn_ca_ref,
+                    openvpn_remote_host=tenant.openvpn_remote_host,
+                    openvpn_remote_port=tenant.openvpn_remote_port,
                 ).model_dump(mode="json")
                 for tenant in tenants
             ]
@@ -162,6 +170,13 @@ def get_tenant(
                 status=tenant.status.value,
                 unifi_base_url=tenant.unifi_base_url,
                 unifi_api_key_ref=tenant.unifi_api_key_ref,
+                is_roaming=tenant.is_roaming,
+                openvpn_enabled=tenant.openvpn_enabled,
+                openvpn_profile_ref=tenant.openvpn_profile_ref,
+                openvpn_auth_ref=tenant.openvpn_auth_ref,
+                openvpn_ca_ref=tenant.openvpn_ca_ref,
+                openvpn_remote_host=tenant.openvpn_remote_host,
+                openvpn_remote_port=tenant.openvpn_remote_port,
             ).model_dump(mode="json")
         },
     }
@@ -405,6 +420,20 @@ def create_tenant(
         status=status,
         unifi_base_url=_empty_to_none(payload.unifi_base_url),
         unifi_api_key_ref=_empty_to_none(payload.unifi_api_key_ref),
+        is_roaming=payload.is_roaming or False,
+        openvpn_enabled=payload.openvpn_enabled or False,
+        openvpn_profile_ref=_empty_to_none(payload.openvpn_profile_ref),
+        openvpn_auth_ref=_empty_to_none(payload.openvpn_auth_ref),
+        openvpn_ca_ref=_empty_to_none(payload.openvpn_ca_ref),
+        openvpn_remote_host=_empty_to_none(payload.openvpn_remote_host),
+        openvpn_remote_port=_validate_openvpn_port(payload.openvpn_remote_port),
+    )
+    _validate_openvpn_requirements(
+        is_roaming=tenant.is_roaming,
+        openvpn_enabled=tenant.openvpn_enabled,
+        openvpn_profile_ref=tenant.openvpn_profile_ref,
+        openvpn_remote_host=tenant.openvpn_remote_host,
+        openvpn_remote_port=tenant.openvpn_remote_port,
     )
     db.add(tenant)
     db.commit()
@@ -419,6 +448,13 @@ def create_tenant(
                 status=tenant.status.value,
                 unifi_base_url=tenant.unifi_base_url,
                 unifi_api_key_ref=tenant.unifi_api_key_ref,
+                is_roaming=tenant.is_roaming,
+                openvpn_enabled=tenant.openvpn_enabled,
+                openvpn_profile_ref=tenant.openvpn_profile_ref,
+                openvpn_auth_ref=tenant.openvpn_auth_ref,
+                openvpn_ca_ref=tenant.openvpn_ca_ref,
+                openvpn_remote_host=tenant.openvpn_remote_host,
+                openvpn_remote_port=tenant.openvpn_remote_port,
             ).model_dump(mode="json")
         },
     }
@@ -467,6 +503,28 @@ def update_tenant(
         tenant.unifi_base_url = _empty_to_none(payload.unifi_base_url)
     if payload.unifi_api_key_ref is not None:
         tenant.unifi_api_key_ref = _empty_to_none(payload.unifi_api_key_ref)
+    if payload.is_roaming is not None:
+        tenant.is_roaming = payload.is_roaming
+    if payload.openvpn_enabled is not None:
+        tenant.openvpn_enabled = payload.openvpn_enabled
+    if payload.openvpn_profile_ref is not None:
+        tenant.openvpn_profile_ref = _empty_to_none(payload.openvpn_profile_ref)
+    if payload.openvpn_auth_ref is not None:
+        tenant.openvpn_auth_ref = _empty_to_none(payload.openvpn_auth_ref)
+    if payload.openvpn_ca_ref is not None:
+        tenant.openvpn_ca_ref = _empty_to_none(payload.openvpn_ca_ref)
+    if payload.openvpn_remote_host is not None:
+        tenant.openvpn_remote_host = _empty_to_none(payload.openvpn_remote_host)
+    if payload.openvpn_remote_port is not None:
+        tenant.openvpn_remote_port = _validate_openvpn_port(payload.openvpn_remote_port)
+
+    _validate_openvpn_requirements(
+        is_roaming=tenant.is_roaming,
+        openvpn_enabled=tenant.openvpn_enabled,
+        openvpn_profile_ref=tenant.openvpn_profile_ref,
+        openvpn_remote_host=tenant.openvpn_remote_host,
+        openvpn_remote_port=tenant.openvpn_remote_port,
+    )
 
     db.add(tenant)
     db.commit()
@@ -481,9 +539,48 @@ def update_tenant(
                 status=tenant.status.value,
                 unifi_base_url=tenant.unifi_base_url,
                 unifi_api_key_ref=tenant.unifi_api_key_ref,
+                is_roaming=tenant.is_roaming,
+                openvpn_enabled=tenant.openvpn_enabled,
+                openvpn_profile_ref=tenant.openvpn_profile_ref,
+                openvpn_auth_ref=tenant.openvpn_auth_ref,
+                openvpn_ca_ref=tenant.openvpn_ca_ref,
+                openvpn_remote_host=tenant.openvpn_remote_host,
+                openvpn_remote_port=tenant.openvpn_remote_port,
             ).model_dump(mode="json")
         },
     }
+
+
+@router.get("/tenants/{tenant_id}/openvpn/profile")
+def download_openvpn_profile(
+    tenant_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    _admin: AdminUser = Depends(require_tenant_role([AdminRole.TENANT_VIEWER, AdminRole.TENANT_ADMIN])),
+) -> Response:
+    tenant = db.execute(select(Tenant).where(Tenant.id == tenant_id)).scalar_one_or_none()
+    if not tenant:
+        raise HTTPException(
+            status_code=404,
+            detail={"ok": False, "error": {"code": "NOT_FOUND", "message": "Tenant not found."}},
+        )
+    if not tenant.openvpn_enabled:
+        raise HTTPException(
+            status_code=400,
+            detail={"ok": False, "error": {"code": "OPENVPN_DISABLED", "message": "OpenVPN is not enabled."}},
+        )
+    try:
+        profile = build_openvpn_profile(tenant)
+    except OpenVpnError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"ok": False, "error": {"code": exc.code, "message": str(exc)}},
+        ) from exc
+    filename = f"{tenant.slug}-openvpn.ovpn"
+    return Response(
+        content=profile,
+        media_type="application/x-openvpn-profile",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.delete("/tenants/{tenant_id}")
@@ -1300,6 +1397,50 @@ def _empty_to_none(value: str | None) -> str | None:
     if value == "":
         return None
     return value
+
+
+def _validate_openvpn_port(value: int | None) -> int | None:
+    if value is None:
+        return None
+    if value < 1 or value > 65535:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "ok": False,
+                "error": {"code": "INVALID_OPENVPN_PORT", "message": "OpenVPN port must be 1-65535."},
+            },
+        )
+    return value
+
+
+def _validate_openvpn_requirements(
+    *,
+    is_roaming: bool,
+    openvpn_enabled: bool,
+    openvpn_profile_ref: str | None,
+    openvpn_remote_host: str | None,
+    openvpn_remote_port: int | None,
+) -> None:
+    if not (is_roaming or openvpn_enabled):
+        return
+    missing_fields = []
+    if not openvpn_profile_ref:
+        missing_fields.append("openvpn_profile_ref")
+    if not openvpn_remote_host:
+        missing_fields.append("openvpn_remote_host")
+    if not openvpn_remote_port:
+        missing_fields.append("openvpn_remote_port")
+    if missing_fields:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "ok": False,
+                "error": {
+                    "code": "OPENVPN_CONFIG_REQUIRED",
+                    "message": f"OpenVPN settings required: {', '.join(missing_fields)}.",
+                },
+            },
+        )
 
 
 def _slugify(value: str | None) -> str | None:

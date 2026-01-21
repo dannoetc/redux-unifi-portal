@@ -15,6 +15,15 @@ services:
     ports:
       - "6379:6379"
 
+  openvpn:
+    image: kylemanna/openvpn:2.5
+    ports:
+      - "1194:1194/udp"
+    cap_add:
+      - NET_ADMIN
+    volumes:
+      - openvpn_data:/etc/openvpn
+
   api:
     build:
       context: ./backend
@@ -127,3 +136,4 @@ volumes:
   postgres_data:
   certbot-etc:
   certbot-var:
+  openvpn_data:

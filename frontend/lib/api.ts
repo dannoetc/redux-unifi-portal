@@ -113,4 +113,40 @@ export async function apiDownloadCsv(
   return filename;
 }
 
+export async function apiDownloadFile(
+  path: string,
+  filenameFallback: string,
+  init: RequestInit = {}
+) {
+  const response = await fetch(buildUrl(path), {
+    credentials: "include",
+    ...init,
+  });
+
+  if (!response.ok) {
+    const payload = await parseJson(response);
+    const errorPayload = payload?.error as ApiErrorPayload | undefined;
+    const message = errorPayload?.message ?? response.statusText ?? "Download failed";
+    throw new ApiError(message, response.status, errorPayload?.code, errorPayload);
+  }
+
+  const blob = await response.blob();
+  const disposition = response.headers.get("Content-Disposition") ?? "";
+  const match = /filename=([^;]+)/i.exec(disposition);
+  const filename = match?.[1]?.replace(/"/g, "") ?? filenameFallback;
+
+  if (typeof window !== "undefined") {
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  }
+
+  return filename;
+}
+
 export { API_BASE_URL };
