@@ -286,32 +286,8 @@ export default function TenantsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[320px_1fr]">
-        <aside className="order-2 lg:order-1">
-          <details
-            className="group rounded-lg bg-muted/40 p-4"
-            open={setupOpen}
-            onToggle={(event) => setSetupOpen((event.target as HTMLDetailsElement).open)}
-          >
-            <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-semibold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-white">
-              Setup checklist
-              <ChevronDown
-                className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180"
-                aria-hidden="true"
-              />
-            </summary>
-            <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
-              <li>1. Create a tenant and capture the tenant slug.</li>
-              <li>2. Add one or more sites with UniFi credentials and default access policy.</li>
-              <li>
-                3. Set the UniFi external portal URL to{" "}
-                <span className="font-medium text-foreground">https://wifi.reduxtc.com/guest/</span>. The
-                portal resolves the correct site using the UniFi Network API.
-              </li>
-            </ul>
-          </details>
-        </aside>
-        <section className="order-1 space-y-5 lg:order-2">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
+        <section className="order-1 space-y-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h1 className="text-xl font-semibold">Tenants</h1>
@@ -413,6 +389,30 @@ export default function TenantsPage() {
             )}
           </div>
         </section>
+        <aside className="order-2 lg:order-2">
+          <details
+            className="group rounded-lg bg-muted/40 p-4"
+            open={setupOpen}
+            onToggle={(event) => setSetupOpen((event.target as HTMLDetailsElement).open)}
+          >
+            <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-semibold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-white">
+              Setup checklist
+              <ChevronDown
+                className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180"
+                aria-hidden="true"
+              />
+            </summary>
+            <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
+              <li>1. Create a tenant and capture the tenant slug.</li>
+              <li>2. Add one or more sites with UniFi credentials and default access policy.</li>
+              <li>
+                3. Set the UniFi external portal URL to{" "}
+                <span className="font-medium text-foreground">https://wifi.reduxtc.com/guest/</span>. The
+                portal resolves the correct site using the UniFi Network API.
+              </li>
+            </ul>
+          </details>
+        </aside>
       </div>
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogContent>
