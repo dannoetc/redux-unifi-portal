@@ -15,8 +15,8 @@ export default function TenantSwitcher({
   onChange?: (value: string) => void;
 }) {
   return (
-    <div className="mb-3 px-2">
-      <label className="mb-2 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground" htmlFor="tenant-switcher">
+    <div className="mb-4">
+      <label className="mb-2 block text-[11px] uppercase tracking-wide text-muted-foreground" htmlFor="tenant-switcher">
         Tenant
       </label>
       <select
@@ -24,7 +24,7 @@ export default function TenantSwitcher({
         aria-label="Tenant"
         value={value ?? ""}
         onChange={(event) => onChange?.(event.target.value)}
-        className="w-full rounded-md border border-input bg-white/90 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2 focus:ring-offset-white"
+        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
       >
         {options.length === 0 ? <option value="">No tenants</option> : null}
         {options.map((option) => (
