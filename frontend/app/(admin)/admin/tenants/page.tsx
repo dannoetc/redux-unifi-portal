@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { ColumnDef } from "@tanstack/react-table";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -175,79 +176,146 @@ export default function TenantsPage() {
 
   const RowActions = ({ tenant }: { tenant: Tenant }) => {
     const [open, setOpen] = useState(false);
+    const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
+    const triggerRef = useRef<HTMLButtonElement | null>(null);
+    const menuRef = useRef<HTMLDivElement | null>(null);
+
+    useEffect(() => {
+      if (!open) {
+        return;
+      }
+      const updatePosition = () => {
+        const trigger = triggerRef.current;
+        if (!trigger) {
+          return;
+        }
+        const rect = trigger.getBoundingClientRect();
+        setMenuPosition({
+          top: rect.bottom + 8,
+          left: rect.right,
+        });
+      };
+      updatePosition();
+
+      const handlePointerDown = (event: MouseEvent) => {
+        const target = event.target as Node;
+        if (menuRef.current?.contains(target) || triggerRef.current?.contains(target)) {
+          return;
+        }
+        setOpen(false);
+      };
+      const handleKeyDown = (event: KeyboardEvent) => {
+        if (event.key === "Escape") {
+          setOpen(false);
+        }
+      };
+      const handleScroll = () => setOpen(false);
+      const handleResize = () => setOpen(false);
+
+      document.addEventListener("mousedown", handlePointerDown);
+      document.addEventListener("keydown", handleKeyDown);
+      window.addEventListener("scroll", handleScroll, true);
+      window.addEventListener("resize", handleResize);
+
+      return () => {
+        document.removeEventListener("mousedown", handlePointerDown);
+        document.removeEventListener("keydown", handleKeyDown);
+        window.removeEventListener("scroll", handleScroll, true);
+        window.removeEventListener("resize", handleResize);
+      };
+    }, [open]);
 
     return (
-      <details
-        className="relative"
-        open={open}
-        onToggle={(event) => setOpen((event.target as HTMLDetailsElement).open)}
-      >
-        <summary
+      <>
+        <button
+          ref={triggerRef}
+          type="button"
+          aria-haspopup="menu"
+          aria-expanded={open}
           aria-label="Open row actions"
-          className="flex h-8 w-8 list-none items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+          className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+          onClick={() => setOpen((prev) => !prev)}
         >
           <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
-        </summary>
-        <div className="absolute right-0 z-20 mt-2 min-w-[180px] rounded-md border border-border bg-white p-1 shadow-soft">
-          <button
-            type="button"
-            className="w-full rounded-sm px-2 py-1.5 text-left text-sm text-foreground hover:bg-muted"
-            onClick={() => {
-              setTenantToConfigure(tenant);
-              controllerForm.reset({
-                unifi_base_url: displayUnifiHost(tenant.unifi_base_url),
-                unifi_api_key_ref: tenant.unifi_api_key_ref ?? "",
-                is_roaming: tenant.is_roaming ?? false,
-                openvpn_enabled: tenant.openvpn_enabled ?? false,
-                openvpn_profile_ref: tenant.openvpn_profile_ref ?? "",
-                openvpn_auth_ref: tenant.openvpn_auth_ref ?? "",
-                openvpn_ca_ref: tenant.openvpn_ca_ref ?? "",
-                openvpn_remote_host: tenant.openvpn_remote_host ?? "",
-                openvpn_remote_port: tenant.openvpn_remote_port ?? undefined,
-              });
-              setControllerOpen(true);
-              setOpen(false);
-            }}
-          >
-            Configure UniFi
-          </button>
-          {isOpenVpnDownloadReady(tenant) ? (
-            <>
-              <div className="my-1 h-px bg-border/70" />
-              <button
-                type="button"
-                className="w-full rounded-sm px-2 py-1.5 text-left text-sm text-foreground hover:bg-muted"
-                onClick={async () => {
-                  try {
-                    await apiDownloadFile(
-                      `/api/admin/tenants/${tenant.id}/openvpn/profile`,
-                      `${tenant.slug}-openvpn.ovpn`
-                    );
-                    toast.success("OpenVPN profile downloaded.");
-                  } catch (error: any) {
-                    toast.error(error?.message ?? "Unable to download OpenVPN profile.");
-                  }
-                  setOpen(false);
+        </button>
+        {open && typeof document !== "undefined"
+          ? createPortal(
+              <div
+                ref={menuRef}
+                role="menu"
+                className="z-50 min-w-[180px] rounded-md border border-border bg-white p-1 shadow-soft"
+                style={{
+                  position: "fixed",
+                  top: menuPosition.top,
+                  left: menuPosition.left,
+                  transform: "translateX(-100%)",
                 }}
               >
-                Download OpenVPN profile
-              </button>
-            </>
-          ) : null}
-          <div className="my-1 h-px bg-border/70" />
-          <button
-            type="button"
-            className="w-full rounded-sm px-2 py-1.5 text-left text-sm text-destructive hover:bg-muted"
-            onClick={() => {
-              setTenantToDelete(tenant);
-              setDeleteOpen(true);
-              setOpen(false);
-            }}
-          >
-            Remove tenant
-          </button>
-        </div>
-      </details>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="w-full rounded-sm px-2 py-1.5 text-left text-sm text-foreground hover:bg-muted"
+                  onClick={() => {
+                    setTenantToConfigure(tenant);
+                    controllerForm.reset({
+                      unifi_base_url: displayUnifiHost(tenant.unifi_base_url),
+                      unifi_api_key_ref: tenant.unifi_api_key_ref ?? "",
+                      is_roaming: tenant.is_roaming ?? false,
+                      openvpn_enabled: tenant.openvpn_enabled ?? false,
+                      openvpn_profile_ref: tenant.openvpn_profile_ref ?? "",
+                      openvpn_auth_ref: tenant.openvpn_auth_ref ?? "",
+                      openvpn_ca_ref: tenant.openvpn_ca_ref ?? "",
+                      openvpn_remote_host: tenant.openvpn_remote_host ?? "",
+                      openvpn_remote_port: tenant.openvpn_remote_port ?? undefined,
+                    });
+                    setControllerOpen(true);
+                    setOpen(false);
+                  }}
+                >
+                  Configure UniFi
+                </button>
+                {isOpenVpnDownloadReady(tenant) ? (
+                  <>
+                    <div className="my-1 h-px bg-border/70" />
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="w-full rounded-sm px-2 py-1.5 text-left text-sm text-foreground hover:bg-muted"
+                      onClick={async () => {
+                        try {
+                          await apiDownloadFile(
+                            `/api/admin/tenants/${tenant.id}/openvpn/profile`,
+                            `${tenant.slug}-openvpn.ovpn`
+                          );
+                          toast.success("OpenVPN profile downloaded.");
+                        } catch (error: any) {
+                          toast.error(error?.message ?? "Unable to download OpenVPN profile.");
+                        }
+                        setOpen(false);
+                      }}
+                    >
+                      Download OpenVPN profile
+                    </button>
+                  </>
+                ) : null}
+                <div className="my-1 h-px bg-border/70" />
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="w-full rounded-sm px-2 py-1.5 text-left text-sm text-destructive hover:bg-muted"
+                  onClick={() => {
+                    setTenantToDelete(tenant);
+                    setDeleteOpen(true);
+                    setOpen(false);
+                  }}
+                >
+                  Remove tenant
+                </button>
+              </div>,
+              document.body
+            )
+          : null}
+      </>
     );
   };
 
