@@ -1,5 +1,7 @@
 import React from "react";
 
+import { cn } from "@/lib/utils";
+
 type TenantOption = {
   label: string;
   value: string;
@@ -9,14 +11,19 @@ export default function TenantSwitcher({
   value,
   options,
   onChange,
+  className,
 }: {
   value?: string;
   options: TenantOption[];
   onChange?: (value: string) => void;
+  className?: string;
 }) {
   return (
-    <div className="mb-4">
-      <label className="mb-2 block text-[11px] uppercase tracking-wide text-muted-foreground" htmlFor="tenant-switcher">
+    <div className={cn("space-y-2", className)}>
+      <label
+        className="block text-[11px] uppercase tracking-wide text-muted-foreground"
+        htmlFor="tenant-switcher"
+      >
         Tenant
       </label>
       <select
