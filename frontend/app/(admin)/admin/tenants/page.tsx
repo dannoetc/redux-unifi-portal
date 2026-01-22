@@ -552,6 +552,58 @@ export default function TenantsPage() {
     }
   };
 
+  const handleGenerateClick = async () => {
+    if (!tenantToConfigure) {
+      return;
+    }
+
+    // Save the form first to persist OpenVPN remote host/port and other settings needed for generation
+    const currentValues = controllerForm.getValues();
+    try {
+      const openvpnPort =
+        currentValues.openvpn_remote_port && Number.isNaN(currentValues.openvpn_remote_port)
+          ? undefined
+          : currentValues.openvpn_remote_port;
+      const payload = {
+        unifi_base_url: normalizeUnifiBaseUrl(currentValues.unifi_base_url),
+        is_roaming: currentValues.is_roaming,
+        openvpn_enabled: currentValues.openvpn_enabled,
+        openvpn_profile_ref: currentValues.openvpn_profile_ref || undefined,
+        openvpn_profile_template: currentValues.openvpn_profile_template?.trim()
+          ? currentValues.openvpn_profile_template
+          : undefined,
+        openvpn_auth_ref: currentValues.openvpn_auth_ref || undefined,
+        openvpn_auth_blob: currentValues.openvpn_auth_blob?.trim()
+          ? currentValues.openvpn_auth_blob
+          : undefined,
+        openvpn_ca_ref: currentValues.openvpn_ca_ref || undefined,
+        openvpn_ca_bundle: currentValues.openvpn_ca_bundle?.trim()
+          ? currentValues.openvpn_ca_bundle
+          : undefined,
+        openvpn_remote_host: currentValues.openvpn_remote_host,
+        openvpn_remote_port: openvpnPort,
+        unifi_api_key_ref: currentValues.unifi_api_key_ref || undefined,
+      };
+
+      await apiFetch<{ tenant: Tenant }>(`/api/admin/tenants/${tenantToConfigure.id}`, {
+        method: "PUT",
+        body: JSON.stringify(payload),
+      });
+
+      // Update local state with the saved tenant
+      const refreshed = await apiFetch<{ tenant: Tenant }>(`/api/admin/tenants/${tenantToConfigure.id}`);
+      setTenantToConfigure(refreshed.tenant);
+      setTenants((prev) =>
+        prev.map((t) => (t.id === refreshed.tenant.id ? refreshed.tenant : t))
+      );
+
+      // Now open the generate dialog
+      setGenerateFromControllerOpen(true);
+    } catch (error: any) {
+      toast.error(error?.message ?? "Unable to save settings before generation.");
+    }
+  };
+
   const testController = async () => {
     if (!tenantToConfigure) {
       return;
@@ -873,7 +925,7 @@ export default function TenantsPage() {
                     variant="outline"
                     className="w-full"
                     disabled={!tenantToConfigure}
-                    onClick={() => setGenerateFromControllerOpen(true)}
+                    onClick={handleGenerateClick}
                     aria-label="Generate OpenVPN gateway profile"
                   >
                     Generate gateway profile…
