@@ -23,8 +23,9 @@ else
     ovpn_genconfig -u udp://openvpn
     
     # Initialize PKI with no passphrase (non-interactive)
+    # Pipe empty input to answer the CA Common Name prompt with default
     echo "Running ovpn_initpki with nopass..."
-    ovpn_initpki nopass
+    echo "" | ovpn_initpki nopass
     
     echo "OpenVPN PKI initialized successfully!"
 fi
