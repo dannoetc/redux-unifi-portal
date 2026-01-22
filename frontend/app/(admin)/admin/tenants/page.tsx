@@ -557,32 +557,54 @@ export default function TenantsPage() {
       return;
     }
 
-    // Save the form first to persist OpenVPN remote host/port and other settings needed for generation
+    // Validate required OpenVPN settings for generation
     const currentValues = controllerForm.getValues();
+    const hasTemplate = Boolean(currentValues.openvpn_profile_template?.trim());
+    const hasRemoteHost = Boolean(currentValues.openvpn_remote_host?.trim());
+    const hasRemotePort = Boolean(currentValues.openvpn_remote_port);
+
+    if (!hasTemplate && !tenantToConfigure.openvpn_profile_stored) {
+      toast.error("A profile template is required to generate. Upload one using Advanced OpenVPN options.");
+      setShowAdvancedOpenvpn(true);
+      return;
+    }
+
+    if (!hasRemoteHost) {
+      toast.error("OpenVPN server host is required. Please fill it in to generate a profile.");
+      return;
+    }
+
+    if (!hasRemotePort) {
+      toast.error("OpenVPN server port is required. Please fill it in to generate a profile.");
+      return;
+    }
+
+    // Save the form first to persist OpenVPN remote host/port and other settings needed for generation
+    const currentValuesForSave = controllerForm.getValues();
     try {
       const openvpnPort =
-        currentValues.openvpn_remote_port && Number.isNaN(currentValues.openvpn_remote_port)
+        currentValuesForSave.openvpn_remote_port && Number.isNaN(currentValuesForSave.openvpn_remote_port)
           ? undefined
-          : currentValues.openvpn_remote_port;
+          : currentValuesForSave.openvpn_remote_port;
       const payload = {
-        unifi_base_url: normalizeUnifiBaseUrl(currentValues.unifi_base_url),
-        is_roaming: currentValues.is_roaming,
-        openvpn_enabled: currentValues.openvpn_enabled,
-        openvpn_profile_ref: currentValues.openvpn_profile_ref || undefined,
-        openvpn_profile_template: currentValues.openvpn_profile_template?.trim()
-          ? currentValues.openvpn_profile_template
+        unifi_base_url: normalizeUnifiBaseUrl(currentValuesForSave.unifi_base_url),
+        is_roaming: currentValuesForSave.is_roaming,
+        openvpn_enabled: currentValuesForSave.openvpn_enabled,
+        openvpn_profile_ref: currentValuesForSave.openvpn_profile_ref || undefined,
+        openvpn_profile_template: currentValuesForSave.openvpn_profile_template?.trim()
+          ? currentValuesForSave.openvpn_profile_template
           : undefined,
-        openvpn_auth_ref: currentValues.openvpn_auth_ref || undefined,
-        openvpn_auth_blob: currentValues.openvpn_auth_blob?.trim()
-          ? currentValues.openvpn_auth_blob
+        openvpn_auth_ref: currentValuesForSave.openvpn_auth_ref || undefined,
+        openvpn_auth_blob: currentValuesForSave.openvpn_auth_blob?.trim()
+          ? currentValuesForSave.openvpn_auth_blob
           : undefined,
-        openvpn_ca_ref: currentValues.openvpn_ca_ref || undefined,
-        openvpn_ca_bundle: currentValues.openvpn_ca_bundle?.trim()
-          ? currentValues.openvpn_ca_bundle
+        openvpn_ca_ref: currentValuesForSave.openvpn_ca_ref || undefined,
+        openvpn_ca_bundle: currentValuesForSave.openvpn_ca_bundle?.trim()
+          ? currentValuesForSave.openvpn_ca_bundle
           : undefined,
-        openvpn_remote_host: currentValues.openvpn_remote_host,
+        openvpn_remote_host: currentValuesForSave.openvpn_remote_host,
         openvpn_remote_port: openvpnPort,
-        unifi_api_key_ref: currentValues.unifi_api_key_ref || undefined,
+        unifi_api_key_ref: currentValuesForSave.unifi_api_key_ref || undefined,
       };
 
       await apiFetch<{ tenant: Tenant }>(`/api/admin/tenants/${tenantToConfigure.id}`, {
