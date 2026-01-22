@@ -48,9 +48,12 @@ services:
       CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
     ports:
       - "8000:8000"
+    volumes:
+      - openvpn_data:/etc/openvpn:ro
     depends_on:
       - postgres
       - redis
+      - openvpn
 
   celery:
     build:

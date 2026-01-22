@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
     SECRET_KEY: str = "dev-change-me"
     OPENVPN_ENCRYPTION_KEY: str = ""
-    OPENVPN_GENERATE_COMMAND_PREFIX: str = "docker compose exec -T openvpn"
+    OPENVPN_PKI_PATH: str = "/etc/openvpn/pki"
     LOG_LEVEL: str = "INFO"
     ADMIN_SESSION_MAX_AGE_SECONDS: int = 60 * 60 * 12
     ADMIN_SESSION_COOKIE_SECURE: bool = False

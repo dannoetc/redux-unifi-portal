@@ -135,19 +135,46 @@ def generate_openvpn_client_profile(client_name: str) -> str:
             "Client name must use letters, numbers, dots, dashes, or underscores.",
         )
 
-    prefix = _resolve_openvpn_command_prefix()
+    pki_path = settings.OPENVPN_PKI_PATH
     
+    # Run easyrsa in the PKI directory to generate client certificate
     _run_openvpn_command(
-        prefix + ["easyrsa", "build-client-full", cleaned, "nopass"],
+        ["easyrsa", "--pki-dir", pki_path, "build-client-full", cleaned, "nopass"],
         "OpenVPN client certificate generation failed.",
     )
-    profile = _run_openvpn_command(
-        prefix + ["ovpn_getclient", cleaned],
-        "OpenVPN profile export failed.",
-        capture_output=True,
+    
+    # Retrieve the generated client profile from the PKI directory
+    client_cert_path = os.path.join(pki_path, "issued", f"{cleaned}.crt")
+    client_key_path = os.path.join(pki_path, "private", f"{cleaned}.key")
+    ca_cert_path = os.path.join(pki_path, "ca.crt")
+    
+    # Verify files exist
+    if not os.path.exists(client_cert_path) or not os.path.exists(client_key_path) or not os.path.exists(ca_cert_path):
+        raise OpenVpnError("OPENVPN_GENERATION_FAILED", "OpenVPN profile generation failed - missing certificate files.")
+    
+    # Read the certificates and key
+    with open(client_cert_path, "r") as f:
+        client_cert = f.read()
+    with open(client_key_path, "r") as f:
+        client_key = f.read()
+    with open(ca_cert_path, "r") as f:
+        ca_cert = f.read()
+    
+    # Get the base OpenVPN profile template
+    profile = resolve_openvpn_profile_template(
+        openvpn_profile_template=None,
+        openvpn_profile_ref=None,
+        openvpn_secret=None,
     )
-    if not profile.strip():
-        raise OpenVpnError("OPENVPN_GENERATION_FAILED", "OpenVPN profile generation failed.")
+    if not profile:
+        raise OpenVpnError("OPENVPN_GENERATION_FAILED", "OpenVPN profile template not available.")
+    
+    # Append certificates to the profile
+    profile = profile.rstrip() + "\n"
+    profile += f"\n<cert>\n{client_cert}</cert>\n"
+    profile += f"<key>\n{client_key}</key>\n"
+    profile += f"<ca>\n{ca_cert}</ca>\n"
+    
     return sanitize_openvpn_profile(profile)
 
 
@@ -218,15 +245,6 @@ def _get_fernet() -> Fernet:
             "OpenVPN encryption key is invalid.",
         ) from exc
 
-
-def _resolve_openvpn_command_prefix() -> list[str]:
-    prefix = settings.OPENVPN_GENERATE_COMMAND_PREFIX
-    if not prefix:
-        raise OpenVpnError(
-            "OPENVPN_GENERATION_FAILED",
-            "OpenVPN generation command prefix is not configured.",
-        )
-    return shlex.split(prefix)
 
 
 def _run_openvpn_command(
