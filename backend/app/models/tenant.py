@@ -36,3 +36,9 @@ class Tenant(Base, TimestampMixin):
     auth_events = relationship("AuthEvent", back_populates="tenant", passive_deletes=True)
     voucher_batches = relationship("VoucherBatch", back_populates="tenant", passive_deletes=True)
     oidc_providers = relationship("OidcProvider", back_populates="tenant", passive_deletes=True)
+    openvpn_secret = relationship(
+        "TenantOpenvpnSecret",
+        back_populates="tenant",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )

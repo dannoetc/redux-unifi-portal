@@ -16,6 +16,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import StatusPill from "@/components/ui/StatusPill";
+import { Textarea } from "@/components/ui/textarea";
 
 const optionalPort = z.preprocess(
   (value) => {
@@ -39,8 +40,11 @@ const schema = z.object({
   is_roaming: z.boolean().optional(),
   openvpn_enabled: z.boolean().optional(),
   openvpn_profile_ref: z.string().optional().or(z.literal("")),
+  openvpn_profile_template: z.string().optional().or(z.literal("")),
   openvpn_auth_ref: z.string().optional().or(z.literal("")),
+  openvpn_auth_blob: z.string().optional().or(z.literal("")),
   openvpn_ca_ref: z.string().optional().or(z.literal("")),
+  openvpn_ca_bundle: z.string().optional().or(z.literal("")),
   openvpn_remote_host: z.string().optional().or(z.literal("")),
   openvpn_remote_port: optionalPort,
 });
@@ -51,8 +55,11 @@ const controllerSchema = z.object({
   is_roaming: z.boolean().optional(),
   openvpn_enabled: z.boolean().optional(),
   openvpn_profile_ref: z.string().optional().or(z.literal("")),
+  openvpn_profile_template: z.string().optional().or(z.literal("")),
   openvpn_auth_ref: z.string().optional().or(z.literal("")),
+  openvpn_auth_blob: z.string().optional().or(z.literal("")),
   openvpn_ca_ref: z.string().optional().or(z.literal("")),
+  openvpn_ca_bundle: z.string().optional().or(z.literal("")),
   openvpn_remote_host: z.string().optional().or(z.literal("")),
   openvpn_remote_port: optionalPort,
 });
@@ -67,8 +74,11 @@ type Tenant = {
   is_roaming?: boolean;
   openvpn_enabled?: boolean;
   openvpn_profile_ref?: string | null;
+  openvpn_profile_stored?: boolean;
   openvpn_auth_ref?: string | null;
+  openvpn_auth_stored?: boolean;
   openvpn_ca_ref?: string | null;
+  openvpn_ca_stored?: boolean;
   openvpn_remote_host?: string | null;
   openvpn_remote_port?: number | null;
 };
@@ -125,9 +135,7 @@ export default function TenantsPage() {
   const isOpenVpnDownloadReady = (tenant: Tenant) =>
     Boolean(
       tenant.openvpn_enabled &&
-        tenant.openvpn_profile_ref &&
-        tenant.openvpn_remote_host &&
-        tenant.openvpn_remote_port
+        (tenant.openvpn_profile_ref || tenant.openvpn_profile_stored)
     );
 
   const form = useForm<CreateTenant>({
@@ -140,8 +148,11 @@ export default function TenantsPage() {
       is_roaming: false,
       openvpn_enabled: false,
       openvpn_profile_ref: "",
+      openvpn_profile_template: "",
       openvpn_auth_ref: "",
+      openvpn_auth_blob: "",
       openvpn_ca_ref: "",
+      openvpn_ca_bundle: "",
       openvpn_remote_host: "",
     },
   });
@@ -173,6 +184,24 @@ export default function TenantsPage() {
       setSetupInitialized(true);
     }
   }, [loading, setupInitialized, tenants.length]);
+
+  const loadFileIntoField =
+    (field: "openvpn_profile_template" | "openvpn_ca_bundle" | "openvpn_auth_blob") =>
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (!file) {
+        return;
+      }
+      try {
+        const content = await file.text();
+        controllerForm.setValue(field, content, { shouldDirty: true });
+        toast.success("Loaded OpenVPN content from file.");
+      } catch (error: any) {
+        toast.error(error?.message ?? "Unable to read the selected file.");
+      } finally {
+        event.target.value = "";
+      }
+    };
 
   const RowActions = ({ tenant }: { tenant: Tenant }) => {
     const [open, setOpen] = useState(false);
@@ -263,8 +292,11 @@ export default function TenantsPage() {
                       is_roaming: tenant.is_roaming ?? false,
                       openvpn_enabled: tenant.openvpn_enabled ?? false,
                       openvpn_profile_ref: tenant.openvpn_profile_ref ?? "",
+                      openvpn_profile_template: "",
                       openvpn_auth_ref: tenant.openvpn_auth_ref ?? "",
+                      openvpn_auth_blob: "",
                       openvpn_ca_ref: tenant.openvpn_ca_ref ?? "",
+                      openvpn_ca_bundle: "",
                       openvpn_remote_host: tenant.openvpn_remote_host ?? "",
                       openvpn_remote_port: tenant.openvpn_remote_port ?? undefined,
                     });
@@ -406,6 +438,11 @@ export default function TenantsPage() {
         ...values,
         unifi_base_url: normalizeUnifiBaseUrl(values.unifi_base_url),
         openvpn_remote_port: openvpnPort,
+        openvpn_profile_template: values.openvpn_profile_template?.trim()
+          ? values.openvpn_profile_template
+          : undefined,
+        openvpn_ca_bundle: values.openvpn_ca_bundle?.trim() ? values.openvpn_ca_bundle : undefined,
+        openvpn_auth_blob: values.openvpn_auth_blob?.trim() ? values.openvpn_auth_blob : undefined,
       };
       const data = await apiFetch<{ tenant: Tenant }>(`/api/admin/tenants/${tenantToConfigure.id}`, {
         method: "PUT",
@@ -662,28 +699,94 @@ export default function TenantsPage() {
                 </div>
               </div>
               <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="openvpn_profile_template">OpenVPN profile template</Label>
+                  {tenantToConfigure?.openvpn_profile_stored ? (
+                    <span className="text-xs font-medium text-emerald-600">Stored</span>
+                  ) : null}
+                </div>
+                <Input
+                  id="openvpn_profile_template_file"
+                  type="file"
+                  accept=".ovpn,.txt"
+                  onChange={loadFileIntoField("openvpn_profile_template")}
+                />
+                <Textarea
+                  id="openvpn_profile_template"
+                  placeholder="Paste the .ovpn template content"
+                  {...controllerForm.register("openvpn_profile_template")}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Stored templates are encrypted at rest. Include {`{{REMOTE_HOST}}`} and {`{{REMOTE_PORT}}`}
+                  tokens if you want the server to inject tenant-specific values. Leave blank to keep the
+                  existing stored template.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="openvpn_ca_bundle">CA bundle content</Label>
+                  {tenantToConfigure?.openvpn_ca_stored ? (
+                    <span className="text-xs font-medium text-emerald-600">Stored</span>
+                  ) : null}
+                </div>
+                <Input
+                  id="openvpn_ca_bundle_file"
+                  type="file"
+                  accept=".crt,.pem,.txt"
+                  onChange={loadFileIntoField("openvpn_ca_bundle")}
+                />
+                <Textarea
+                  id="openvpn_ca_bundle"
+                  placeholder="Optional CA bundle content"
+                  {...controllerForm.register("openvpn_ca_bundle")}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Optional: store a CA bundle to append when the template does not already include a
+                  &lt;ca&gt; block. Leave blank to keep the existing stored bundle.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="openvpn_auth_blob">Auth credentials content</Label>
+                  {tenantToConfigure?.openvpn_auth_stored ? (
+                    <span className="text-xs font-medium text-emerald-600">Stored</span>
+                  ) : null}
+                </div>
+                <Input
+                  id="openvpn_auth_blob_file"
+                  type="file"
+                  accept=".txt,.conf"
+                  onChange={loadFileIntoField("openvpn_auth_blob")}
+                />
+                <Textarea
+                  id="openvpn_auth_blob"
+                  placeholder="username\npassword"
+                  {...controllerForm.register("openvpn_auth_blob")}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Optional: store auth-user-pass credentials to inline when missing from the template. Leave
+                  blank to keep the existing stored credentials.
+                </p>
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="openvpn_profile_ref">OpenVPN profile template ref</Label>
                 <Input id="openvpn_profile_ref" {...controllerForm.register("openvpn_profile_ref")} />
                 <p className="text-xs text-muted-foreground">
-                  Reference an environment variable containing the full .ovpn template. Include the
-                  required {`{{REMOTE_HOST}}`} and {`{{REMOTE_PORT}}`} tokens so the server can inject
-                  the tenant-specific remote address.
+                  Backward-compatible env var reference containing the full .ovpn template.
                 </p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="openvpn_ca_ref">CA bundle ref</Label>
                 <Input id="openvpn_ca_ref" {...controllerForm.register("openvpn_ca_ref")} />
                 <p className="text-xs text-muted-foreground">
-                  Optional: reference a CA bundle secret to append a &lt;ca&gt; block when the template
-                  does not already include one.
+                  Optional env var reference containing a CA bundle.
                 </p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="openvpn_auth_ref">Auth credentials ref</Label>
                 <Input id="openvpn_auth_ref" type="password" {...controllerForm.register("openvpn_auth_ref")} />
                 <p className="text-xs text-muted-foreground">
-                  Optional: reference a username/password secret to inject an auth-user-pass block if the
-                  template does not already include one.
+                  Optional env var reference containing username/password credentials.
                 </p>
               </div>
             </div>
