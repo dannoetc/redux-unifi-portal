@@ -56,11 +56,14 @@ export function PopoverMenu({
     [isControlled, onOpenChange]
   );
 
-  const triggerElement = React.isValidElement<React.HTMLAttributes<HTMLElement>>(trigger)
-    ? React.cloneElement(trigger, {
-        "aria-haspopup": "menu",
-        "aria-expanded": resolvedOpen,
-      })
+  const triggerElement = React.isValidElement(trigger)
+    ? React.cloneElement(
+        trigger as React.ReactElement<React.HTMLAttributes<HTMLElement>>,
+        {
+          "aria-haspopup": "menu",
+          "aria-expanded": resolvedOpen,
+        } as React.HTMLAttributes<HTMLElement>
+      )
     : trigger;
 
   const handleOpenAutoFocus = React.useCallback((event: Event) => {
