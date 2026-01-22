@@ -28,6 +28,8 @@ from app.models import (
     Site,
     SiteOidcSetting,
     Tenant,
+    TenantOpenvpnClientProfile,
+    TenantOpenvpnSecret,
     TenantStatus,
     Voucher,
     VoucherBatch,
@@ -48,14 +50,21 @@ from app.schemas.admin_site import (
     SiteUpdateRequest,
     UnifiSiteDiscoveryResponse,
 )
-from app.schemas.admin_tenant import TenantCreateRequest, TenantResponse, TenantUpdateRequest
+from app.schemas.admin_tenant import (
+    OpenvpnGenerateRequest,
+    TenantCreateRequest,
+    TenantResponse,
+    TenantUpdateRequest,
+)
 from app.schemas.admin_voucher import VoucherBatchCreateRequest
 from app.security import create_session_token, hash_password, verify_password
 from app.services.openvpn import (
     OpenVpnError,
-    build_openvpn_profile,
+    decrypt_openvpn_secret,
+    encrypt_openvpn_secret,
+    generate_openvpn_client_profile,
     profile_requires_remote_settings,
-    resolve_openvpn_secret,
+    resolve_openvpn_profile_template,
 )
 from app.services.unifi import UnifiApiError, UnifiClient
 from app.settings import settings
@@ -132,21 +141,7 @@ def list_tenants(
         "ok": True,
         "data": {
             "tenants": [
-                TenantResponse(
-                    id=str(tenant.id),
-                    name=tenant.name,
-                    slug=tenant.slug,
-                    status=tenant.status.value,
-                    unifi_base_url=tenant.unifi_base_url,
-                    unifi_api_key_ref=tenant.unifi_api_key_ref,
-                    is_roaming=tenant.is_roaming,
-                    openvpn_enabled=tenant.openvpn_enabled,
-                    openvpn_profile_ref=tenant.openvpn_profile_ref,
-                    openvpn_auth_ref=tenant.openvpn_auth_ref,
-                    openvpn_ca_ref=tenant.openvpn_ca_ref,
-                    openvpn_remote_host=tenant.openvpn_remote_host,
-                    openvpn_remote_port=tenant.openvpn_remote_port,
-                ).model_dump(mode="json")
+                _build_tenant_response(tenant)
                 for tenant in tenants
             ]
         },
@@ -168,21 +163,7 @@ def get_tenant(
     return {
         "ok": True,
         "data": {
-            "tenant": TenantResponse(
-                id=str(tenant.id),
-                name=tenant.name,
-                slug=tenant.slug,
-                status=tenant.status.value,
-                unifi_base_url=tenant.unifi_base_url,
-                unifi_api_key_ref=tenant.unifi_api_key_ref,
-                is_roaming=tenant.is_roaming,
-                openvpn_enabled=tenant.openvpn_enabled,
-                openvpn_profile_ref=tenant.openvpn_profile_ref,
-                openvpn_auth_ref=tenant.openvpn_auth_ref,
-                openvpn_ca_ref=tenant.openvpn_ca_ref,
-                openvpn_remote_host=tenant.openvpn_remote_host,
-                openvpn_remote_port=tenant.openvpn_remote_port,
-            ).model_dump(mode="json")
+            "tenant": _build_tenant_response(tenant)
         },
     }
 
@@ -418,6 +399,10 @@ def create_tenant(
             detail={"ok": False, "error": {"code": "SLUG_TAKEN", "message": "Tenant slug is already in use."}},
         )
 
+    openvpn_profile_template = _empty_to_none(payload.openvpn_profile_template)
+    openvpn_ca_bundle = _empty_to_none(payload.openvpn_ca_bundle)
+    openvpn_auth_blob = _empty_to_none(payload.openvpn_auth_blob)
+
     tenant = Tenant(
         id=uuid.uuid4(),
         slug=normalized_slug,
@@ -437,30 +422,37 @@ def create_tenant(
         is_roaming=tenant.is_roaming,
         openvpn_enabled=tenant.openvpn_enabled,
         openvpn_profile_ref=tenant.openvpn_profile_ref,
+        openvpn_profile_template=openvpn_profile_template,
+        openvpn_secret=None,
         openvpn_remote_host=tenant.openvpn_remote_host,
         openvpn_remote_port=tenant.openvpn_remote_port,
     )
+    if openvpn_profile_template is None and (openvpn_ca_bundle or openvpn_auth_blob):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "ok": False,
+                "error": {
+                    "code": "OPENVPN_PROFILE_REQUIRED",
+                    "message": "OpenVPN profile template is required to store CA or auth content.",
+                },
+            },
+        )
     db.add(tenant)
+    if openvpn_profile_template:
+        _apply_openvpn_secret_updates(
+            db=db,
+            tenant=tenant,
+            profile_template=openvpn_profile_template,
+            ca_bundle=openvpn_ca_bundle,
+            auth_blob=openvpn_auth_blob,
+        )
     db.commit()
     db.refresh(tenant)
     return {
         "ok": True,
         "data": {
-            "tenant": TenantResponse(
-                id=str(tenant.id),
-                name=tenant.name,
-                slug=tenant.slug,
-                status=tenant.status.value,
-                unifi_base_url=tenant.unifi_base_url,
-                unifi_api_key_ref=tenant.unifi_api_key_ref,
-                is_roaming=tenant.is_roaming,
-                openvpn_enabled=tenant.openvpn_enabled,
-                openvpn_profile_ref=tenant.openvpn_profile_ref,
-                openvpn_auth_ref=tenant.openvpn_auth_ref,
-                openvpn_ca_ref=tenant.openvpn_ca_ref,
-                openvpn_remote_host=tenant.openvpn_remote_host,
-                openvpn_remote_port=tenant.openvpn_remote_port,
-            ).model_dump(mode="json")
+            "tenant": _build_tenant_response(tenant)
         },
     }
 
@@ -523,35 +515,54 @@ def update_tenant(
     if payload.openvpn_remote_port is not None:
         tenant.openvpn_remote_port = _validate_openvpn_port(payload.openvpn_remote_port)
 
+    openvpn_profile_template = _normalize_secret_value(payload.openvpn_profile_template)
+    openvpn_ca_bundle = _normalize_secret_value(payload.openvpn_ca_bundle)
+    openvpn_auth_blob = _normalize_secret_value(payload.openvpn_auth_blob)
+    openvpn_secret_for_validation = tenant.openvpn_secret
+    if openvpn_profile_template == "":
+        openvpn_secret_for_validation = None
+
     _validate_openvpn_requirements(
         is_roaming=tenant.is_roaming,
         openvpn_enabled=tenant.openvpn_enabled,
         openvpn_profile_ref=tenant.openvpn_profile_ref,
+        openvpn_profile_template=openvpn_profile_template if openvpn_profile_template not in ("", None) else None,
+        openvpn_secret=openvpn_secret_for_validation,
         openvpn_remote_host=tenant.openvpn_remote_host,
         openvpn_remote_port=tenant.openvpn_remote_port,
     )
 
+    if (
+        openvpn_profile_template is None
+        and (openvpn_ca_bundle is not None or openvpn_auth_blob is not None)
+        and tenant.openvpn_secret is None
+        and openvpn_secret_for_validation is None
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "ok": False,
+                "error": {
+                    "code": "OPENVPN_PROFILE_REQUIRED",
+                    "message": "OpenVPN profile template is required to store CA or auth content.",
+                },
+            },
+        )
+
     db.add(tenant)
+    _apply_openvpn_secret_updates(
+        db=db,
+        tenant=tenant,
+        profile_template=openvpn_profile_template,
+        ca_bundle=openvpn_ca_bundle,
+        auth_blob=openvpn_auth_blob,
+    )
     db.commit()
     db.refresh(tenant)
     return {
         "ok": True,
         "data": {
-            "tenant": TenantResponse(
-                id=str(tenant.id),
-                name=tenant.name,
-                slug=tenant.slug,
-                status=tenant.status.value,
-                unifi_base_url=tenant.unifi_base_url,
-                unifi_api_key_ref=tenant.unifi_api_key_ref,
-                is_roaming=tenant.is_roaming,
-                openvpn_enabled=tenant.openvpn_enabled,
-                openvpn_profile_ref=tenant.openvpn_profile_ref,
-                openvpn_auth_ref=tenant.openvpn_auth_ref,
-                openvpn_ca_ref=tenant.openvpn_ca_ref,
-                openvpn_remote_host=tenant.openvpn_remote_host,
-                openvpn_remote_port=tenant.openvpn_remote_port,
-            ).model_dump(mode="json")
+            "tenant": _build_tenant_response(tenant)
         },
     }
 
@@ -571,21 +582,98 @@ def download_openvpn_profile(
     if not tenant.openvpn_enabled:
         raise HTTPException(
             status_code=400,
-            detail={"ok": False, "error": {"code": "OPENVPN_DISABLED", "message": "OpenVPN is not enabled."}},
+            detail={
+                "ok": False,
+                "error": {
+                    "code": "OPENVPN_NOT_CONFIGURED",
+                    "message": "OpenVPN generation is not configured for this tenant.",
+                },
+            },
+        )
+    profile_record = (
+        db.execute(
+            select(TenantOpenvpnClientProfile)
+            .where(TenantOpenvpnClientProfile.tenant_id == tenant_id)
+            .order_by(TenantOpenvpnClientProfile.created_at.desc())
+        )
+        .scalars()
+        .first()
+    )
+    if not profile_record:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "ok": False,
+                "error": {
+                    "code": "OPENVPN_PROFILE_NOT_GENERATED",
+                    "message": "Generate an OpenVPN profile before downloading.",
+                },
+            },
         )
     try:
-        profile = build_openvpn_profile(tenant)
+        profile = decrypt_openvpn_secret(profile_record.profile_encrypted)
     except OpenVpnError as exc:
         raise HTTPException(
             status_code=400,
             detail={"ok": False, "error": {"code": exc.code, "message": str(exc)}},
         ) from exc
-    filename = f"{tenant.slug}-openvpn.ovpn"
+    filename = f"{profile_record.client_name}.ovpn"
     return Response(
         content=profile,
         media_type="application/x-openvpn-profile",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@router.post("/tenants/{tenant_id}/openvpn/generate")
+def generate_openvpn_profile(
+    tenant_id: uuid.UUID,
+    payload: OpenvpnGenerateRequest,
+    db: Session = Depends(get_db),
+    _admin: AdminUser = Depends(require_tenant_role([AdminRole.TENANT_ADMIN])),
+) -> dict:
+    tenant = db.execute(select(Tenant).where(Tenant.id == tenant_id)).scalar_one_or_none()
+    if not tenant:
+        raise HTTPException(
+            status_code=404,
+            detail={"ok": False, "error": {"code": "NOT_FOUND", "message": "Tenant not found."}},
+        )
+    if not tenant.openvpn_enabled or not tenant.openvpn_remote_host or not tenant.openvpn_remote_port:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "ok": False,
+                "error": {
+                    "code": "OPENVPN_NOT_CONFIGURED",
+                    "message": "OpenVPN generation is not configured for this tenant.",
+                },
+            },
+        )
+    try:
+        profile = generate_openvpn_client_profile(payload.client_name)
+        encrypted_profile = encrypt_openvpn_secret(profile)
+    except OpenVpnError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"ok": False, "error": {"code": exc.code, "message": str(exc)}},
+        ) from exc
+
+    profile_record = TenantOpenvpnClientProfile(
+        tenant_id=tenant.id,
+        client_name=payload.client_name.strip(),
+        profile_encrypted=encrypted_profile,
+    )
+    db.add(profile_record)
+    db.commit()
+    db.refresh(profile_record)
+
+    return {
+        "ok": True,
+        "data": {
+            "client_name": profile_record.client_name,
+            "created_at": profile_record.created_at,
+        },
+    }
 
 
 @router.delete("/tenants/{tenant_id}")
@@ -1404,6 +1492,103 @@ def _empty_to_none(value: str | None) -> str | None:
     return value
 
 
+def _normalize_secret_value(value: str | None) -> str | None:
+    if value is None:
+        return None
+    if value.strip() == "":
+        return ""
+    return value
+
+
+def _build_tenant_response(tenant: Tenant) -> dict:
+    secret = tenant.openvpn_secret
+    latest_profile = tenant.openvpn_client_profiles[0] if tenant.openvpn_client_profiles else None
+    return TenantResponse(
+        id=str(tenant.id),
+        name=tenant.name,
+        slug=tenant.slug,
+        status=tenant.status.value,
+        unifi_base_url=tenant.unifi_base_url,
+        unifi_api_key_ref=tenant.unifi_api_key_ref,
+        is_roaming=tenant.is_roaming,
+        openvpn_enabled=tenant.openvpn_enabled,
+        openvpn_profile_ref=tenant.openvpn_profile_ref,
+        openvpn_profile_stored=secret is not None,
+        openvpn_auth_ref=tenant.openvpn_auth_ref,
+        openvpn_auth_stored=bool(secret and secret.auth_blob_encrypted),
+        openvpn_ca_ref=tenant.openvpn_ca_ref,
+        openvpn_ca_stored=bool(secret and secret.ca_bundle_encrypted),
+        openvpn_remote_host=tenant.openvpn_remote_host,
+        openvpn_remote_port=tenant.openvpn_remote_port,
+        openvpn_generated_client_name=latest_profile.client_name if latest_profile else None,
+        openvpn_generated_created_at=latest_profile.created_at if latest_profile else None,
+    ).model_dump(mode="json")
+
+
+def _apply_openvpn_secret_updates(
+    *,
+    db: Session,
+    tenant: Tenant,
+    profile_template: str | None,
+    ca_bundle: str | None,
+    auth_blob: str | None,
+) -> None:
+    if profile_template is None and ca_bundle is None and auth_blob is None:
+        return
+
+    secret = tenant.openvpn_secret
+
+    if profile_template == "":
+        if (ca_bundle not in (None, "")) or (auth_blob not in (None, "")):
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "ok": False,
+                    "error": {
+                        "code": "OPENVPN_PROFILE_REQUIRED",
+                        "message": "OpenVPN profile template is required to store CA or auth content.",
+                    },
+                },
+            )
+        if secret is not None:
+            db.delete(secret)
+            tenant.openvpn_secret = None
+        return
+
+    if secret is None:
+        if profile_template in (None, ""):
+            return
+        try:
+            secret = TenantOpenvpnSecret(
+                tenant_id=tenant.id,
+                profile_template_encrypted=encrypt_openvpn_secret(profile_template),
+                ca_bundle_encrypted=encrypt_openvpn_secret(ca_bundle) if ca_bundle else None,
+                auth_blob_encrypted=encrypt_openvpn_secret(auth_blob) if auth_blob else None,
+            )
+        except OpenVpnError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail={"ok": False, "error": {"code": exc.code, "message": str(exc)}},
+            ) from exc
+        tenant.openvpn_secret = secret
+        db.add(secret)
+        return
+
+    try:
+        if profile_template is not None:
+            secret.profile_template_encrypted = encrypt_openvpn_secret(profile_template)
+        if ca_bundle is not None:
+            secret.ca_bundle_encrypted = None if ca_bundle == "" else encrypt_openvpn_secret(ca_bundle)
+        if auth_blob is not None:
+            secret.auth_blob_encrypted = None if auth_blob == "" else encrypt_openvpn_secret(auth_blob)
+    except OpenVpnError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"ok": False, "error": {"code": exc.code, "message": str(exc)}},
+        ) from exc
+    db.add(secret)
+
+
 def _validate_openvpn_port(value: int | None) -> int | None:
     if value is None:
         return None
@@ -1423,6 +1608,8 @@ def _validate_openvpn_requirements(
     is_roaming: bool,
     openvpn_enabled: bool,
     openvpn_profile_ref: str | None,
+    openvpn_profile_template: str | None,
+    openvpn_secret: TenantOpenvpnSecret | None,
     openvpn_remote_host: str | None,
     openvpn_remote_port: int | None,
 ) -> None:
@@ -1430,16 +1617,19 @@ def _validate_openvpn_requirements(
         return
     missing_fields = []
     profile_template = None
-    if not openvpn_profile_ref:
-        missing_fields.append("openvpn_profile_ref")
-    else:
-        try:
-            profile_template = resolve_openvpn_secret(openvpn_profile_ref)
-        except OpenVpnError as exc:
-            raise HTTPException(
-                status_code=400,
-                detail={"ok": False, "error": {"code": exc.code, "message": str(exc)}},
-            ) from exc
+    try:
+        profile_template = resolve_openvpn_profile_template(
+            openvpn_profile_template=openvpn_profile_template,
+            openvpn_profile_ref=openvpn_profile_ref,
+            openvpn_secret=openvpn_secret,
+        )
+    except OpenVpnError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"ok": False, "error": {"code": exc.code, "message": str(exc)}},
+        ) from exc
+    if not profile_template:
+        missing_fields.append("openvpn_profile_template")
     needs_remote_settings = True
     if profile_template is not None:
         needs_remote_settings = profile_requires_remote_settings(profile_template)

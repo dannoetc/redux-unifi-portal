@@ -329,7 +329,7 @@ export default function SitesPage() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-6">
+    <div className="mx-auto flex min-h-[calc(100vh-104px)] w-full max-w-7xl flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 pb-4">
         <div>
           <h1 className="text-2xl font-semibold">Sites</h1>
@@ -514,7 +514,7 @@ export default function SitesPage() {
           </Dialog>
         </div>
       </div>
-      <div className="space-y-4">
+      <section className="flex min-h-0 flex-1 flex-col">
         {loading ? (
           <div className="space-y-3 rounded-lg border border-border/60 bg-muted/20 p-4">
             {Array.from({ length: 6 }).map((_, index) => (
@@ -540,11 +540,11 @@ export default function SitesPage() {
             </Button>
           </div>
         ) : (
-          <div className="overflow-hidden rounded-lg border border-border/60 bg-background">
+          <div className="flex-1 overflow-visible rounded-lg border border-border/60 bg-background">
             <DataTable columns={columns} data={sites} />
           </div>
         )}
-      </div>
+      </section>
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogContent>
           <DialogHeader>

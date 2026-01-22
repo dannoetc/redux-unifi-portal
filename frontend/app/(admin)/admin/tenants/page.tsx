@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { ColumnDef } from "@tanstack/react-table";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -8,13 +9,14 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ChevronDown, MoreHorizontal } from "lucide-react";
 
-import { apiDownloadFile, apiFetch } from "@/lib/api";
+import { ApiError, apiDownloadFile, apiFetch } from "@/lib/api";
 import { DataTable } from "@/components/data-table";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import StatusPill from "@/components/ui/StatusPill";
+import { Textarea } from "@/components/ui/textarea";
 
 const optionalPort = z.preprocess(
   (value) => {
@@ -38,8 +40,11 @@ const schema = z.object({
   is_roaming: z.boolean().optional(),
   openvpn_enabled: z.boolean().optional(),
   openvpn_profile_ref: z.string().optional().or(z.literal("")),
+  openvpn_profile_template: z.string().optional().or(z.literal("")),
   openvpn_auth_ref: z.string().optional().or(z.literal("")),
+  openvpn_auth_blob: z.string().optional().or(z.literal("")),
   openvpn_ca_ref: z.string().optional().or(z.literal("")),
+  openvpn_ca_bundle: z.string().optional().or(z.literal("")),
   openvpn_remote_host: z.string().optional().or(z.literal("")),
   openvpn_remote_port: optionalPort,
 });
@@ -50,10 +55,17 @@ const controllerSchema = z.object({
   is_roaming: z.boolean().optional(),
   openvpn_enabled: z.boolean().optional(),
   openvpn_profile_ref: z.string().optional().or(z.literal("")),
+  openvpn_profile_template: z.string().optional().or(z.literal("")),
   openvpn_auth_ref: z.string().optional().or(z.literal("")),
+  openvpn_auth_blob: z.string().optional().or(z.literal("")),
   openvpn_ca_ref: z.string().optional().or(z.literal("")),
+  openvpn_ca_bundle: z.string().optional().or(z.literal("")),
   openvpn_remote_host: z.string().optional().or(z.literal("")),
   openvpn_remote_port: optionalPort,
+});
+
+const openvpnGenerateSchema = z.object({
+  client_name: z.string().trim().min(1, "Client name is required.").max(64, "Client name is too long."),
 });
 
 type Tenant = {
@@ -66,15 +78,21 @@ type Tenant = {
   is_roaming?: boolean;
   openvpn_enabled?: boolean;
   openvpn_profile_ref?: string | null;
+  openvpn_profile_stored?: boolean;
   openvpn_auth_ref?: string | null;
+  openvpn_auth_stored?: boolean;
   openvpn_ca_ref?: string | null;
+  openvpn_ca_stored?: boolean;
   openvpn_remote_host?: string | null;
   openvpn_remote_port?: number | null;
+  openvpn_generated_client_name?: string | null;
+  openvpn_generated_created_at?: string | null;
 };
 
 type TenantList = { tenants: Tenant[] };
 
 type CreateTenant = z.infer<typeof schema>;
+type GenerateOpenvpn = z.infer<typeof openvpnGenerateSchema>;
 
 const formatStatus = (status?: string) => {
   const normalized = (status ?? "ACTIVE").toLowerCase();
@@ -120,14 +138,9 @@ export default function TenantsPage() {
   const [tenantToConfigure, setTenantToConfigure] = useState<Tenant | null>(null);
   const [setupOpen, setSetupOpen] = useState(true);
   const [setupInitialized, setSetupInitialized] = useState(false);
-
-  const isOpenVpnDownloadReady = (tenant: Tenant) =>
-    Boolean(
-      tenant.openvpn_enabled &&
-        tenant.openvpn_profile_ref &&
-        tenant.openvpn_remote_host &&
-        tenant.openvpn_remote_port
-    );
+  const [generateOpen, setGenerateOpen] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [tenantToGenerate, setTenantToGenerate] = useState<Tenant | null>(null);
 
   const form = useForm<CreateTenant>({
     resolver: zodResolver(schema),
@@ -139,9 +152,18 @@ export default function TenantsPage() {
       is_roaming: false,
       openvpn_enabled: false,
       openvpn_profile_ref: "",
+      openvpn_profile_template: "",
       openvpn_auth_ref: "",
+      openvpn_auth_blob: "",
       openvpn_ca_ref: "",
+      openvpn_ca_bundle: "",
       openvpn_remote_host: "",
+    },
+  });
+  const generateForm = useForm<GenerateOpenvpn>({
+    resolver: zodResolver(openvpnGenerateSchema),
+    defaultValues: {
+      client_name: "",
     },
   });
 
@@ -173,81 +195,214 @@ export default function TenantsPage() {
     }
   }, [loading, setupInitialized, tenants.length]);
 
+  const loadFileIntoField =
+    (field: "openvpn_profile_template" | "openvpn_ca_bundle" | "openvpn_auth_blob") =>
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (!file) {
+        return;
+      }
+      try {
+        const content = await file.text();
+        controllerForm.setValue(field, content, { shouldDirty: true });
+        toast.success("Loaded OpenVPN content from file.");
+      } catch (error: any) {
+        toast.error(error?.message ?? "Unable to read the selected file.");
+      } finally {
+        event.target.value = "";
+      }
+    };
+
   const RowActions = ({ tenant }: { tenant: Tenant }) => {
     const [open, setOpen] = useState(false);
+    const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
+    const triggerRef = useRef<HTMLButtonElement | null>(null);
+    const menuRef = useRef<HTMLDivElement | null>(null);
+    const openvpnEnabled = Boolean(tenant.openvpn_enabled);
+    const hasGeneratedProfile = Boolean(tenant.openvpn_generated_client_name);
+    const openvpnDisabledMessage = "OpenVPN generation is not configured for this tenant.";
+
+    useEffect(() => {
+      if (!open) {
+        return;
+      }
+      const updatePosition = () => {
+        const trigger = triggerRef.current;
+        if (!trigger) {
+          return;
+        }
+        const rect = trigger.getBoundingClientRect();
+        setMenuPosition({
+          top: rect.bottom + 8,
+          left: rect.right,
+        });
+      };
+      updatePosition();
+
+      const handlePointerDown = (event: MouseEvent) => {
+        const target = event.target as Node;
+        if (menuRef.current?.contains(target) || triggerRef.current?.contains(target)) {
+          return;
+        }
+        setOpen(false);
+      };
+      const handleKeyDown = (event: KeyboardEvent) => {
+        if (event.key === "Escape") {
+          setOpen(false);
+        }
+      };
+      const handleScroll = () => setOpen(false);
+      const handleResize = () => setOpen(false);
+
+      document.addEventListener("mousedown", handlePointerDown);
+      document.addEventListener("keydown", handleKeyDown);
+      window.addEventListener("scroll", handleScroll, true);
+      window.addEventListener("resize", handleResize);
+
+      return () => {
+        document.removeEventListener("mousedown", handlePointerDown);
+        document.removeEventListener("keydown", handleKeyDown);
+        window.removeEventListener("scroll", handleScroll, true);
+        window.removeEventListener("resize", handleResize);
+      };
+    }, [open]);
 
     return (
-      <details
-        className="relative"
-        open={open}
-        onToggle={(event) => setOpen((event.target as HTMLDetailsElement).open)}
-      >
-        <summary
+      <>
+        <button
+          ref={triggerRef}
+          type="button"
+          aria-haspopup="menu"
+          aria-expanded={open}
           aria-label="Open row actions"
-          className="flex h-8 w-8 list-none items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+          className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+          onClick={() => setOpen((prev) => !prev)}
         >
           <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
-        </summary>
-        <div className="absolute right-0 z-20 mt-2 min-w-[180px] rounded-md border border-border bg-white p-1 shadow-soft">
-          <button
-            type="button"
-            className="w-full rounded-sm px-2 py-1.5 text-left text-sm text-foreground hover:bg-muted"
-            onClick={() => {
-              setTenantToConfigure(tenant);
-              controllerForm.reset({
-                unifi_base_url: displayUnifiHost(tenant.unifi_base_url),
-                unifi_api_key_ref: tenant.unifi_api_key_ref ?? "",
-                is_roaming: tenant.is_roaming ?? false,
-                openvpn_enabled: tenant.openvpn_enabled ?? false,
-                openvpn_profile_ref: tenant.openvpn_profile_ref ?? "",
-                openvpn_auth_ref: tenant.openvpn_auth_ref ?? "",
-                openvpn_ca_ref: tenant.openvpn_ca_ref ?? "",
-                openvpn_remote_host: tenant.openvpn_remote_host ?? "",
-                openvpn_remote_port: tenant.openvpn_remote_port ?? undefined,
-              });
-              setControllerOpen(true);
-              setOpen(false);
-            }}
-          >
-            Configure UniFi
-          </button>
-          {isOpenVpnDownloadReady(tenant) ? (
-            <>
-              <div className="my-1 h-px bg-border/70" />
-              <button
-                type="button"
-                className="w-full rounded-sm px-2 py-1.5 text-left text-sm text-foreground hover:bg-muted"
-                onClick={async () => {
-                  try {
-                    await apiDownloadFile(
-                      `/api/admin/tenants/${tenant.id}/openvpn/profile`,
-                      `${tenant.slug}-openvpn.ovpn`
-                    );
-                    toast.success("OpenVPN profile downloaded.");
-                  } catch (error: any) {
-                    toast.error(error?.message ?? "Unable to download OpenVPN profile.");
-                  }
-                  setOpen(false);
+        </button>
+        {open && typeof document !== "undefined"
+          ? createPortal(
+              <div
+                ref={menuRef}
+                role="menu"
+                className="z-50 min-w-[180px] rounded-md border border-border bg-white p-1 shadow-soft"
+                style={{
+                  position: "fixed",
+                  top: menuPosition.top,
+                  left: menuPosition.left,
+                  transform: "translateX(-100%)",
                 }}
               >
-                Download OpenVPN profile
-              </button>
-            </>
-          ) : null}
-          <div className="my-1 h-px bg-border/70" />
-          <button
-            type="button"
-            className="w-full rounded-sm px-2 py-1.5 text-left text-sm text-destructive hover:bg-muted"
-            onClick={() => {
-              setTenantToDelete(tenant);
-              setDeleteOpen(true);
-              setOpen(false);
-            }}
-          >
-            Remove tenant
-          </button>
-        </div>
-      </details>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="w-full rounded-sm px-2 py-1.5 text-left text-sm text-foreground hover:bg-muted"
+                  onClick={() => {
+                    setTenantToConfigure(tenant);
+                    controllerForm.reset({
+                      unifi_base_url: displayUnifiHost(tenant.unifi_base_url),
+                      unifi_api_key_ref: tenant.unifi_api_key_ref ?? "",
+                      is_roaming: tenant.is_roaming ?? false,
+                      openvpn_enabled: tenant.openvpn_enabled ?? false,
+                      openvpn_profile_ref: tenant.openvpn_profile_ref ?? "",
+                      openvpn_profile_template: "",
+                      openvpn_auth_ref: tenant.openvpn_auth_ref ?? "",
+                      openvpn_auth_blob: "",
+                      openvpn_ca_ref: tenant.openvpn_ca_ref ?? "",
+                      openvpn_ca_bundle: "",
+                      openvpn_remote_host: tenant.openvpn_remote_host ?? "",
+                      openvpn_remote_port: tenant.openvpn_remote_port ?? undefined,
+                    });
+                    setControllerOpen(true);
+                    setOpen(false);
+                  }}
+                >
+                  Configure UniFi
+                </button>
+                <div className="my-1 h-px bg-border/70" />
+                <button
+                  type="button"
+                  role="menuitem"
+                  title={openvpnEnabled ? undefined : openvpnDisabledMessage}
+                  aria-disabled={!openvpnEnabled}
+                  className={`w-full rounded-sm px-2 py-1.5 text-left text-sm hover:bg-muted ${
+                    openvpnEnabled ? "text-foreground" : "cursor-not-allowed text-muted-foreground"
+                  }`}
+                  onClick={() => {
+                    if (!openvpnEnabled) {
+                      toast.error(openvpnDisabledMessage);
+                      setOpen(false);
+                      return;
+                    }
+                    setTenantToGenerate(tenant);
+                    generateForm.reset({ client_name: "" });
+                    setGenerateOpen(true);
+                    setOpen(false);
+                  }}
+                >
+                  Generate OpenVPN profile...
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  title={!openvpnEnabled ? openvpnDisabledMessage : undefined}
+                  aria-disabled={!openvpnEnabled}
+                  className={`w-full rounded-sm px-2 py-1.5 text-left text-sm hover:bg-muted ${
+                    openvpnEnabled ? "text-foreground" : "cursor-not-allowed text-muted-foreground"
+                  }`}
+                  onClick={async () => {
+                    if (!openvpnEnabled) {
+                      toast.error(openvpnDisabledMessage);
+                      setOpen(false);
+                      return;
+                    }
+                    if (!hasGeneratedProfile) {
+                      toast.error("No OpenVPN profile generated yet. Generate one first.");
+                      setOpen(false);
+                      return;
+                    }
+                    try {
+                      await apiDownloadFile(
+                        `/api/admin/tenants/${tenant.id}/openvpn/profile`,
+                        `${tenant.slug}-openvpn.ovpn`
+                      );
+                      toast.success("OpenVPN profile downloaded.");
+                    } catch (error: any) {
+                      if (error instanceof ApiError) {
+                        if (error.code === "OPENVPN_NOT_CONFIGURED") {
+                          toast.error(openvpnDisabledMessage);
+                        } else if (error.code === "OPENVPN_PROFILE_NOT_GENERATED") {
+                          toast.error("No OpenVPN profile generated yet. Generate one first.");
+                        } else {
+                          toast.error(error.message);
+                        }
+                      } else {
+                        toast.error(error?.message ?? "Unable to download OpenVPN profile.");
+                      }
+                    }
+                    setOpen(false);
+                  }}
+                >
+                  Download OpenVPN profile
+                </button>
+                <div className="my-1 h-px bg-border/70" />
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="w-full rounded-sm px-2 py-1.5 text-left text-sm text-destructive hover:bg-muted"
+                  onClick={() => {
+                    setTenantToDelete(tenant);
+                    setDeleteOpen(true);
+                    setOpen(false);
+                  }}
+                >
+                  Remove tenant
+                </button>
+              </div>,
+              document.body
+            )
+          : null}
+      </>
     );
   };
 
@@ -338,6 +493,11 @@ export default function TenantsPage() {
         ...values,
         unifi_base_url: normalizeUnifiBaseUrl(values.unifi_base_url),
         openvpn_remote_port: openvpnPort,
+        openvpn_profile_template: values.openvpn_profile_template?.trim()
+          ? values.openvpn_profile_template
+          : undefined,
+        openvpn_ca_bundle: values.openvpn_ca_bundle?.trim() ? values.openvpn_ca_bundle : undefined,
+        openvpn_auth_blob: values.openvpn_auth_blob?.trim() ? values.openvpn_auth_blob : undefined,
       };
       const data = await apiFetch<{ tenant: Tenant }>(`/api/admin/tenants/${tenantToConfigure.id}`, {
         method: "PUT",
@@ -351,6 +511,48 @@ export default function TenantsPage() {
       setTenantToConfigure(null);
     } catch (error: any) {
       toast.error(error?.message ?? "Unable to update UniFi controller.");
+    }
+  };
+
+  const refreshTenants = async () => {
+    try {
+      const data = await apiFetch<TenantList>("/api/admin/tenants");
+      setTenants(data.tenants);
+    } catch (error: any) {
+      toast.error(error?.message ?? "Unable to refresh tenants.");
+    }
+  };
+
+  const generateOpenvpnProfile = async (values: GenerateOpenvpn) => {
+    if (!tenantToGenerate) {
+      return;
+    }
+    setGenerating(true);
+    try {
+      const data = await apiFetch<{ client_name: string }>(
+        `/api/admin/tenants/${tenantToGenerate.id}/openvpn/generate`,
+        {
+          method: "POST",
+          body: JSON.stringify({ client_name: values.client_name.trim() }),
+        }
+      );
+      await refreshTenants();
+      toast.success(`OpenVPN profile generated for ${data.client_name}.`);
+      setGenerateOpen(false);
+      setTenantToGenerate(null);
+      generateForm.reset({ client_name: "" });
+    } catch (error: any) {
+      if (error instanceof ApiError) {
+        if (error.code === "OPENVPN_NOT_CONFIGURED") {
+          toast.error("OpenVPN generation is not configured for this tenant.");
+        } else {
+          toast.error(error.message);
+        }
+      } else {
+        toast.error(error?.message ?? "Unable to generate OpenVPN profile.");
+      }
+    } finally {
+      setGenerating(false);
     }
   };
 
@@ -370,137 +572,131 @@ export default function TenantsPage() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-6">
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
-        <section className="order-1 space-y-5">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 pb-4">
-            <div>
-              <h1 className="text-2xl font-semibold">Tenants</h1>
-              <p className="mt-1 text-sm text-muted-foreground">Manage customer tenants and status.</p>
-            </div>
-            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-              <DialogTrigger asChild>
-                <Button variant="primary" className="shadow-sm">
-                  New tenant
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-3xl">
-                <DialogHeader>
-                  <DialogTitle>Create tenant</DialogTitle>
-                  <DialogDescription>Provision a new MSP tenant.</DialogDescription>
-                </DialogHeader>
-                <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Name</Label>
-                    <Input id="name" autoFocus {...form.register("name")} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="slug">Slug</Label>
-                    <Input id="slug" {...form.register("slug")} />
-                  </div>
-                  <div className="flex items-center justify-between rounded-lg border border-border/60 px-3 py-2">
-                    <div>
-                      <div className="text-sm font-medium">Active</div>
-                      <div className="text-xs text-muted-foreground">Toggle tenant access.</div>
-                    </div>
-                    <label className="relative inline-flex cursor-pointer items-center">
-                      <input
-                        type="checkbox"
-                        className="peer sr-only"
-                        checked={form.watch("status") !== "SUSPENDED"}
-                        onChange={() =>
-                          form.setValue(
-                            "status",
-                            form.watch("status") === "SUSPENDED" ? "ACTIVE" : "SUSPENDED"
-                          )
-                        }
-                      />
-                      <span className="h-5 w-9 rounded-full bg-muted transition peer-checked:bg-primary" />
-                      <span className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition peer-checked:translate-x-4" />
-                    </label>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="unifi_base_url">UniFi controller IP</Label>
-                    <Input
-                      id="unifi_base_url"
-                      placeholder="71.162.143.124"
-                      {...form.register("unifi_base_url")}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      We append {UNIFI_INTEGRATION_PATH} automatically.
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="unifi_api_key_ref">UniFi API key reference</Label>
-                    <Input id="unifi_api_key_ref" type="password" {...form.register("unifi_api_key_ref")} />
-                    <p className="text-xs text-muted-foreground">Use a secret reference, not a raw key.</p>
-                  </div>
-                  <DialogFooter>
-                    <Button type="submit" variant="primary">
-                      Create tenant
-                    </Button>
-                  </DialogFooter>
-                </form>
-              </DialogContent>
-            </Dialog>
-          </div>
-          <div className="space-y-4">
-            {loading ? (
-              <div className="space-y-3 rounded-lg border border-border/60 bg-muted/20 p-4">
-                {Array.from({ length: 6 }).map((_, index) => (
-                  <div
-                    key={`tenant-skeleton-${index}`}
-                    className="grid animate-pulse grid-cols-[2fr_1fr_1fr_80px] items-center gap-4"
-                  >
-                    <div className="h-4 rounded bg-muted/60" />
-                    <div className="h-4 rounded bg-muted/60" />
-                    <div className="h-4 rounded bg-muted/60" />
-                    <div className="h-8 rounded bg-muted/60" />
-                  </div>
-                ))}
+    <div className="mx-auto flex min-h-[calc(100vh-104px)] w-full max-w-7xl flex-col gap-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 pb-4">
+        <div>
+          <h1 className="text-2xl font-semibold">Tenants</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Manage customer tenants and status.</p>
+        </div>
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogTrigger asChild>
+            <Button variant="primary" className="shadow-sm">
+              New tenant
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-3xl">
+            <DialogHeader>
+              <DialogTitle>Create tenant</DialogTitle>
+              <DialogDescription>Provision a new MSP tenant.</DialogDescription>
+            </DialogHeader>
+            <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
+              <div className="space-y-2">
+                <Label htmlFor="name">Name</Label>
+                <Input id="name" autoFocus {...form.register("name")} />
               </div>
-            ) : tenants.length === 0 ? (
-              <div className="flex flex-col items-start gap-2 rounded-lg border border-dashed border-border/60 bg-background/80 p-6">
-                <div className="text-sm font-semibold">No tenants yet.</div>
-                <div className="text-sm text-muted-foreground">
-                  Create your first tenant to start provisioning sites.
+              <div className="space-y-2">
+                <Label htmlFor="slug">Slug</Label>
+                <Input id="slug" {...form.register("slug")} />
+              </div>
+              <div className="flex items-center justify-between rounded-lg border border-border/60 px-3 py-2">
+                <div>
+                  <div className="text-sm font-medium">Active</div>
+                  <div className="text-xs text-muted-foreground">Toggle tenant access.</div>
                 </div>
-                <Button variant="primary" onClick={() => setDialogOpen(true)}>
+                <label className="relative inline-flex cursor-pointer items-center">
+                  <input
+                    type="checkbox"
+                    className="peer sr-only"
+                    checked={form.watch("status") !== "SUSPENDED"}
+                    onChange={() =>
+                      form.setValue(
+                        "status",
+                        form.watch("status") === "SUSPENDED" ? "ACTIVE" : "SUSPENDED"
+                      )
+                    }
+                  />
+                  <span className="h-5 w-9 rounded-full bg-muted transition peer-checked:bg-primary" />
+                  <span className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition peer-checked:translate-x-4" />
+                </label>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="unifi_base_url">UniFi controller IP</Label>
+                <Input
+                  id="unifi_base_url"
+                  placeholder="71.162.143.124"
+                  {...form.register("unifi_base_url")}
+                />
+                <p className="text-xs text-muted-foreground">
+                  We append {UNIFI_INTEGRATION_PATH} automatically.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="unifi_api_key_ref">UniFi API key reference</Label>
+                <Input id="unifi_api_key_ref" type="password" {...form.register("unifi_api_key_ref")} />
+                <p className="text-xs text-muted-foreground">Use a secret reference, not a raw key.</p>
+              </div>
+              <DialogFooter>
+                <Button type="submit" variant="primary">
                   Create tenant
                 </Button>
-              </div>
-            ) : (
-              <div className="overflow-hidden rounded-lg border border-border/60 bg-background">
-                <DataTable columns={columns} data={tenants} />
-              </div>
-            )}
-          </div>
-        </section>
-        <aside className="order-2 lg:order-2">
-          <details
-            className="group rounded-lg border border-border/60 bg-muted/30 p-4"
-            open={setupOpen}
-            onToggle={(event) => setSetupOpen((event.target as HTMLDetailsElement).open)}
-          >
-            <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-semibold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-white">
-              Setup checklist
-              <ChevronDown
-                className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180"
-                aria-hidden="true"
-              />
-            </summary>
-            <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
-              <li>1. Create a tenant and capture the tenant slug.</li>
-              <li>2. Add one or more sites with UniFi credentials and default access policy.</li>
-              <li>
-                3. Set the UniFi external portal URL to{" "}
-                <span className="font-medium text-foreground">https://wifi.reduxtc.com/guest/</span>. The
-                portal resolves the correct site using the UniFi Network API.
-              </li>
-            </ul>
-          </details>
-        </aside>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
       </div>
+      <details
+        className="group rounded-lg bg-muted/30 p-4"
+        open={setupOpen}
+        onToggle={(event) => setSetupOpen((event.target as HTMLDetailsElement).open)}
+      >
+        <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-semibold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-white">
+          Setup checklist
+          <ChevronDown
+            className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180"
+            aria-hidden="true"
+          />
+        </summary>
+        <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
+          <li>1. Create a tenant and capture the tenant slug.</li>
+          <li>2. Add one or more sites with UniFi credentials and default access policy.</li>
+          <li>
+            3. In the UniFi console, set the external portal host/IP to{" "}
+            <span className="font-medium text-foreground">wifi.reduxtc.com</span> (hostnames only). The
+            portal resolves the correct site using the UniFi Network API.
+          </li>
+        </ul>
+      </details>
+      <section className="flex min-h-0 flex-1 flex-col">
+        {loading ? (
+          <div className="space-y-3 rounded-lg border border-border/60 bg-muted/20 p-4">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <div
+                key={`tenant-skeleton-${index}`}
+                className="grid animate-pulse grid-cols-[2fr_1fr_1fr_80px] items-center gap-4"
+              >
+                <div className="h-4 rounded bg-muted/60" />
+                <div className="h-4 rounded bg-muted/60" />
+                <div className="h-4 rounded bg-muted/60" />
+                <div className="h-8 rounded bg-muted/60" />
+              </div>
+            ))}
+          </div>
+        ) : tenants.length === 0 ? (
+          <div className="flex flex-col items-start gap-2 rounded-lg border border-dashed border-border/60 bg-background/80 p-6">
+            <div className="text-sm font-semibold">No tenants yet.</div>
+            <div className="text-sm text-muted-foreground">
+              Create your first tenant to start provisioning sites.
+            </div>
+            <Button variant="primary" onClick={() => setDialogOpen(true)}>
+              Create tenant
+            </Button>
+          </div>
+        ) : (
+          <div className="flex-1 overflow-visible rounded-lg border border-border/60 bg-background">
+            <DataTable columns={columns} data={tenants} />
+          </div>
+        )}
+      </section>
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogContent>
           <DialogHeader>
@@ -517,6 +713,43 @@ export default function TenantsPage() {
               {deleting ? "Removing..." : "Confirm remove"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={generateOpen} onOpenChange={setGenerateOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Generate OpenVPN profile</DialogTitle>
+            <DialogDescription>
+              Create a client configuration for {tenantToGenerate?.name ?? "this tenant"}.
+            </DialogDescription>
+          </DialogHeader>
+          <form className="space-y-4" onSubmit={generateForm.handleSubmit(generateOpenvpnProfile)}>
+            <div className="space-y-2">
+              <Label htmlFor="openvpn_client_name">Client name</Label>
+              <Input
+                id="openvpn_client_name"
+                placeholder="gateway-01"
+                autoFocus
+                {...generateForm.register("client_name")}
+              />
+              {generateForm.formState.errors.client_name ? (
+                <p className="text-xs text-destructive">
+                  {generateForm.formState.errors.client_name.message}
+                </p>
+              ) : null}
+              <p className="text-xs text-muted-foreground">
+                Use a unique client name per gateway to rotate profiles as needed.
+              </p>
+            </div>
+            <DialogFooter className="gap-2">
+              <Button type="button" variant="secondary" onClick={() => setGenerateOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" variant="primary" disabled={generating}>
+                {generating ? "Generating..." : "Generate profile"}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
       <Dialog open={controllerOpen} onOpenChange={setControllerOpen}>
@@ -600,28 +833,94 @@ export default function TenantsPage() {
                 </div>
               </div>
               <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="openvpn_profile_template">OpenVPN profile template</Label>
+                  {tenantToConfigure?.openvpn_profile_stored ? (
+                    <span className="text-xs font-medium text-emerald-600">Stored</span>
+                  ) : null}
+                </div>
+                <Input
+                  id="openvpn_profile_template_file"
+                  type="file"
+                  accept=".ovpn,.txt"
+                  onChange={loadFileIntoField("openvpn_profile_template")}
+                />
+                <Textarea
+                  id="openvpn_profile_template"
+                  placeholder="Paste the .ovpn template content"
+                  {...controllerForm.register("openvpn_profile_template")}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Stored templates are encrypted at rest. Include {`{{REMOTE_HOST}}`} and {`{{REMOTE_PORT}}`}
+                  tokens if you want the server to inject tenant-specific values. Leave blank to keep the
+                  existing stored template.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="openvpn_ca_bundle">CA bundle content</Label>
+                  {tenantToConfigure?.openvpn_ca_stored ? (
+                    <span className="text-xs font-medium text-emerald-600">Stored</span>
+                  ) : null}
+                </div>
+                <Input
+                  id="openvpn_ca_bundle_file"
+                  type="file"
+                  accept=".crt,.pem,.txt"
+                  onChange={loadFileIntoField("openvpn_ca_bundle")}
+                />
+                <Textarea
+                  id="openvpn_ca_bundle"
+                  placeholder="Optional CA bundle content"
+                  {...controllerForm.register("openvpn_ca_bundle")}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Optional: store a CA bundle to append when the template does not already include a
+                  &lt;ca&gt; block. Leave blank to keep the existing stored bundle.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="openvpn_auth_blob">Auth credentials content</Label>
+                  {tenantToConfigure?.openvpn_auth_stored ? (
+                    <span className="text-xs font-medium text-emerald-600">Stored</span>
+                  ) : null}
+                </div>
+                <Input
+                  id="openvpn_auth_blob_file"
+                  type="file"
+                  accept=".txt,.conf"
+                  onChange={loadFileIntoField("openvpn_auth_blob")}
+                />
+                <Textarea
+                  id="openvpn_auth_blob"
+                  placeholder="username\npassword"
+                  {...controllerForm.register("openvpn_auth_blob")}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Optional: store auth-user-pass credentials to inline when missing from the template. Leave
+                  blank to keep the existing stored credentials.
+                </p>
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="openvpn_profile_ref">OpenVPN profile template ref</Label>
                 <Input id="openvpn_profile_ref" {...controllerForm.register("openvpn_profile_ref")} />
                 <p className="text-xs text-muted-foreground">
-                  Reference an environment variable containing the full .ovpn template. Include the
-                  required {`{{REMOTE_HOST}}`} and {`{{REMOTE_PORT}}`} tokens so the server can inject
-                  the tenant-specific remote address.
+                  Backward-compatible env var reference containing the full .ovpn template.
                 </p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="openvpn_ca_ref">CA bundle ref</Label>
                 <Input id="openvpn_ca_ref" {...controllerForm.register("openvpn_ca_ref")} />
                 <p className="text-xs text-muted-foreground">
-                  Optional: reference a CA bundle secret to append a &lt;ca&gt; block when the template
-                  does not already include one.
+                  Optional env var reference containing a CA bundle.
                 </p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="openvpn_auth_ref">Auth credentials ref</Label>
                 <Input id="openvpn_auth_ref" type="password" {...controllerForm.register("openvpn_auth_ref")} />
                 <p className="text-xs text-muted-foreground">
-                  Optional: reference a username/password secret to inject an auth-user-pass block if the
-                  template does not already include one.
+                  Optional env var reference containing username/password credentials.
                 </p>
               </div>
             </div>
