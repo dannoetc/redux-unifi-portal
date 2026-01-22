@@ -12,7 +12,7 @@ type PopoverMenuContextValue = {
 const PopoverMenuContext = React.createContext<PopoverMenuContextValue | null>(null);
 
 type PopoverMenuProps = {
-  trigger: React.ReactElement;
+  trigger: React.ReactElement<any>;
   children: React.ReactNode;
   align?: "start" | "center" | "end";
   sideOffset?: number;
@@ -56,7 +56,7 @@ export function PopoverMenu({
     [isControlled, onOpenChange]
   );
 
-  const triggerElement = React.isValidElement(trigger)
+  const triggerElement = React.isValidElement<React.HTMLAttributes<HTMLElement>>(trigger)
     ? React.cloneElement(trigger, {
         "aria-haspopup": "menu",
         "aria-expanded": resolvedOpen,
