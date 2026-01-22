@@ -31,7 +31,9 @@ else
 fi
 
 echo "=== OpenVPN Ready ==="
+echo "PKI is ready for client profile generation."
+echo "Container will stay alive to serve profile generation requests."
 
-# Execute the original entrypoint command
-# The kylemanna/openvpn image expects to run OpenVPN server by default
-exec openvpn --config /etc/openvpn/openvpn.conf
+# Keep the container running (no TUN/TAP needed for client profile generation)
+# The API will use 'docker compose exec' to run easyrsa commands
+exec tail -f /dev/null
