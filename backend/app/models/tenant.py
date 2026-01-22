@@ -42,3 +42,9 @@ class Tenant(Base, TimestampMixin):
         cascade="all, delete-orphan",
         uselist=False,
     )
+    openvpn_client_profiles = relationship(
+        "TenantOpenvpnClientProfile",
+        back_populates="tenant",
+        cascade="all, delete-orphan",
+        order_by="TenantOpenvpnClientProfile.created_at.desc()",
+    )

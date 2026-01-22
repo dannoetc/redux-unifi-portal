@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from datetime import datetime
 
+from pydantic import BaseModel, Field
 
 class TenantCreateRequest(BaseModel):
     name: str
@@ -98,3 +99,9 @@ class TenantResponse(BaseModel):
     openvpn_ca_stored: bool
     openvpn_remote_host: str | None
     openvpn_remote_port: int | None
+    openvpn_generated_client_name: str | None = None
+    openvpn_generated_created_at: datetime | None = None
+
+
+class OpenvpnGenerateRequest(BaseModel):
+    client_name: str

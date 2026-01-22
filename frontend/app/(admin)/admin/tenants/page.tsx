@@ -9,7 +9,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ChevronDown, MoreHorizontal } from "lucide-react";
 
-import { apiDownloadFile, apiFetch } from "@/lib/api";
+import { ApiError, apiDownloadFile, apiFetch } from "@/lib/api";
 import { DataTable } from "@/components/data-table";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -64,6 +64,10 @@ const controllerSchema = z.object({
   openvpn_remote_port: optionalPort,
 });
 
+const openvpnGenerateSchema = z.object({
+  client_name: z.string().trim().min(1, "Client name is required.").max(64, "Client name is too long."),
+});
+
 type Tenant = {
   id: string;
   name: string;
@@ -81,11 +85,14 @@ type Tenant = {
   openvpn_ca_stored?: boolean;
   openvpn_remote_host?: string | null;
   openvpn_remote_port?: number | null;
+  openvpn_generated_client_name?: string | null;
+  openvpn_generated_created_at?: string | null;
 };
 
 type TenantList = { tenants: Tenant[] };
 
 type CreateTenant = z.infer<typeof schema>;
+type GenerateOpenvpn = z.infer<typeof openvpnGenerateSchema>;
 
 const formatStatus = (status?: string) => {
   const normalized = (status ?? "ACTIVE").toLowerCase();
@@ -131,12 +138,9 @@ export default function TenantsPage() {
   const [tenantToConfigure, setTenantToConfigure] = useState<Tenant | null>(null);
   const [setupOpen, setSetupOpen] = useState(true);
   const [setupInitialized, setSetupInitialized] = useState(false);
-
-  const isOpenVpnDownloadReady = (tenant: Tenant) =>
-    Boolean(
-      tenant.openvpn_enabled &&
-        (tenant.openvpn_profile_ref || tenant.openvpn_profile_stored)
-    );
+  const [generateOpen, setGenerateOpen] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [tenantToGenerate, setTenantToGenerate] = useState<Tenant | null>(null);
 
   const form = useForm<CreateTenant>({
     resolver: zodResolver(schema),
@@ -154,6 +158,12 @@ export default function TenantsPage() {
       openvpn_ca_ref: "",
       openvpn_ca_bundle: "",
       openvpn_remote_host: "",
+    },
+  });
+  const generateForm = useForm<GenerateOpenvpn>({
+    resolver: zodResolver(openvpnGenerateSchema),
+    defaultValues: {
+      client_name: "",
     },
   });
 
@@ -208,6 +218,9 @@ export default function TenantsPage() {
     const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
     const triggerRef = useRef<HTMLButtonElement | null>(null);
     const menuRef = useRef<HTMLDivElement | null>(null);
+    const openvpnEnabled = Boolean(tenant.openvpn_enabled);
+    const hasGeneratedProfile = Boolean(tenant.openvpn_generated_client_name);
+    const openvpnDisabledMessage = "OpenVPN generation is not configured for this tenant.";
 
     useEffect(() => {
       if (!open) {
@@ -306,30 +319,72 @@ export default function TenantsPage() {
                 >
                   Configure UniFi
                 </button>
-                {isOpenVpnDownloadReady(tenant) ? (
-                  <>
-                    <div className="my-1 h-px bg-border/70" />
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className="w-full rounded-sm px-2 py-1.5 text-left text-sm text-foreground hover:bg-muted"
-                      onClick={async () => {
-                        try {
-                          await apiDownloadFile(
-                            `/api/admin/tenants/${tenant.id}/openvpn/profile`,
-                            `${tenant.slug}-openvpn.ovpn`
-                          );
-                          toast.success("OpenVPN profile downloaded.");
-                        } catch (error: any) {
-                          toast.error(error?.message ?? "Unable to download OpenVPN profile.");
+                <div className="my-1 h-px bg-border/70" />
+                <button
+                  type="button"
+                  role="menuitem"
+                  title={openvpnEnabled ? undefined : openvpnDisabledMessage}
+                  aria-disabled={!openvpnEnabled}
+                  className={`w-full rounded-sm px-2 py-1.5 text-left text-sm hover:bg-muted ${
+                    openvpnEnabled ? "text-foreground" : "cursor-not-allowed text-muted-foreground"
+                  }`}
+                  onClick={() => {
+                    if (!openvpnEnabled) {
+                      toast.error(openvpnDisabledMessage);
+                      setOpen(false);
+                      return;
+                    }
+                    setTenantToGenerate(tenant);
+                    generateForm.reset({ client_name: "" });
+                    setGenerateOpen(true);
+                    setOpen(false);
+                  }}
+                >
+                  Generate OpenVPN profile...
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  title={!openvpnEnabled ? openvpnDisabledMessage : undefined}
+                  aria-disabled={!openvpnEnabled}
+                  className={`w-full rounded-sm px-2 py-1.5 text-left text-sm hover:bg-muted ${
+                    openvpnEnabled ? "text-foreground" : "cursor-not-allowed text-muted-foreground"
+                  }`}
+                  onClick={async () => {
+                    if (!openvpnEnabled) {
+                      toast.error(openvpnDisabledMessage);
+                      setOpen(false);
+                      return;
+                    }
+                    if (!hasGeneratedProfile) {
+                      toast.error("No OpenVPN profile generated yet. Generate one first.");
+                      setOpen(false);
+                      return;
+                    }
+                    try {
+                      await apiDownloadFile(
+                        `/api/admin/tenants/${tenant.id}/openvpn/profile`,
+                        `${tenant.slug}-openvpn.ovpn`
+                      );
+                      toast.success("OpenVPN profile downloaded.");
+                    } catch (error: any) {
+                      if (error instanceof ApiError) {
+                        if (error.code === "OPENVPN_NOT_CONFIGURED") {
+                          toast.error(openvpnDisabledMessage);
+                        } else if (error.code === "OPENVPN_PROFILE_NOT_GENERATED") {
+                          toast.error("No OpenVPN profile generated yet. Generate one first.");
+                        } else {
+                          toast.error(error.message);
                         }
-                        setOpen(false);
-                      }}
-                    >
-                      Download OpenVPN profile
-                    </button>
-                  </>
-                ) : null}
+                      } else {
+                        toast.error(error?.message ?? "Unable to download OpenVPN profile.");
+                      }
+                    }
+                    setOpen(false);
+                  }}
+                >
+                  Download OpenVPN profile
+                </button>
                 <div className="my-1 h-px bg-border/70" />
                 <button
                   type="button"
@@ -456,6 +511,48 @@ export default function TenantsPage() {
       setTenantToConfigure(null);
     } catch (error: any) {
       toast.error(error?.message ?? "Unable to update UniFi controller.");
+    }
+  };
+
+  const refreshTenants = async () => {
+    try {
+      const data = await apiFetch<TenantList>("/api/admin/tenants");
+      setTenants(data.tenants);
+    } catch (error: any) {
+      toast.error(error?.message ?? "Unable to refresh tenants.");
+    }
+  };
+
+  const generateOpenvpnProfile = async (values: GenerateOpenvpn) => {
+    if (!tenantToGenerate) {
+      return;
+    }
+    setGenerating(true);
+    try {
+      const data = await apiFetch<{ client_name: string }>(
+        `/api/admin/tenants/${tenantToGenerate.id}/openvpn/generate`,
+        {
+          method: "POST",
+          body: JSON.stringify({ client_name: values.client_name.trim() }),
+        }
+      );
+      await refreshTenants();
+      toast.success(`OpenVPN profile generated for ${data.client_name}.`);
+      setGenerateOpen(false);
+      setTenantToGenerate(null);
+      generateForm.reset({ client_name: "" });
+    } catch (error: any) {
+      if (error instanceof ApiError) {
+        if (error.code === "OPENVPN_NOT_CONFIGURED") {
+          toast.error("OpenVPN generation is not configured for this tenant.");
+        } else {
+          toast.error(error.message);
+        }
+      } else {
+        toast.error(error?.message ?? "Unable to generate OpenVPN profile.");
+      }
+    } finally {
+      setGenerating(false);
     }
   };
 
@@ -616,6 +713,43 @@ export default function TenantsPage() {
               {deleting ? "Removing..." : "Confirm remove"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={generateOpen} onOpenChange={setGenerateOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Generate OpenVPN profile</DialogTitle>
+            <DialogDescription>
+              Create a client configuration for {tenantToGenerate?.name ?? "this tenant"}.
+            </DialogDescription>
+          </DialogHeader>
+          <form className="space-y-4" onSubmit={generateForm.handleSubmit(generateOpenvpnProfile)}>
+            <div className="space-y-2">
+              <Label htmlFor="openvpn_client_name">Client name</Label>
+              <Input
+                id="openvpn_client_name"
+                placeholder="gateway-01"
+                autoFocus
+                {...generateForm.register("client_name")}
+              />
+              {generateForm.formState.errors.client_name ? (
+                <p className="text-xs text-destructive">
+                  {generateForm.formState.errors.client_name.message}
+                </p>
+              ) : null}
+              <p className="text-xs text-muted-foreground">
+                Use a unique client name per gateway to rotate profiles as needed.
+              </p>
+            </div>
+            <DialogFooter className="gap-2">
+              <Button type="button" variant="secondary" onClick={() => setGenerateOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" variant="primary" disabled={generating}>
+                {generating ? "Generating..." : "Generate profile"}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
       <Dialog open={controllerOpen} onOpenChange={setControllerOpen}>
