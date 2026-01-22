@@ -123,16 +123,19 @@ export function OpenVpnGenerateDialog({
           body: JSON.stringify({ client_name: values.client_name.trim() }),
         }
       );
-      const resolvedClient =
-        "client" in data && data.client
-          ? data.client
-          : data.client_name
-            ? {
-                id: data.id ?? "",
-                client_name: data.client_name,
-                created_at: data.created_at ?? new Date().toISOString(),
-              }
-            : null;
+      let resolvedClient: OpenVpnClient | null = null;
+      if ("client" in data && data.client) {
+        resolvedClient = data.client;
+      } else {
+        const legacy = data as { id?: string; client_name?: string; created_at?: string };
+        if (legacy.client_name) {
+          resolvedClient = {
+            id: legacy.id ?? "",
+            client_name: legacy.client_name,
+            created_at: legacy.created_at ?? new Date().toISOString(),
+          };
+        }
+      }
       if (!resolvedClient) {
         throw new Error("OpenVPN generation returned an invalid response.");
       }
