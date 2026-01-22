@@ -139,7 +139,7 @@ def generate_openvpn_client_profile(client_name: str) -> str:
     
     # Run easyrsa in the PKI directory to generate client certificate
     _run_openvpn_command(
-        ["easyrsa", "--pki-dir", pki_path, "build-client-full", cleaned, "nopass"],
+        ["/usr/share/easy-rsa/easyrsa", "--batch", f"--pki={pki_path}", "build-client-full", cleaned, "nopass"],
         "OpenVPN client certificate generation failed.",
     )
     

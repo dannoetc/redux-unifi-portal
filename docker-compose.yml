@@ -49,7 +49,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - openvpn_data:/etc/openvpn:ro
+      - openvpn_data:/etc/openvpn
     depends_on:
       - postgres
       - redis
