@@ -62,6 +62,8 @@ const controllerSchema = z.object({
   openvpn_profile_template: z.string().optional().or(z.literal("")),
   openvpn_auth_ref: z.string().optional().or(z.literal("")),
   openvpn_auth_blob: z.string().optional().or(z.literal("")),
+  openvpn_auth_username: z.string().optional().or(z.literal("")),
+  openvpn_auth_password: z.string().optional().or(z.literal("")),
   openvpn_ca_ref: z.string().optional().or(z.literal("")),
   openvpn_ca_bundle: z.string().optional().or(z.literal("")),
   openvpn_remote_host: z.string().optional().or(z.literal("")),
@@ -179,6 +181,8 @@ export default function TenantsPage() {
       openvpn_profile_template: "",
       openvpn_auth_ref: "",
       openvpn_auth_blob: "",
+      openvpn_auth_username: "",
+      openvpn_auth_password: "",
       openvpn_ca_ref: "",
       openvpn_ca_bundle: "",
       openvpn_remote_host: "",
@@ -328,6 +332,8 @@ export default function TenantsPage() {
               openvpn_profile_template: "",
               openvpn_auth_ref: tenant.openvpn_auth_ref ?? "",
               openvpn_auth_blob: "",
+              openvpn_auth_username: "",
+              openvpn_auth_password: "",
               openvpn_ca_ref: tenant.openvpn_ca_ref ?? "",
               openvpn_ca_bundle: "",
               openvpn_remote_host: tenant.openvpn_remote_host ?? "",
@@ -514,19 +520,35 @@ export default function TenantsPage() {
     setControllerValidationError("");
 
     try {
+      const authUsername = values.openvpn_auth_username?.trim() ?? "";
+      const authPassword = values.openvpn_auth_password?.trim() ?? "";
+      if ((authUsername && !authPassword) || (!authUsername && authPassword)) {
+        toast.error("Enter both a username and password for OpenVPN credentials.");
+        return;
+      }
       const openvpnPort =
         values.openvpn_remote_port && Number.isNaN(values.openvpn_remote_port)
           ? undefined
           : values.openvpn_remote_port;
       const payload = {
-        ...values,
         unifi_base_url: normalizeUnifiBaseUrl(values.unifi_base_url),
-        openvpn_remote_port: openvpnPort,
+        unifi_api_key_ref: values.unifi_api_key_ref || undefined,
+        is_roaming: values.is_roaming,
+        openvpn_enabled: values.openvpn_enabled,
+        openvpn_profile_ref: values.openvpn_profile_ref || undefined,
         openvpn_profile_template: values.openvpn_profile_template?.trim()
           ? values.openvpn_profile_template
           : undefined,
+        openvpn_auth_ref: values.openvpn_auth_ref || undefined,
+        openvpn_auth_blob: authUsername && authPassword
+          ? `${authUsername}\n${authPassword}`
+          : values.openvpn_auth_blob?.trim()
+            ? values.openvpn_auth_blob
+            : undefined,
+        openvpn_ca_ref: values.openvpn_ca_ref || undefined,
         openvpn_ca_bundle: values.openvpn_ca_bundle?.trim() ? values.openvpn_ca_bundle : undefined,
-        openvpn_auth_blob: values.openvpn_auth_blob?.trim() ? values.openvpn_auth_blob : undefined,
+        openvpn_remote_host: values.openvpn_remote_host || undefined,
+        openvpn_remote_port: openvpnPort,
       };
       const data = await apiFetch<{ tenant: Tenant }>(`/api/admin/tenants/${tenantToConfigure.id}`, {
         method: "PUT",
@@ -575,6 +597,12 @@ export default function TenantsPage() {
     // Save the form first to persist OpenVPN remote host/port and other settings needed for generation
     const currentValuesForSave = controllerForm.getValues();
     try {
+      const authUsername = currentValuesForSave.openvpn_auth_username?.trim() ?? "";
+      const authPassword = currentValuesForSave.openvpn_auth_password?.trim() ?? "";
+      if ((authUsername && !authPassword) || (!authUsername && authPassword)) {
+        toast.error("Enter both a username and password for OpenVPN credentials.");
+        return;
+      }
       const openvpnPort =
         currentValuesForSave.openvpn_remote_port && Number.isNaN(currentValuesForSave.openvpn_remote_port)
           ? undefined
@@ -588,9 +616,11 @@ export default function TenantsPage() {
           ? currentValuesForSave.openvpn_profile_template
           : undefined,
         openvpn_auth_ref: currentValuesForSave.openvpn_auth_ref || undefined,
-        openvpn_auth_blob: currentValuesForSave.openvpn_auth_blob?.trim()
-          ? currentValuesForSave.openvpn_auth_blob
-          : undefined,
+        openvpn_auth_blob: authUsername && authPassword
+          ? `${authUsername}\n${authPassword}`
+          : currentValuesForSave.openvpn_auth_blob?.trim()
+            ? currentValuesForSave.openvpn_auth_blob
+            : undefined,
         openvpn_ca_ref: currentValuesForSave.openvpn_ca_ref || undefined,
         openvpn_ca_bundle: currentValuesForSave.openvpn_ca_bundle?.trim()
           ? currentValuesForSave.openvpn_ca_bundle
@@ -973,6 +1003,43 @@ export default function TenantsPage() {
                         {...controllerForm.register("openvpn_remote_port", { valueAsNumber: true })}
                       />
                     </div>
+                  </div>
+                  <div className="rounded-md border border-border/60 bg-muted/20 p-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-sm font-medium">Gateway auth credentials</div>
+                        <div className="text-xs text-muted-foreground">
+                          UniFi requires a username and password when uploading the OpenVPN profile.
+                        </div>
+                      </div>
+                      {tenantToConfigure?.openvpn_auth_stored ? (
+                        <span className="text-xs font-medium text-emerald-600">Stored</span>
+                      ) : null}
+                    </div>
+                    <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="openvpn_auth_username">Username</Label>
+                        <Input
+                          id="openvpn_auth_username"
+                          placeholder="gateway-user"
+                          autoComplete="off"
+                          {...controllerForm.register("openvpn_auth_username")}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="openvpn_auth_password">Password</Label>
+                        <Input
+                          id="openvpn_auth_password"
+                          type="password"
+                          placeholder="••••••••"
+                          autoComplete="new-password"
+                          {...controllerForm.register("openvpn_auth_password")}
+                        />
+                      </div>
+                    </div>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Leave blank to keep the existing stored credentials.
+                    </p>
                   </div>
                   <div className="flex items-center justify-between rounded-md border border-border/60 px-3 py-2">
                     <div>
