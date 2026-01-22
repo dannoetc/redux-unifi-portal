@@ -10,3 +10,4 @@ from .auth_event import AuthEvent  # noqa: F401
 from .voucher import VoucherBatch, Voucher, VoucherRedemption  # noqa: F401
 from .oidc import OidcProvider, SiteOidcSetting  # noqa: F401
 from .openvpn_secret import TenantOpenvpnSecret  # noqa: F401
+from .openvpn_client_profile import TenantOpenvpnClientProfile  # noqa: F401

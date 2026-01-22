@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import LargeBinary, String, Uuid
+from sqlalchemy import ForeignKey, LargeBinary, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
@@ -13,6 +13,7 @@ class TenantOpenvpnSecret(Base, TimestampMixin):
 
     tenant_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True),
+        ForeignKey("tenants.id", ondelete="CASCADE"),
         primary_key=True,
     )
     profile_template_encrypted: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
@@ -21,4 +22,3 @@ class TenantOpenvpnSecret(Base, TimestampMixin):
     encryption_version: Mapped[str] = mapped_column(String(32), nullable=False, default="v1")
 
     tenant = relationship("Tenant", back_populates="openvpn_secret")
-

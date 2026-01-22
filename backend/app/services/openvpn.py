@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import os
 import re
+import shlex
+import subprocess
 
 from cryptography.fernet import Fernet, InvalidToken
 
@@ -119,6 +121,42 @@ def build_openvpn_profile(tenant: Tenant) -> str:
     return profile.rstrip() + "\n"
 
 
+def generate_openvpn_client_profile(client_name: str) -> str:
+    cleaned = client_name.strip()
+    if not cleaned:
+        raise OpenVpnError("OPENVPN_INVALID_CLIENT_NAME", "Client name is required.")
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}", cleaned):
+        raise OpenVpnError(
+            "OPENVPN_INVALID_CLIENT_NAME",
+            "Client name must use letters, numbers, dots, dashes, or underscores.",
+        )
+
+    prefix = _resolve_openvpn_command_prefix()
+    _run_openvpn_command(
+        prefix + ["easyrsa", "build-client-full", cleaned, "nopass"],
+        "OpenVPN client certificate generation failed.",
+    )
+    profile = _run_openvpn_command(
+        prefix + ["ovpn_getclient", cleaned],
+        "OpenVPN profile export failed.",
+        capture_output=True,
+    )
+    if not profile.strip():
+        raise OpenVpnError("OPENVPN_GENERATION_FAILED", "OpenVPN profile generation failed.")
+    return sanitize_openvpn_profile(profile)
+
+
+def sanitize_openvpn_profile(profile: str) -> str:
+    sanitized_lines = []
+    for line in profile.splitlines():
+        if re.search(r"^\s*redirect-gateway\b", line, flags=re.IGNORECASE):
+            continue
+        if re.search(r"^\s*push\s+\"?redirect-gateway\b", line, flags=re.IGNORECASE):
+            continue
+        sanitized_lines.append(line)
+    return "\n".join(sanitized_lines).rstrip() + "\n"
+
+
 def _apply_placeholders(profile: str, tenant: Tenant) -> str:
     replacements = {
         "{{REMOTE_HOST}}": tenant.openvpn_remote_host or "",
@@ -174,3 +212,37 @@ def _get_fernet() -> Fernet:
             "OPENVPN_ENCRYPTION_KEY_INVALID",
             "OpenVPN encryption key is invalid.",
         ) from exc
+
+
+def _resolve_openvpn_command_prefix() -> list[str]:
+    prefix = settings.OPENVPN_GENERATE_COMMAND_PREFIX
+    if not prefix:
+        raise OpenVpnError(
+            "OPENVPN_GENERATION_FAILED",
+            "OpenVPN generation command prefix is not configured.",
+        )
+    return shlex.split(prefix)
+
+
+def _run_openvpn_command(
+    command: list[str],
+    message: str,
+    *,
+    capture_output: bool = False,
+) -> str:
+    try:
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as exc:
+        raise OpenVpnError("OPENVPN_GENERATION_FAILED", message) from exc
+
+    if result.returncode != 0:
+        raise OpenVpnError("OPENVPN_GENERATION_FAILED", message)
+
+    if capture_output:
+        return (result.stdout or "").strip("\n") + "\n" if result.stdout is not None else ""
+    return ""
