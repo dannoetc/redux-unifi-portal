@@ -3,7 +3,11 @@ from __future__ import annotations
 import os
 import re
 
+from cryptography.fernet import Fernet, InvalidToken
+
+from app.models.openvpn_secret import TenantOpenvpnSecret
 from app.models.tenant import Tenant
+from app.settings import settings
 
 
 class OpenVpnError(RuntimeError):
@@ -20,20 +24,96 @@ def resolve_openvpn_secret(ref: str) -> str:
     return value
 
 
+def encrypt_openvpn_secret(value: str) -> bytes:
+    fernet = _get_fernet()
+    return fernet.encrypt(value.encode("utf-8"))
+
+
+def decrypt_openvpn_secret(value: bytes) -> str:
+    fernet = _get_fernet()
+    try:
+        decrypted = fernet.decrypt(value)
+    except InvalidToken as exc:
+        raise OpenVpnError(
+            "OPENVPN_SECRET_DECRYPT_FAILED",
+            "OpenVPN secret could not be decrypted.",
+        ) from exc
+    return decrypted.decode("utf-8")
+
+
+def resolve_openvpn_profile_template(
+    *,
+    openvpn_profile_template: str | None,
+    openvpn_profile_ref: str | None,
+    openvpn_secret: TenantOpenvpnSecret | None,
+) -> str | None:
+    if openvpn_profile_template:
+        return openvpn_profile_template
+    if openvpn_secret is not None:
+        return decrypt_openvpn_secret(openvpn_secret.profile_template_encrypted)
+    if openvpn_profile_ref:
+        return resolve_openvpn_secret(openvpn_profile_ref)
+    return None
+
+
+def resolve_openvpn_ca_bundle(
+    *,
+    openvpn_ca_bundle: str | None,
+    openvpn_ca_ref: str | None,
+    openvpn_secret: TenantOpenvpnSecret | None,
+) -> str | None:
+    if openvpn_ca_bundle:
+        return openvpn_ca_bundle
+    if openvpn_secret is not None and openvpn_secret.ca_bundle_encrypted:
+        return decrypt_openvpn_secret(openvpn_secret.ca_bundle_encrypted)
+    if openvpn_ca_ref:
+        return resolve_openvpn_secret(openvpn_ca_ref)
+    return None
+
+
+def resolve_openvpn_auth_blob(
+    *,
+    openvpn_auth_blob: str | None,
+    openvpn_auth_ref: str | None,
+    openvpn_secret: TenantOpenvpnSecret | None,
+) -> str | None:
+    if openvpn_auth_blob:
+        return openvpn_auth_blob
+    if openvpn_secret is not None and openvpn_secret.auth_blob_encrypted:
+        return decrypt_openvpn_secret(openvpn_secret.auth_blob_encrypted)
+    if openvpn_auth_ref:
+        return resolve_openvpn_secret(openvpn_auth_ref)
+    return None
+
+
 def build_openvpn_profile(tenant: Tenant) -> str:
-    """Build a tenant-specific OpenVPN profile from env-stored templates."""
-    if not tenant.openvpn_profile_ref:
+    """Build a tenant-specific OpenVPN profile from stored secrets or env refs."""
+    profile = resolve_openvpn_profile_template(
+        openvpn_profile_template=None,
+        openvpn_profile_ref=tenant.openvpn_profile_ref,
+        openvpn_secret=tenant.openvpn_secret,
+    )
+    if not profile:
         raise OpenVpnError("OPENVPN_PROFILE_MISSING", "OpenVPN profile template is required.")
-    profile = resolve_openvpn_secret(tenant.openvpn_profile_ref)
     profile = _apply_placeholders(profile, tenant)
     profile = _ensure_remote(profile, tenant)
 
-    if tenant.openvpn_ca_ref and "<ca>" not in profile:
-        ca_bundle = resolve_openvpn_secret(tenant.openvpn_ca_ref).strip()
+    ca_bundle = resolve_openvpn_ca_bundle(
+        openvpn_ca_bundle=None,
+        openvpn_ca_ref=tenant.openvpn_ca_ref,
+        openvpn_secret=tenant.openvpn_secret,
+    )
+    if ca_bundle and "<ca>" not in profile:
+        ca_bundle = ca_bundle.strip()
         profile = f"{profile.rstrip()}\n<ca>\n{ca_bundle}\n</ca>\n"
 
-    if tenant.openvpn_auth_ref:
-        auth_payload = resolve_openvpn_secret(tenant.openvpn_auth_ref).strip()
+    auth_payload = resolve_openvpn_auth_blob(
+        openvpn_auth_blob=None,
+        openvpn_auth_ref=tenant.openvpn_auth_ref,
+        openvpn_secret=tenant.openvpn_secret,
+    )
+    if auth_payload:
+        auth_payload = auth_payload.strip()
         profile = _ensure_auth(profile, auth_payload)
 
     return profile.rstrip() + "\n"
@@ -78,3 +158,19 @@ def _ensure_auth(profile: str, auth_payload: str) -> str:
     if "<auth-user-pass>" not in updated:
         updated = f"{updated.rstrip()}\n<auth-user-pass>\n{auth_payload}\n</auth-user-pass>\n"
     return updated
+
+
+def _get_fernet() -> Fernet:
+    key = settings.OPENVPN_ENCRYPTION_KEY
+    if not key:
+        raise OpenVpnError(
+            "OPENVPN_ENCRYPTION_KEY_MISSING",
+            "OpenVPN encryption key is not configured.",
+        )
+    try:
+        return Fernet(key.encode("utf-8"))
+    except (ValueError, TypeError) as exc:
+        raise OpenVpnError(
+            "OPENVPN_ENCRYPTION_KEY_INVALID",
+            "OpenVPN encryption key is invalid.",
+        ) from exc
