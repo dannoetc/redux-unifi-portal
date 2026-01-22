@@ -83,11 +83,14 @@ export function OpenVpnGenerateDialog({
       return;
     }
     try {
-      await apiDownloadFile(
-        `/api/admin/tenants/${tenant.id}/openvpn/clients/${client.id}`,
-        `${client.client_name}.ovpn`
-      );
-      toast.success("OpenVPN profile downloaded.");
+      if (client.id) {
+        await apiDownloadFile(
+          `/api/admin/tenants/${tenant.id}/openvpn/clients/${client.id}`,
+          `${client.client_name}.ovpn`
+        );
+        toast.success("OpenVPN profile downloaded.");
+        return;
+      }
     } catch (error: any) {
       if (error instanceof ApiError && error.code === "OPENVPN_PROFILE_NOT_GENERATED") {
         toast.error("No generated profile exists — click Generate to create one.");
@@ -111,16 +114,31 @@ export function OpenVpnGenerateDialog({
     }
     setSubmitting(true);
     try {
-      const data = await apiFetch<{ client: OpenVpnClient }>(
+      const data = await apiFetch<
+        { client: OpenVpnClient } | { id?: string; client_name?: string; created_at?: string }
+      >(
         `/api/admin/tenants/${tenant.id}/openvpn/generate`,
         {
           method: "POST",
           body: JSON.stringify({ client_name: values.client_name.trim() }),
         }
       );
-      setGeneratedClient(data.client);
-      toast.success(`OpenVPN profile generated for ${data.client.client_name}.`);
-      onGenerated?.(data.client);
+      const resolvedClient =
+        "client" in data && data.client
+          ? data.client
+          : data.client_name
+            ? {
+                id: data.id ?? "",
+                client_name: data.client_name,
+                created_at: data.created_at ?? new Date().toISOString(),
+              }
+            : null;
+      if (!resolvedClient) {
+        throw new Error("OpenVPN generation returned an invalid response.");
+      }
+      setGeneratedClient(resolvedClient);
+      toast.success(`OpenVPN profile generated for ${resolvedClient.client_name}.`);
+      onGenerated?.(resolvedClient);
       await onRefresh?.();
     } catch (error: any) {
       if (error instanceof ApiError) {

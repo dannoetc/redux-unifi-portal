@@ -136,10 +136,12 @@ def generate_openvpn_client_profile(client_name: str) -> str:
         )
 
     pki_path = settings.OPENVPN_PKI_PATH
+    easyrsa_path = "/usr/share/easy-rsa/easyrsa"
+    _cleanup_existing_openvpn_client(pki_path, cleaned, easyrsa_path)
     
     # Run easyrsa in the PKI directory to generate client certificate
     _run_openvpn_command(
-        ["/usr/share/easy-rsa/easyrsa", "--batch", f"--pki={pki_path}", "build-client-full", cleaned, "nopass"],
+        [easyrsa_path, "--batch", f"--pki={pki_path}", "build-client-full", cleaned, "nopass"],
         "OpenVPN client certificate generation failed.",
     )
     
@@ -245,6 +247,31 @@ def _get_fernet() -> Fernet:
             "OpenVPN encryption key is invalid.",
         ) from exc
 
+
+def _cleanup_existing_openvpn_client(pki_path: str, client_name: str, easyrsa_path: str) -> None:
+    req_path = os.path.join(pki_path, "reqs", f"{client_name}.req")
+    key_path = os.path.join(pki_path, "private", f"{client_name}.key")
+    cert_path = os.path.join(pki_path, "issued", f"{client_name}.crt")
+    has_existing_cert = os.path.exists(cert_path)
+    has_existing_req = os.path.exists(req_path)
+    has_existing_key = os.path.exists(key_path)
+
+    if not (has_existing_cert or has_existing_req or has_existing_key):
+        return
+
+    if has_existing_cert:
+        _run_openvpn_command(
+            [easyrsa_path, "--batch", f"--pki={pki_path}", "revoke-issued", client_name],
+            "OpenVPN client revoke failed.",
+        )
+        _run_openvpn_command(
+            [easyrsa_path, "--batch", f"--pki={pki_path}", "gen-crl"],
+            "OpenVPN CRL update failed.",
+        )
+
+    for path in (req_path, key_path, cert_path):
+        if os.path.exists(path):
+            os.remove(path)
 
 
 def _run_openvpn_command(

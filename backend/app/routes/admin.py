@@ -679,8 +679,11 @@ def generate_openvpn_profile(
     return {
         "ok": True,
         "data": {
-            "client_name": profile_record.client_name,
-            "created_at": profile_record.created_at,
+            "client": {
+                "id": str(profile_record.id),
+                "client_name": profile_record.client_name,
+                "created_at": profile_record.created_at,
+            },
         },
     }
 
