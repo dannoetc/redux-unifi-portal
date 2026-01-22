@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ColumnDef } from "@tanstack/react-table";
 import { toast } from "sonner";
 import { z } from "zod";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ChevronDown, MoreHorizontal } from "lucide-react";
 import Link from "next/link";
@@ -163,6 +163,8 @@ export default function TenantsPage() {
   const [manageOpen, setManageOpen] = useState(false);
   const [tenantToManage, setTenantToManage] = useState<Tenant | null>(null);
   const [showAdvancedOpenvpn, setShowAdvancedOpenvpn] = useState(false);
+  const [generateFromControllerOpen, setGenerateFromControllerOpen] = useState(false);
+  const [controllerValidationError, setControllerValidationError] = useState<string>("");
 
   const form = useForm<CreateTenant>({
     resolver: zodResolver(schema),
@@ -210,6 +212,16 @@ export default function TenantsPage() {
       setSetupInitialized(true);
     }
   }, [loading, setupInitialized, tenants.length]);
+
+  const hasGeneratedOrStoredProfile = (tenant: Tenant | null): boolean => {
+    if (!tenant) {
+      return false;
+    }
+    const latestClient = getLatestOpenvpnClient(tenant);
+    const hasGeneratedClient = Boolean(latestClient) || Boolean(tenant.openvpn_generated_client_name);
+    const hasStoredProfile = Boolean(tenant.openvpn_profile_stored);
+    return hasGeneratedClient || hasStoredProfile;
+  };
 
   const loadFileIntoField =
     (field: "openvpn_profile_template" | "openvpn_ca_bundle" | "openvpn_auth_blob") =>
@@ -482,6 +494,25 @@ export default function TenantsPage() {
     if (!tenantToConfigure) {
       return;
     }
+
+    // Validate that a generated/stored profile exists if OpenVPN is being enabled
+    if (values.openvpn_enabled) {
+      const latestClient = getLatestOpenvpnClient(tenantToConfigure);
+      const hasGeneratedClient = Boolean(latestClient) || Boolean(tenantToConfigure.openvpn_generated_client_name);
+      const hasStoredProfile = Boolean(tenantToConfigure.openvpn_profile_stored);
+      const hasProfileTemplate = Boolean(values.openvpn_profile_template?.trim());
+      const hasProfileRef = Boolean(values.openvpn_profile_ref?.trim());
+
+      if (!hasGeneratedClient && !hasStoredProfile && !hasProfileTemplate && !hasProfileRef) {
+        setControllerValidationError(
+          "A generated gateway profile is required to enable OpenVPN. Click Generate gateway profile… to create one."
+        );
+        return;
+      }
+    }
+
+    setControllerValidationError("");
+
     try {
       const openvpnPort =
         values.openvpn_remote_port && Number.isNaN(values.openvpn_remote_port)
@@ -812,6 +843,42 @@ export default function TenantsPage() {
                       <span className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition peer-checked:translate-x-4" />
                     </label>
                   </div>
+
+                  {controllerValidationError && (
+                    <div className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                      {controllerValidationError}
+                    </div>
+                  )}
+
+                  {hasGeneratedOrStoredProfile(tenantToConfigure) && (
+                    <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+                      <div className="font-medium">
+                        {(() => {
+                          const latestClient = getLatestOpenvpnClient(tenantToConfigure);
+                          if (latestClient) {
+                            const createdDate = new Date(latestClient.created_at).toLocaleString();
+                            return `Generated profile: ${latestClient.client_name} — created ${createdDate}`;
+                          }
+                          if (tenantToConfigure.openvpn_generated_client_name) {
+                            return `Generated profile: ${tenantToConfigure.openvpn_generated_client_name}`;
+                          }
+                          return "Stored profile available";
+                        })()}
+                      </div>
+                    </div>
+                  )}
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    disabled={!tenantToConfigure}
+                    onClick={() => setGenerateFromControllerOpen(true)}
+                    aria-label="Generate OpenVPN gateway profile"
+                  >
+                    Generate gateway profile…
+                  </Button>
+
                   <div className="rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
                     OpenVPN profiles are served for gateway devices only and do not route general traffic.
                     The API provides profiles; it does not join the VPN automatically. Profiles are
@@ -971,6 +1038,47 @@ export default function TenantsPage() {
           </form>
         </DialogContent>
       </Dialog>
+      <OpenVpnGenerateDialog
+        open={generateFromControllerOpen}
+        onOpenChange={(isOpen) => {
+          setGenerateFromControllerOpen(isOpen);
+        }}
+        tenant={tenantToConfigure ? { id: tenantToConfigure.id, name: tenantToConfigure.name, slug: tenantToConfigure.slug } : null}
+        onGenerated={async (client) => {
+          if (!tenantToConfigure) {
+            return;
+          }
+
+          try {
+            const refreshedTenant = await apiFetch<{ tenant: Tenant }>(
+              `/api/admin/tenants/${tenantToConfigure.id}`
+            );
+            const updatedTenant = refreshedTenant.tenant;
+
+            // Update the main tenants list
+            setTenants((prev) =>
+              prev.map((tenant) => (tenant.id === updatedTenant.id ? updatedTenant : tenant))
+            );
+
+            // Update tenantToConfigure for the dialog
+            setTenantToConfigure(updatedTenant);
+
+            // Update controller form with new generated profile metadata
+            controllerForm.setValue("openvpn_enabled", true, { shouldDirty: true });
+
+            // Close the generate dialog but keep controller dialog open
+            setGenerateFromControllerOpen(false);
+
+            // Clear any validation errors since we now have a generated profile
+            setControllerValidationError("");
+
+            toast.success("OpenVPN profile generated and set as the default for this tenant.");
+          } catch (error: any) {
+            toast.error(error?.message ?? "Unable to refresh tenant after generation.");
+          }
+        }}
+        onRefresh={refreshTenants}
+      />
     </div>
   );
 }
