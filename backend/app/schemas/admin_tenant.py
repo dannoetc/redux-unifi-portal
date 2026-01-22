@@ -15,13 +15,25 @@ class TenantCreateRequest(BaseModel):
         default=None,
         description="Env var name that stores the tenant-specific OpenVPN profile template.",
     )
+    openvpn_profile_template: str | None = Field(
+        default=None,
+        description="Encrypted OpenVPN profile template content to store.",
+    )
     openvpn_auth_ref: str | None = Field(
         default=None,
         description="Env var name containing auth-user-pass credentials (optional).",
     )
+    openvpn_auth_blob: str | None = Field(
+        default=None,
+        description="Encrypted auth-user-pass payload to store (optional).",
+    )
     openvpn_ca_ref: str | None = Field(
         default=None,
         description="Env var name containing a CA bundle to inline when missing from the profile.",
+    )
+    openvpn_ca_bundle: str | None = Field(
+        default=None,
+        description="Encrypted CA bundle content to store (optional).",
     )
     openvpn_remote_host: str | None = None
     openvpn_remote_port: int | None = None
@@ -39,13 +51,25 @@ class TenantUpdateRequest(BaseModel):
         default=None,
         description="Env var name that stores the tenant-specific OpenVPN profile template.",
     )
+    openvpn_profile_template: str | None = Field(
+        default=None,
+        description="Encrypted OpenVPN profile template content to store.",
+    )
     openvpn_auth_ref: str | None = Field(
         default=None,
         description="Env var name containing auth-user-pass credentials (optional).",
     )
+    openvpn_auth_blob: str | None = Field(
+        default=None,
+        description="Encrypted auth-user-pass payload to store (optional).",
+    )
     openvpn_ca_ref: str | None = Field(
         default=None,
         description="Env var name containing a CA bundle to inline when missing from the profile.",
+    )
+    openvpn_ca_bundle: str | None = Field(
+        default=None,
+        description="Encrypted CA bundle content to store (optional).",
     )
     openvpn_remote_host: str | None = None
     openvpn_remote_port: int | None = None
@@ -63,11 +87,14 @@ class TenantResponse(BaseModel):
     openvpn_profile_ref: str | None = Field(
         description="Env var name that stores the tenant-specific OpenVPN profile template.",
     )
+    openvpn_profile_stored: bool
     openvpn_auth_ref: str | None = Field(
         description="Env var name containing auth-user-pass credentials (optional).",
     )
+    openvpn_auth_stored: bool
     openvpn_ca_ref: str | None = Field(
         description="Env var name containing a CA bundle to inline when missing from the profile.",
     )
+    openvpn_ca_stored: bool
     openvpn_remote_host: str | None
     openvpn_remote_port: int | None
