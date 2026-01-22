@@ -66,4 +66,32 @@ describe("OpenVpnGenerateDialog", () => {
     expect(await screen.findByText("Profile generated")).toBeInTheDocument();
     expect(screen.getByText("gateway-01")).toBeInTheDocument();
   });
+
+  it("shows gateway credentials after generation when provided", async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    apiFetchMock.mockResolvedValueOnce({
+      client: {
+        id: "client-2",
+        client_name: "gateway-02",
+        created_at: "2024-01-03T10:00:00Z",
+      },
+    });
+
+    render(
+      <OpenVpnGenerateDialog
+        open
+        onOpenChange={() => {}}
+        tenant={{ id: "tenant-1", name: "Acme", slug: "acme" }}
+        authUsername="unifi-user"
+        authPassword="unifi-pass"
+      />
+    );
+
+    await user.type(screen.getByLabelText("Client name"), "gateway-02");
+    await user.click(screen.getByRole("button", { name: "Generate profile" }));
+
+    expect(await screen.findByText("Gateway credentials")).toBeInTheDocument();
+    expect(screen.getByText("unifi-user")).toBeInTheDocument();
+    expect(screen.getByText("unifi-pass")).toBeInTheDocument();
+  });
 });

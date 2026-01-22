@@ -188,6 +188,14 @@ export default function TenantsPage() {
       openvpn_remote_host: "",
     },
   });
+  const openvpnAuthUsername = useWatch({
+    control: controllerForm.control,
+    name: "openvpn_auth_username",
+  });
+  const openvpnAuthPassword = useWatch({
+    control: controllerForm.control,
+    name: "openvpn_auth_password",
+  });
 
   useEffect(() => {
     let active = true;
@@ -1178,6 +1186,8 @@ export default function TenantsPage() {
           setGenerateFromControllerOpen(isOpen);
         }}
         tenant={tenantToConfigure ? { id: tenantToConfigure.id, name: tenantToConfigure.name, slug: tenantToConfigure.slug } : null}
+        authUsername={openvpnAuthUsername?.trim() ? openvpnAuthUsername.trim() : undefined}
+        authPassword={openvpnAuthPassword?.trim() ? openvpnAuthPassword.trim() : undefined}
         onGenerated={async (client) => {
           if (!tenantToConfigure) {
             return;

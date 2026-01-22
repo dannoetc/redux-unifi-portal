@@ -45,6 +45,8 @@ type OpenVpnGenerateDialogProps = {
   tenant: TenantSummary | null;
   onGenerated?: (client: OpenVpnClient) => void;
   onRefresh?: () => Promise<void> | void;
+  authUsername?: string;
+  authPassword?: string;
 };
 
 const formatDateTime = (value?: string | null) => {
@@ -61,6 +63,8 @@ export function OpenVpnGenerateDialog({
   tenant,
   onGenerated,
   onRefresh,
+  authUsername,
+  authPassword,
 }: OpenVpnGenerateDialogProps) {
   const [submitting, setSubmitting] = useState(false);
   const [generatedClient, setGeneratedClient] = useState<OpenVpnClient | null>(null);
@@ -208,6 +212,25 @@ export function OpenVpnGenerateDialog({
                   Created {formatDateTime(generatedClient.created_at)}
                 </span>
               </div>
+              {authUsername && authPassword ? (
+                <div className="mt-2 rounded-sm border border-emerald-200/70 bg-white/70 px-2 py-1 text-[11px] text-emerald-700">
+                  <div className="font-medium">Gateway credentials</div>
+                  <div className="mt-1 grid gap-1">
+                    <div>
+                      <span className="font-semibold">Username:</span>{" "}
+                      <span className="font-mono">{authUsername}</span>
+                    </div>
+                    <div>
+                      <span className="font-semibold">Password:</span>{" "}
+                      <span className="font-mono">{authPassword}</span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-2 text-[11px] text-emerald-700/80">
+                  Add gateway credentials in Tenant networking to upload this profile in UniFi.
+                </div>
+              )}
               <div className="mt-2">
                 <Button
                   type="button"
