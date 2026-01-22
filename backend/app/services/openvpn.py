@@ -55,7 +55,8 @@ def resolve_openvpn_profile_template(
         return decrypt_openvpn_secret(openvpn_secret.profile_template_encrypted)
     if openvpn_profile_ref:
         return resolve_openvpn_secret(openvpn_profile_ref)
-    return None
+    # Fallback to default template
+    return settings.OPENVPN_DEFAULT_TEMPLATE
 
 
 def resolve_openvpn_ca_bundle(

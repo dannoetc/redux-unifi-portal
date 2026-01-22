@@ -1628,8 +1628,7 @@ def _validate_openvpn_requirements(
             status_code=400,
             detail={"ok": False, "error": {"code": exc.code, "message": str(exc)}},
         ) from exc
-    if not profile_template:
-        missing_fields.append("openvpn_profile_template")
+    # profile_template check removed - resolve_openvpn_profile_template now returns default template
     needs_remote_settings = True
     if profile_template is not None:
         needs_remote_settings = profile_requires_remote_settings(profile_template)

@@ -42,6 +42,21 @@ class Settings(BaseSettings):
     UNIFI_CLIENT_LOOKUP_ATTEMPTS: int = 6
     UNIFI_CLIENT_LOOKUP_BACKOFF_SECONDS: float = 0.6
 
+    # OpenVPN default template
+    OPENVPN_DEFAULT_TEMPLATE: str = """client
+dev tun
+proto udp
+remote {{REMOTE_HOST}} {{REMOTE_PORT}}
+resolv-retry infinite
+nobind
+persist-key
+persist-tun
+cipher AES-256-GCM
+auth SHA256
+comp-lzo
+verb 3
+"""
+
     # CORS
     CORS_ALLOW_ORIGINS: str = "http://localhost:3000"
 
