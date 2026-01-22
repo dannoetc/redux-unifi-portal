@@ -12,7 +12,7 @@ type PopoverMenuContextValue = {
 const PopoverMenuContext = React.createContext<PopoverMenuContextValue | null>(null);
 
 type PopoverMenuProps = {
-  trigger: React.ReactElement<any>;
+  trigger: React.ReactElement;
   children: React.ReactNode;
   align?: "start" | "center" | "end";
   sideOffset?: number;

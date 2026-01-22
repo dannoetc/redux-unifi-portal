@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PopoverMenu, PopoverMenuItem, PopoverMenuSeparator } from "@/components/ui/PopoverMenu";
 import StatusPill from "@/components/ui/StatusPill";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 
 const optionalPort = z.preprocess(
@@ -727,178 +728,207 @@ export default function TenantsPage() {
             </DialogDescription>
           </DialogHeader>
           <form className="space-y-4" onSubmit={controllerForm.handleSubmit(saveController)}>
-            <div className="space-y-2">
-              <Label htmlFor="controller_base_url">UniFi controller IP</Label>
-              <Input id="controller_base_url" placeholder="71.162.143.124" {...controllerForm.register("unifi_base_url")} />
-              <p className="text-xs text-muted-foreground">
-                We append {UNIFI_INTEGRATION_PATH} automatically.
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="controller_api_key_ref">API key reference</Label>
-              <Input id="controller_api_key_ref" type="password" {...controllerForm.register("unifi_api_key_ref")} />
-              <p className="text-xs text-muted-foreground">Use a secret reference, not a raw key.</p>
-            </div>
-            <div className="space-y-3 rounded-lg border border-border/60 p-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-sm font-medium">Roaming tenant</div>
-                  <div className="text-xs text-muted-foreground">
-                    Enables OpenVPN-assisted UniFi API connectivity.
-                  </div>
-                </div>
-                <label className="relative inline-flex cursor-pointer items-center">
-                  <input
-                    type="checkbox"
-                    className="peer sr-only"
-                    checked={controllerForm.watch("is_roaming") ?? false}
-                    onChange={() =>
-                      controllerForm.setValue("is_roaming", !(controllerForm.watch("is_roaming") ?? false))
-                    }
-                  />
-                  <span className="h-5 w-9 rounded-full bg-muted transition peer-checked:bg-primary" />
-                  <span className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition peer-checked:translate-x-4" />
-                </label>
-              </div>
-              <div className="flex items-center justify-between rounded-md border border-border/60 px-3 py-2">
-                <div>
-                  <div className="text-sm font-medium">OpenVPN profile enabled</div>
-                  <div className="text-xs text-muted-foreground">
-                    Required to download a gateway-ready .ovpn file.
-                  </div>
-                </div>
-                <label className="relative inline-flex cursor-pointer items-center">
-                  <input
-                    type="checkbox"
-                    className="peer sr-only"
-                    checked={controllerForm.watch("openvpn_enabled") ?? false}
-                    onChange={() =>
-                      controllerForm.setValue(
-                        "openvpn_enabled",
-                        !(controllerForm.watch("openvpn_enabled") ?? false)
-                      )
-                    }
-                  />
-                  <span className="h-5 w-9 rounded-full bg-muted transition peer-checked:bg-primary" />
-                  <span className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition peer-checked:translate-x-4" />
-                </label>
-              </div>
-              <div className="rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-                OpenVPN profiles are served for gateway devices only and do not route general traffic. The
-                API provides profiles; it does not join the VPN automatically. Profiles are split-tunnel
-                only (redirect-gateway is removed).{" "}
-                <Link className="text-primary underline-offset-4 hover:underline" href={openvpnDocsUrl}>
-                  Operations &amp; Security
-                </Link>
-                .
-              </div>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <Tabs defaultValue="unifi">
+              <TabsList className="w-full justify-start">
+                <TabsTrigger value="unifi">UniFi connection</TabsTrigger>
+                <TabsTrigger value="openvpn">OpenVPN settings</TabsTrigger>
+              </TabsList>
+              <TabsContent value="unifi" className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="openvpn_remote_host">OpenVPN server host</Label>
-                  <Input id="openvpn_remote_host" placeholder="vpn.reduxtc.com" {...controllerForm.register("openvpn_remote_host")} />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="openvpn_remote_port">OpenVPN server port</Label>
+                  <Label htmlFor="controller_base_url">UniFi controller IP</Label>
                   <Input
-                    id="openvpn_remote_port"
-                    type="number"
-                    placeholder="1194"
-                    {...controllerForm.register("openvpn_remote_port", { valueAsNumber: true })}
+                    id="controller_base_url"
+                    placeholder="71.162.143.124"
+                    {...controllerForm.register("unifi_base_url")}
                   />
+                  <p className="text-xs text-muted-foreground">
+                    We append {UNIFI_INTEGRATION_PATH} automatically.
+                  </p>
                 </div>
-              </div>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="openvpn_profile_template">OpenVPN profile template</Label>
-                  {tenantToConfigure?.openvpn_profile_stored ? (
-                    <span className="text-xs font-medium text-emerald-600">Stored</span>
-                  ) : null}
+                <div className="space-y-2">
+                  <Label htmlFor="controller_api_key_ref">API key reference</Label>
+                  <Input
+                    id="controller_api_key_ref"
+                    type="password"
+                    {...controllerForm.register("unifi_api_key_ref")}
+                  />
+                  <p className="text-xs text-muted-foreground">Use a secret reference, not a raw key.</p>
                 </div>
-                <Input
-                  id="openvpn_profile_template_file"
-                  type="file"
-                  accept=".ovpn,.txt"
-                  onChange={loadFileIntoField("openvpn_profile_template")}
-                />
-                <Textarea
-                  id="openvpn_profile_template"
-                  placeholder="Paste the .ovpn template content"
-                  {...controllerForm.register("openvpn_profile_template")}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Stored templates are encrypted at rest. Include {`{{REMOTE_HOST}}`} and {`{{REMOTE_PORT}}`}
-                  tokens if you want the server to inject tenant-specific values. Leave blank to keep the
-                  existing stored template.
-                </p>
-              </div>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="openvpn_ca_bundle">CA bundle content</Label>
-                  {tenantToConfigure?.openvpn_ca_stored ? (
-                    <span className="text-xs font-medium text-emerald-600">Stored</span>
-                  ) : null}
+              </TabsContent>
+              <TabsContent value="openvpn" className="space-y-4">
+                <div className="space-y-3 rounded-lg border border-border/60 p-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-sm font-medium">Roaming tenant</div>
+                      <div className="text-xs text-muted-foreground">
+                        Enables OpenVPN-assisted UniFi API connectivity.
+                      </div>
+                    </div>
+                    <label className="relative inline-flex cursor-pointer items-center">
+                      <input
+                        type="checkbox"
+                        className="peer sr-only"
+                        checked={controllerForm.watch("is_roaming") ?? false}
+                        onChange={() =>
+                          controllerForm.setValue(
+                            "is_roaming",
+                            !(controllerForm.watch("is_roaming") ?? false)
+                          )
+                        }
+                      />
+                      <span className="h-5 w-9 rounded-full bg-muted transition peer-checked:bg-primary" />
+                      <span className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition peer-checked:translate-x-4" />
+                    </label>
+                  </div>
+                  <div className="flex items-center justify-between rounded-md border border-border/60 px-3 py-2">
+                    <div>
+                      <div className="text-sm font-medium">OpenVPN profile enabled</div>
+                      <div className="text-xs text-muted-foreground">
+                        Required to download a gateway-ready .ovpn file.
+                      </div>
+                    </div>
+                    <label className="relative inline-flex cursor-pointer items-center">
+                      <input
+                        type="checkbox"
+                        className="peer sr-only"
+                        checked={controllerForm.watch("openvpn_enabled") ?? false}
+                        onChange={() =>
+                          controllerForm.setValue(
+                            "openvpn_enabled",
+                            !(controllerForm.watch("openvpn_enabled") ?? false)
+                          )
+                        }
+                      />
+                      <span className="h-5 w-9 rounded-full bg-muted transition peer-checked:bg-primary" />
+                      <span className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition peer-checked:translate-x-4" />
+                    </label>
+                  </div>
+                  <div className="rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                    OpenVPN profiles are served for gateway devices only and do not route general traffic.
+                    The API provides profiles; it does not join the VPN automatically. Profiles are
+                    split-tunnel only (redirect-gateway is removed).{" "}
+                    <Link className="text-primary underline-offset-4 hover:underline" href={openvpnDocsUrl}>
+                      Operations &amp; Security
+                    </Link>
+                    .
+                  </div>
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="openvpn_remote_host">OpenVPN server host</Label>
+                      <Input
+                        id="openvpn_remote_host"
+                        placeholder="vpn.reduxtc.com"
+                        {...controllerForm.register("openvpn_remote_host")}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="openvpn_remote_port">OpenVPN server port</Label>
+                      <Input
+                        id="openvpn_remote_port"
+                        type="number"
+                        placeholder="1194"
+                        {...controllerForm.register("openvpn_remote_port", { valueAsNumber: true })}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="openvpn_profile_template">OpenVPN profile template</Label>
+                      {tenantToConfigure?.openvpn_profile_stored ? (
+                        <span className="text-xs font-medium text-emerald-600">Stored</span>
+                      ) : null}
+                    </div>
+                    <Input
+                      id="openvpn_profile_template_file"
+                      type="file"
+                      accept=".ovpn,.txt"
+                      onChange={loadFileIntoField("openvpn_profile_template")}
+                    />
+                    <Textarea
+                      id="openvpn_profile_template"
+                      placeholder="Paste the .ovpn template content"
+                      {...controllerForm.register("openvpn_profile_template")}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Stored templates are encrypted at rest. Include {`{{REMOTE_HOST}}`} and{" "}
+                      {`{{REMOTE_PORT}}`} tokens if you want the server to inject tenant-specific values.
+                      Leave blank to keep the existing stored template.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="openvpn_ca_bundle">CA bundle content</Label>
+                      {tenantToConfigure?.openvpn_ca_stored ? (
+                        <span className="text-xs font-medium text-emerald-600">Stored</span>
+                      ) : null}
+                    </div>
+                    <Input
+                      id="openvpn_ca_bundle_file"
+                      type="file"
+                      accept=".crt,.pem,.txt"
+                      onChange={loadFileIntoField("openvpn_ca_bundle")}
+                    />
+                    <Textarea
+                      id="openvpn_ca_bundle"
+                      placeholder="Optional CA bundle content"
+                      {...controllerForm.register("openvpn_ca_bundle")}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Optional: store a CA bundle to append when the template does not already include a
+                      &lt;ca&gt; block. Leave blank to keep the existing stored bundle.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="openvpn_auth_blob">Auth credentials content</Label>
+                      {tenantToConfigure?.openvpn_auth_stored ? (
+                        <span className="text-xs font-medium text-emerald-600">Stored</span>
+                      ) : null}
+                    </div>
+                    <Input
+                      id="openvpn_auth_blob_file"
+                      type="file"
+                      accept=".txt,.conf"
+                      onChange={loadFileIntoField("openvpn_auth_blob")}
+                    />
+                    <Textarea
+                      id="openvpn_auth_blob"
+                      placeholder="username\npassword"
+                      {...controllerForm.register("openvpn_auth_blob")}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Optional: store auth-user-pass credentials to inline when missing from the template.
+                      Leave blank to keep the existing stored credentials.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="openvpn_profile_ref">OpenVPN profile template ref</Label>
+                    <Input id="openvpn_profile_ref" {...controllerForm.register("openvpn_profile_ref")} />
+                    <p className="text-xs text-muted-foreground">
+                      Backward-compatible env var reference containing the full .ovpn template.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="openvpn_ca_ref">CA bundle ref</Label>
+                    <Input id="openvpn_ca_ref" {...controllerForm.register("openvpn_ca_ref")} />
+                    <p className="text-xs text-muted-foreground">
+                      Optional env var reference containing a CA bundle.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="openvpn_auth_ref">Auth credentials ref</Label>
+                    <Input
+                      id="openvpn_auth_ref"
+                      type="password"
+                      {...controllerForm.register("openvpn_auth_ref")}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Optional env var reference containing username/password credentials.
+                    </p>
+                  </div>
                 </div>
-                <Input
-                  id="openvpn_ca_bundle_file"
-                  type="file"
-                  accept=".crt,.pem,.txt"
-                  onChange={loadFileIntoField("openvpn_ca_bundle")}
-                />
-                <Textarea
-                  id="openvpn_ca_bundle"
-                  placeholder="Optional CA bundle content"
-                  {...controllerForm.register("openvpn_ca_bundle")}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Optional: store a CA bundle to append when the template does not already include a
-                  &lt;ca&gt; block. Leave blank to keep the existing stored bundle.
-                </p>
-              </div>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="openvpn_auth_blob">Auth credentials content</Label>
-                  {tenantToConfigure?.openvpn_auth_stored ? (
-                    <span className="text-xs font-medium text-emerald-600">Stored</span>
-                  ) : null}
-                </div>
-                <Input
-                  id="openvpn_auth_blob_file"
-                  type="file"
-                  accept=".txt,.conf"
-                  onChange={loadFileIntoField("openvpn_auth_blob")}
-                />
-                <Textarea
-                  id="openvpn_auth_blob"
-                  placeholder="username\npassword"
-                  {...controllerForm.register("openvpn_auth_blob")}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Optional: store auth-user-pass credentials to inline when missing from the template. Leave
-                  blank to keep the existing stored credentials.
-                </p>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="openvpn_profile_ref">OpenVPN profile template ref</Label>
-                <Input id="openvpn_profile_ref" {...controllerForm.register("openvpn_profile_ref")} />
-                <p className="text-xs text-muted-foreground">
-                  Backward-compatible env var reference containing the full .ovpn template.
-                </p>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="openvpn_ca_ref">CA bundle ref</Label>
-                <Input id="openvpn_ca_ref" {...controllerForm.register("openvpn_ca_ref")} />
-                <p className="text-xs text-muted-foreground">
-                  Optional env var reference containing a CA bundle.
-                </p>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="openvpn_auth_ref">Auth credentials ref</Label>
-                <Input id="openvpn_auth_ref" type="password" {...controllerForm.register("openvpn_auth_ref")} />
-                <p className="text-xs text-muted-foreground">
-                  Optional env var reference containing username/password credentials.
-                </p>
-              </div>
-            </div>
+              </TabsContent>
+            </Tabs>
             <DialogFooter className="gap-2">
               <Button type="button" variant="secondary" size="sm" onClick={testController}>
                 Test UniFi connection
