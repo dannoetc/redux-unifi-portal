@@ -10,10 +10,18 @@ import {
 
 import { Table, TableBody, TableCell, TableHead, TableHeader } from "@/components/ui/table";
 import { TableRow } from "@/components/ui/TableRow";
+import { cn } from "@/lib/utils";
 
 type DataTableProps<TData, TValue> = {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
+};
+
+type ColumnMeta = {
+  headerClassName?: string;
+  cellClassName?: string;
+  hiddenOnMobile?: boolean;
+  showOnMobileOnly?: boolean;
 };
 
 export function DataTable<TData, TValue>({ columns, data }: DataTableProps<TData, TValue>) {
@@ -24,12 +32,21 @@ export function DataTable<TData, TValue>({ columns, data }: DataTableProps<TData
   });
 
   return (
-    <Table className="min-w-[720px] [&_th]:h-10 [&_th]:text-[11px] [&_th]:tracking-wide">
+    <Table className="min-w-full md:min-w-[720px] [&_th]:h-10 [&_th]:text-[11px] [&_th]:tracking-wide">
       <TableHeader>
         {table.getHeaderGroups().map((headerGroup) => (
           <TableRow key={headerGroup.id}>
             {headerGroup.headers.map((header) => (
-              <TableHead key={header.id}>
+              <TableHead
+                key={header.id}
+                data-hidden={(header.column.columnDef.meta as ColumnMeta | undefined)?.hiddenOnMobile}
+                className={cn(
+                  (header.column.columnDef.meta as ColumnMeta | undefined)?.headerClassName,
+                  (header.column.columnDef.meta as ColumnMeta | undefined)?.showOnMobileOnly
+                    ? "md:hidden"
+                    : undefined
+                )}
+              >
                 {header.isPlaceholder
                   ? null
                   : flexRender(header.column.columnDef.header, header.getContext())}
@@ -43,7 +60,16 @@ export function DataTable<TData, TValue>({ columns, data }: DataTableProps<TData
           table.getRowModel().rows.map((row) => (
             <TableRow key={row.id}>
               {row.getVisibleCells().map((cell) => (
-                <TableCell key={cell.id}>
+                <TableCell
+                  key={cell.id}
+                  data-hidden={(cell.column.columnDef.meta as ColumnMeta | undefined)?.hiddenOnMobile}
+                  className={cn(
+                    (cell.column.columnDef.meta as ColumnMeta | undefined)?.cellClassName,
+                    (cell.column.columnDef.meta as ColumnMeta | undefined)?.showOnMobileOnly
+                      ? "md:hidden"
+                      : undefined
+                  )}
+                >
                   {flexRender(cell.column.columnDef.cell, cell.getContext())}
                 </TableCell>
               ))}
