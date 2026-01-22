@@ -559,23 +559,16 @@ export default function TenantsPage() {
 
     // Validate required OpenVPN settings for generation
     const currentValues = controllerForm.getValues();
-    const hasTemplate = Boolean(currentValues.openvpn_profile_template?.trim());
     const hasRemoteHost = Boolean(currentValues.openvpn_remote_host?.trim());
     const hasRemotePort = Boolean(currentValues.openvpn_remote_port);
 
-    if (!hasTemplate && !tenantToConfigure.openvpn_profile_stored) {
-      toast.error("A profile template is required to generate. Upload one using Advanced OpenVPN options.");
-      setShowAdvancedOpenvpn(true);
-      return;
-    }
-
     if (!hasRemoteHost) {
-      toast.error("OpenVPN server host is required. Please fill it in to generate a profile.");
+      toast.error("OpenVPN server host is required to generate client configs.");
       return;
     }
 
     if (!hasRemotePort) {
-      toast.error("OpenVPN server port is required. Please fill it in to generate a profile.");
+      toast.error("OpenVPN server port is required to generate client configs.");
       return;
     }
 
@@ -950,11 +943,11 @@ export default function TenantsPage() {
                     onClick={handleGenerateClick}
                     aria-label="Generate OpenVPN gateway profile"
                   >
-                    Generate gateway profile…
+                    Generate client config…
                   </Button>
 
                   <div className="rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-                    OpenVPN profiles are served for gateway devices only and do not route general traffic.
+                    Generate creates client-specific configs with unique credentials for each gateway using a default template. Upload a custom template in Advanced options below to override. OpenVPN profiles are served for gateway devices only and do not route general traffic.
                     The API provides profiles; it does not join the VPN automatically. Profiles are
                     split-tunnel only (redirect-gateway is removed).{" "}
                     <Link className="text-primary underline-offset-4 hover:underline" href={openvpnDocsUrl}>
