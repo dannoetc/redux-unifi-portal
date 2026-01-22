@@ -133,6 +133,10 @@ def generate_openvpn_client_profile(client_name: str) -> str:
         )
 
     prefix = _resolve_openvpn_command_prefix()
+    
+    # Ensure PKI is initialized
+    _ensure_pki_initialized(prefix)
+    
     _run_openvpn_command(
         prefix + ["easyrsa", "build-client-full", cleaned, "nopass"],
         "OpenVPN client certificate generation failed.",
@@ -223,6 +227,49 @@ def _resolve_openvpn_command_prefix() -> list[str]:
             "OpenVPN generation command prefix is not configured.",
         )
     return shlex.split(prefix)
+
+
+def _ensure_pki_initialized(prefix: list[str]) -> None:
+    """Ensure OpenVPN EasyRSA PKI is initialized."""
+    # Check if PKI is already initialized by testing if pki directory exists
+    check_cmd = prefix + ["ls", "-la", "/etc/openvpn/pki"]
+    try:
+        result = subprocess.run(check_cmd, capture_output=True, text=True, check=False)
+        if result.returncode == 0:
+            # PKI exists, already initialized
+            return
+    except OSError:
+        pass
+    
+    # Initialize PKI
+    try:
+        # Build PKI with easy-rsa
+        init_cmd = prefix + ["easyrsa", "init-pki"]
+        result = subprocess.run(init_cmd, input="yes\n", capture_output=True, text=True, check=False)
+        if result.returncode != 0:
+            raise OpenVpnError(
+                "OPENVPN_GENERATION_FAILED",
+                f"Failed to initialize OpenVPN PKI: {result.stderr}",
+            )
+        
+        # Build CA
+        build_ca_cmd = prefix + ["easyrsa", "build-ca", "nopass"]
+        result = subprocess.run(
+            build_ca_cmd,
+            input="reduxtc\n",
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            raise OpenVpnError(
+                "OPENVPN_GENERATION_FAILED",
+                f"Failed to build OpenVPN CA: {result.stderr}",
+            )
+    except OpenVpnError:
+        raise
+    except OSError as exc:
+        raise OpenVpnError("OPENVPN_GENERATION_FAILED", "Failed to initialize OpenVPN PKI.") from exc
 
 
 def _run_openvpn_command(
