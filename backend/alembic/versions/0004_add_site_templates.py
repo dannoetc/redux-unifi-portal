@@ -1,7 +1,7 @@
 """Add site portal templates
 
 Revision ID: 0004_add_site_templates
-Revises: 0003_add_tos_only
+Revises: 0004_tenant_unifi_controller
 Create Date: 2026-01-20 00:00:00.000000
 """
 
@@ -12,7 +12,7 @@ from alembic import op
 
 
 revision = "0004_add_site_templates"
-down_revision = "0003_add_tos_only"
+down_revision = "0004_tenant_unifi_controller"
 branch_labels = None
 depends_on = None
 

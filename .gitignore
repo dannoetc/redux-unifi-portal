@@ -65,3 +65,4 @@ docker-compose.override.yml
 # ---- Misc ----
 *.tmp
 *.bak
+vscode.code-workspace
