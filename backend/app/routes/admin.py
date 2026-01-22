@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import io
+import logging
 import re
 import secrets
 import string
@@ -70,6 +71,7 @@ from app.services.unifi import UnifiApiError, UnifiClient
 from app.settings import settings
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 @router.post("/login")
 def login(payload: AdminLoginRequest, db: Session = Depends(get_db)) -> JSONResponse:
@@ -653,9 +655,16 @@ def generate_openvpn_profile(
         profile = generate_openvpn_client_profile(payload.client_name)
         encrypted_profile = encrypt_openvpn_secret(profile)
     except OpenVpnError as exc:
+        logger.error(f"OpenVPN generation error: {exc.code} - {str(exc)}")
         raise HTTPException(
             status_code=400,
             detail={"ok": False, "error": {"code": exc.code, "message": str(exc)}},
+        ) from exc
+    except Exception as exc:
+        logger.error(f"Unexpected error during OpenVPN generation: {exc}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail={"ok": False, "error": {"code": "OPENVPN_GENERATION_FAILED", "message": "Failed to generate OpenVPN profile."}},
         ) from exc
 
     profile_record = TenantOpenvpnClientProfile(
