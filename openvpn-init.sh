@@ -6,11 +6,17 @@ set -e
 
 echo "=== OpenVPN Container Startup ==="
 
-# Check if PKI is already initialized
-if [ -d /etc/openvpn/pki ]; then
-    echo "OpenVPN PKI already initialized, skipping setup..."
+# Check if PKI is fully initialized by looking for key files
+if [ -f /etc/openvpn/pki/ca.crt ] && [ -f /etc/openvpn/pki/dh.pem ]; then
+    echo "OpenVPN PKI already fully initialized, skipping setup..."
 else
-    echo "OpenVPN PKI not found, initializing..."
+    echo "OpenVPN PKI incomplete or not found, initializing..."
+    
+    # Remove incomplete PKI directory if it exists
+    if [ -d /etc/openvpn/pki ]; then
+        echo "Removing incomplete PKI directory..."
+        rm -rf /etc/openvpn/pki
+    fi
     
     # Generate OpenVPN config (non-interactive)
     echo "Running ovpn_genconfig..."
