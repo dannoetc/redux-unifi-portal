@@ -502,14 +502,13 @@ export default function TenantsPage() {
     }
   };
 
-  const refreshTenants = async () => {
+  const refreshTenants = async (): Promise<void> => {
     try {
       const data = await apiFetch<TenantList>("/api/admin/tenants");
       setTenants(data.tenants);
       return data.tenants;
     } catch (error: any) {
       toast.error(error?.message ?? "Unable to refresh tenants.");
-      return [];
     }
   };
 
