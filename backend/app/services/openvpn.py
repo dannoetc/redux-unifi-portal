@@ -136,9 +136,6 @@ def generate_openvpn_client_profile(client_name: str) -> str:
 
     prefix = _resolve_openvpn_command_prefix()
     
-    # Ensure PKI is initialized
-    _ensure_pki_initialized(prefix)
-    
     _run_openvpn_command(
         prefix + ["easyrsa", "build-client-full", cleaned, "nopass"],
         "OpenVPN client certificate generation failed.",
@@ -229,54 +226,6 @@ def _resolve_openvpn_command_prefix() -> list[str]:
             "OpenVPN generation command prefix is not configured.",
         )
     return shlex.split(prefix)
-
-
-def _ensure_pki_initialized(prefix: list[str]) -> None:
-    """Ensure OpenVPN EasyRSA PKI is initialized."""
-    import logging
-    logger = logging.getLogger(__name__)
-    
-    # Check if PKI is already initialized by testing if pki directory exists
-    check_cmd = prefix + ["ls", "-la", "/etc/openvpn/pki"]
-    try:
-        result = subprocess.run(check_cmd, capture_output=True, text=True, check=False)
-        if result.returncode == 0:
-            # PKI exists, already initialized
-            logger.info("OpenVPN PKI already initialized")
-            return
-    except OSError as e:
-        logger.warning(f"Could not check PKI status: {e}")
-    
-    # Initialize PKI using kylemanna/openvpn helper scripts
-    try:
-        logger.info("Initializing OpenVPN PKI...")
-        
-        # First, generate OpenVPN config if not already done
-        genconfig_cmd = prefix + ["ovpn_genconfig", "-u", "udp://openvpn"]
-        result = subprocess.run(genconfig_cmd, capture_output=True, text=True, check=False)
-        if result.returncode != 0:
-            logger.warning(f"ovpn_genconfig returned {result.returncode}: {result.stderr}")
-        
-        # Initialize PKI using the container's helper script
-        initpki_cmd = prefix + ["ovpn_initpki", "nopass"]
-        logger.info(f"Running: {' '.join(initpki_cmd)}")
-        result = subprocess.run(initpki_cmd, capture_output=True, text=True, check=False)
-        
-        if result.returncode != 0:
-            logger.error(f"ovpn_initpki failed with code {result.returncode}")
-            logger.error(f"stdout: {result.stdout}")
-            logger.error(f"stderr: {result.stderr}")
-            raise OpenVpnError(
-                "OPENVPN_GENERATION_FAILED",
-                f"Failed to initialize OpenVPN PKI: {result.stderr}",
-            )
-        
-        logger.info("OpenVPN PKI initialized successfully")
-    except OpenVpnError:
-        raise
-    except OSError as exc:
-        logger.error(f"OSError during PKI initialization: {exc}")
-        raise OpenVpnError("OPENVPN_GENERATION_FAILED", "Failed to initialize OpenVPN PKI.") from exc
 
 
 def _run_openvpn_command(

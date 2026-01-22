@@ -23,6 +23,8 @@ services:
       - NET_ADMIN
     volumes:
       - openvpn_data:/etc/openvpn
+      - ./openvpn-init.sh:/usr/local/bin/openvpn-init.sh:ro
+    entrypoint: /usr/local/bin/openvpn-init.sh
 
   api:
     build:
