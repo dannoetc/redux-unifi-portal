@@ -1,20 +1,23 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useMemo, useState } from "react";
 import { ColumnDef } from "@tanstack/react-table";
 import { toast } from "sonner";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ChevronDown, MoreHorizontal } from "lucide-react";
+import Link from "next/link";
 
 import { ApiError, apiDownloadFile, apiFetch } from "@/lib/api";
 import { DataTable } from "@/components/data-table";
+import { OpenVpnClientList } from "@/components/OpenVpn/OpenVpnClientList";
+import { OpenVpnGenerateDialog, OpenVpnClient } from "@/components/OpenVpn/OpenVpnGenerateDialog";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PopoverMenu, PopoverMenuItem, PopoverMenuSeparator } from "@/components/ui/PopoverMenu";
 import StatusPill from "@/components/ui/StatusPill";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -64,10 +67,6 @@ const controllerSchema = z.object({
   openvpn_remote_port: optionalPort,
 });
 
-const openvpnGenerateSchema = z.object({
-  client_name: z.string().trim().min(1, "Client name is required.").max(64, "Client name is too long."),
-});
-
 type Tenant = {
   id: string;
   name: string;
@@ -87,12 +86,12 @@ type Tenant = {
   openvpn_remote_port?: number | null;
   openvpn_generated_client_name?: string | null;
   openvpn_generated_created_at?: string | null;
+  openvpn_clients?: OpenVpnClient[] | null;
 };
 
 type TenantList = { tenants: Tenant[] };
 
 type CreateTenant = z.infer<typeof schema>;
-type GenerateOpenvpn = z.infer<typeof openvpnGenerateSchema>;
 
 const formatStatus = (status?: string) => {
   const normalized = (status ?? "ACTIVE").toLowerCase();
@@ -127,6 +126,26 @@ const displayUnifiHost = (value?: string | null) => {
   return withoutProtocol.split("/")[0] ?? "";
 };
 
+const openvpnDocsUrl = "/docs/operations-security.md";
+
+const getLatestOpenvpnClient = (tenant: Tenant) => {
+  const clients = tenant.openvpn_clients ?? [];
+  if (!clients.length) {
+    return null;
+  }
+  return clients.reduce<OpenVpnClient | null>((latest, client) => {
+    if (!latest) {
+      return client;
+    }
+    const latestTime = new Date(latest.created_at).getTime();
+    const clientTime = new Date(client.created_at).getTime();
+    if (Number.isNaN(latestTime) || Number.isNaN(clientTime)) {
+      return latest;
+    }
+    return clientTime > latestTime ? client : latest;
+  }, null);
+};
+
 export default function TenantsPage() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [loading, setLoading] = useState(true);
@@ -139,8 +158,9 @@ export default function TenantsPage() {
   const [setupOpen, setSetupOpen] = useState(true);
   const [setupInitialized, setSetupInitialized] = useState(false);
   const [generateOpen, setGenerateOpen] = useState(false);
-  const [generating, setGenerating] = useState(false);
   const [tenantToGenerate, setTenantToGenerate] = useState<Tenant | null>(null);
+  const [manageOpen, setManageOpen] = useState(false);
+  const [tenantToManage, setTenantToManage] = useState<Tenant | null>(null);
 
   const form = useForm<CreateTenant>({
     resolver: zodResolver(schema),
@@ -158,12 +178,6 @@ export default function TenantsPage() {
       openvpn_ca_ref: "",
       openvpn_ca_bundle: "",
       openvpn_remote_host: "",
-    },
-  });
-  const generateForm = useForm<GenerateOpenvpn>({
-    resolver: zodResolver(openvpnGenerateSchema),
-    defaultValues: {
-      client_name: "",
     },
   });
 
@@ -213,196 +227,151 @@ export default function TenantsPage() {
       }
     };
 
-  const RowActions = ({ tenant }: { tenant: Tenant }) => {
-    const [open, setOpen] = useState(false);
-    const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
-    const triggerRef = useRef<HTMLButtonElement | null>(null);
-    const menuRef = useRef<HTMLDivElement | null>(null);
+  const downloadOpenvpnProfile = async (tenant: Tenant) => {
     const openvpnEnabled = Boolean(tenant.openvpn_enabled);
-    const hasGeneratedProfile = Boolean(tenant.openvpn_generated_client_name);
-    const openvpnDisabledMessage = "OpenVPN generation is not configured for this tenant.";
+    const latestClient = getLatestOpenvpnClient(tenant);
+    const hasGeneratedProfile =
+      Boolean(latestClient) || Boolean(tenant.openvpn_generated_client_name);
+    const openvpnDisabledMessage = "OpenVPN is not configured for this tenant. See operations docs.";
 
-    useEffect(() => {
-      if (!open) {
-        return;
+    if (!openvpnEnabled) {
+      toast.error(openvpnDisabledMessage);
+      return;
+    }
+    if (!hasGeneratedProfile) {
+      toast.error("No generated profile exists — click Generate to create one.");
+      return;
+    }
+    try {
+      if (latestClient) {
+        await apiDownloadFile(
+          `/api/admin/tenants/${tenant.id}/openvpn/clients/${latestClient.id}`,
+          `${latestClient.client_name}.ovpn`
+        );
+      } else {
+        await apiDownloadFile(
+          `/api/admin/tenants/${tenant.id}/openvpn/profile`,
+          `${tenant.slug}-openvpn.ovpn`
+        );
       }
-      const updatePosition = () => {
-        const trigger = triggerRef.current;
-        if (!trigger) {
+      toast.success("OpenVPN profile downloaded.");
+    } catch (error: any) {
+      if (error instanceof ApiError) {
+        if (error.code === "OPENVPN_NOT_CONFIGURED") {
+          toast.error(openvpnDisabledMessage);
           return;
         }
-        const rect = trigger.getBoundingClientRect();
-        setMenuPosition({
-          top: rect.bottom + 8,
-          left: rect.right,
-        });
-      };
-      updatePosition();
-
-      const handlePointerDown = (event: MouseEvent) => {
-        const target = event.target as Node;
-        if (menuRef.current?.contains(target) || triggerRef.current?.contains(target)) {
+        if (error.code === "OPENVPN_PROFILE_NOT_GENERATED") {
+          toast.error("No generated profile exists — click Generate to create one.");
           return;
         }
-        setOpen(false);
-      };
-      const handleKeyDown = (event: KeyboardEvent) => {
-        if (event.key === "Escape") {
-          setOpen(false);
+        if (error.code === "OPENVPN_GENERATION_FAILED") {
+          toast.error("OpenVPN generation failed. Check the tenant configuration.");
+          return;
         }
-      };
-      const handleScroll = () => setOpen(false);
-      const handleResize = () => setOpen(false);
+        if (error.status === 404 && !latestClient) {
+          toast.error("No generated profile exists — click Generate to create one.");
+          return;
+        }
+      }
+      toast.error(error?.message ?? "Unable to download OpenVPN profile.");
+    }
+  };
 
-      document.addEventListener("mousedown", handlePointerDown);
-      document.addEventListener("keydown", handleKeyDown);
-      window.addEventListener("scroll", handleScroll, true);
-      window.addEventListener("resize", handleResize);
-
-      return () => {
-        document.removeEventListener("mousedown", handlePointerDown);
-        document.removeEventListener("keydown", handleKeyDown);
-        window.removeEventListener("scroll", handleScroll, true);
-        window.removeEventListener("resize", handleResize);
-      };
-    }, [open]);
+  const RowActions = ({ tenant }: { tenant: Tenant }) => {
+    const openvpnEnabled = Boolean(tenant.openvpn_enabled);
+    const openvpnDisabledMessage = "OpenVPN is not configured for this tenant. See operations docs.";
 
     return (
-      <>
-        <button
-          ref={triggerRef}
-          type="button"
-          aria-haspopup="menu"
-          aria-expanded={open}
-          aria-label="Open row actions"
-          className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
-          onClick={() => setOpen((prev) => !prev)}
+      <PopoverMenu
+        trigger={
+          <button
+            type="button"
+            aria-label="Open row actions"
+            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+          >
+            <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+          </button>
+        }
+      >
+        <PopoverMenuItem
+          onClick={() => {
+            setTenantToConfigure(tenant);
+            controllerForm.reset({
+              unifi_base_url: displayUnifiHost(tenant.unifi_base_url),
+              unifi_api_key_ref: tenant.unifi_api_key_ref ?? "",
+              is_roaming: tenant.is_roaming ?? false,
+              openvpn_enabled: tenant.openvpn_enabled ?? false,
+              openvpn_profile_ref: tenant.openvpn_profile_ref ?? "",
+              openvpn_profile_template: "",
+              openvpn_auth_ref: tenant.openvpn_auth_ref ?? "",
+              openvpn_auth_blob: "",
+              openvpn_ca_ref: tenant.openvpn_ca_ref ?? "",
+              openvpn_ca_bundle: "",
+              openvpn_remote_host: tenant.openvpn_remote_host ?? "",
+              openvpn_remote_port: tenant.openvpn_remote_port ?? undefined,
+            });
+            setControllerOpen(true);
+          }}
         >
-          <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
-        </button>
-        {open && typeof document !== "undefined"
-          ? createPortal(
-              <div
-                ref={menuRef}
-                role="menu"
-                className="z-50 min-w-[180px] rounded-md border border-border bg-white p-1 shadow-soft"
-                style={{
-                  position: "fixed",
-                  top: menuPosition.top,
-                  left: menuPosition.left,
-                  transform: "translateX(-100%)",
-                }}
-              >
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="w-full rounded-sm px-2 py-1.5 text-left text-sm text-foreground hover:bg-muted"
-                  onClick={() => {
-                    setTenantToConfigure(tenant);
-                    controllerForm.reset({
-                      unifi_base_url: displayUnifiHost(tenant.unifi_base_url),
-                      unifi_api_key_ref: tenant.unifi_api_key_ref ?? "",
-                      is_roaming: tenant.is_roaming ?? false,
-                      openvpn_enabled: tenant.openvpn_enabled ?? false,
-                      openvpn_profile_ref: tenant.openvpn_profile_ref ?? "",
-                      openvpn_profile_template: "",
-                      openvpn_auth_ref: tenant.openvpn_auth_ref ?? "",
-                      openvpn_auth_blob: "",
-                      openvpn_ca_ref: tenant.openvpn_ca_ref ?? "",
-                      openvpn_ca_bundle: "",
-                      openvpn_remote_host: tenant.openvpn_remote_host ?? "",
-                      openvpn_remote_port: tenant.openvpn_remote_port ?? undefined,
-                    });
-                    setControllerOpen(true);
-                    setOpen(false);
-                  }}
-                >
-                  Configure UniFi
-                </button>
-                <div className="my-1 h-px bg-border/70" />
-                <button
-                  type="button"
-                  role="menuitem"
-                  title={openvpnEnabled ? undefined : openvpnDisabledMessage}
-                  aria-disabled={!openvpnEnabled}
-                  className={`w-full rounded-sm px-2 py-1.5 text-left text-sm hover:bg-muted ${
-                    openvpnEnabled ? "text-foreground" : "cursor-not-allowed text-muted-foreground"
-                  }`}
-                  onClick={() => {
-                    if (!openvpnEnabled) {
-                      toast.error(openvpnDisabledMessage);
-                      setOpen(false);
-                      return;
-                    }
-                    setTenantToGenerate(tenant);
-                    generateForm.reset({ client_name: "" });
-                    setGenerateOpen(true);
-                    setOpen(false);
-                  }}
-                >
-                  Generate OpenVPN profile...
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  title={!openvpnEnabled ? openvpnDisabledMessage : undefined}
-                  aria-disabled={!openvpnEnabled}
-                  className={`w-full rounded-sm px-2 py-1.5 text-left text-sm hover:bg-muted ${
-                    openvpnEnabled ? "text-foreground" : "cursor-not-allowed text-muted-foreground"
-                  }`}
-                  onClick={async () => {
-                    if (!openvpnEnabled) {
-                      toast.error(openvpnDisabledMessage);
-                      setOpen(false);
-                      return;
-                    }
-                    if (!hasGeneratedProfile) {
-                      toast.error("No OpenVPN profile generated yet. Generate one first.");
-                      setOpen(false);
-                      return;
-                    }
-                    try {
-                      await apiDownloadFile(
-                        `/api/admin/tenants/${tenant.id}/openvpn/profile`,
-                        `${tenant.slug}-openvpn.ovpn`
-                      );
-                      toast.success("OpenVPN profile downloaded.");
-                    } catch (error: any) {
-                      if (error instanceof ApiError) {
-                        if (error.code === "OPENVPN_NOT_CONFIGURED") {
-                          toast.error(openvpnDisabledMessage);
-                        } else if (error.code === "OPENVPN_PROFILE_NOT_GENERATED") {
-                          toast.error("No OpenVPN profile generated yet. Generate one first.");
-                        } else {
-                          toast.error(error.message);
-                        }
-                      } else {
-                        toast.error(error?.message ?? "Unable to download OpenVPN profile.");
-                      }
-                    }
-                    setOpen(false);
-                  }}
-                >
-                  Download OpenVPN profile
-                </button>
-                <div className="my-1 h-px bg-border/70" />
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="w-full rounded-sm px-2 py-1.5 text-left text-sm text-destructive hover:bg-muted"
-                  onClick={() => {
-                    setTenantToDelete(tenant);
-                    setDeleteOpen(true);
-                    setOpen(false);
-                  }}
-                >
-                  Remove tenant
-                </button>
-              </div>,
-              document.body
-            )
-          : null}
-      </>
+          Configure UniFi
+        </PopoverMenuItem>
+        <PopoverMenuSeparator />
+        <PopoverMenuItem
+          disabled={!openvpnEnabled}
+          title={openvpnEnabled ? undefined : openvpnDisabledMessage}
+          onClick={() => {
+            if (!openvpnEnabled) {
+              toast.error(openvpnDisabledMessage);
+              return;
+            }
+            setTenantToGenerate(tenant);
+            setGenerateOpen(true);
+          }}
+        >
+          Generate gateway profile…
+        </PopoverMenuItem>
+        <PopoverMenuItem
+          disabled={!openvpnEnabled}
+          title={openvpnEnabled ? undefined : openvpnDisabledMessage}
+          onClick={() => {
+            if (!openvpnEnabled) {
+              toast.error(openvpnDisabledMessage);
+              return;
+            }
+            setTenantToManage(tenant);
+            setManageOpen(true);
+          }}
+        >
+          Manage gateway profiles
+        </PopoverMenuItem>
+        <PopoverMenuItem
+          disabled={!openvpnEnabled}
+          title={openvpnEnabled ? undefined : openvpnDisabledMessage}
+          onClick={() => downloadOpenvpnProfile(tenant)}
+        >
+          Download gateway profile
+        </PopoverMenuItem>
+        {!openvpnEnabled ? (
+          <div className="px-2 pb-2 pt-1 text-xs text-muted-foreground" role="presentation">
+            OpenVPN is disabled for this tenant.{" "}
+            <Link className="text-primary underline-offset-4 hover:underline" href={openvpnDocsUrl}>
+              See operations docs
+            </Link>
+            .
+          </div>
+        ) : null}
+        <PopoverMenuSeparator />
+        <PopoverMenuItem
+          className="text-destructive"
+          onClick={() => {
+            setTenantToDelete(tenant);
+            setDeleteOpen(true);
+          }}
+        >
+          Remove tenant
+        </PopoverMenuItem>
+      </PopoverMenu>
     );
   };
 
@@ -418,6 +387,7 @@ export default function TenantsPage() {
       {
         accessorKey: "slug",
         header: "Slug",
+        meta: { hiddenOnMobile: true },
         cell: ({ row }) => (
           <span className="text-sm text-muted-foreground">{row.original.slug}</span>
         ),
@@ -425,8 +395,26 @@ export default function TenantsPage() {
       {
         accessorKey: "status",
         header: "Status",
+        meta: { hiddenOnMobile: true },
         cell: ({ row }) => (
           <StatusPill status={formatStatus(row.original.status)} />
+        ),
+      },
+      {
+        id: "details",
+        header: () => <span className="md:hidden">Details</span>,
+        meta: { showOnMobileOnly: true, headerClassName: "text-xs" },
+        cell: ({ row }) => (
+          <div className="space-y-1 text-xs text-muted-foreground md:hidden">
+            <div className="flex items-center gap-2">
+              <span className="font-medium text-foreground">Slug</span>
+              <span>{row.original.slug}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="font-medium text-foreground">Status</span>
+              <StatusPill status={formatStatus(row.original.status)} />
+            </div>
+          </div>
         ),
       },
       {
@@ -518,41 +506,10 @@ export default function TenantsPage() {
     try {
       const data = await apiFetch<TenantList>("/api/admin/tenants");
       setTenants(data.tenants);
+      return data.tenants;
     } catch (error: any) {
       toast.error(error?.message ?? "Unable to refresh tenants.");
-    }
-  };
-
-  const generateOpenvpnProfile = async (values: GenerateOpenvpn) => {
-    if (!tenantToGenerate) {
-      return;
-    }
-    setGenerating(true);
-    try {
-      const data = await apiFetch<{ client_name: string }>(
-        `/api/admin/tenants/${tenantToGenerate.id}/openvpn/generate`,
-        {
-          method: "POST",
-          body: JSON.stringify({ client_name: values.client_name.trim() }),
-        }
-      );
-      await refreshTenants();
-      toast.success(`OpenVPN profile generated for ${data.client_name}.`);
-      setGenerateOpen(false);
-      setTenantToGenerate(null);
-      generateForm.reset({ client_name: "" });
-    } catch (error: any) {
-      if (error instanceof ApiError) {
-        if (error.code === "OPENVPN_NOT_CONFIGURED") {
-          toast.error("OpenVPN generation is not configured for this tenant.");
-        } else {
-          toast.error(error.message);
-        }
-      } else {
-        toast.error(error?.message ?? "Unable to generate OpenVPN profile.");
-      }
-    } finally {
-      setGenerating(false);
+      return [];
     }
   };
 
@@ -715,43 +672,54 @@ export default function TenantsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <Dialog open={generateOpen} onOpenChange={setGenerateOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Generate OpenVPN profile</DialogTitle>
-            <DialogDescription>
-              Create a client configuration for {tenantToGenerate?.name ?? "this tenant"}.
-            </DialogDescription>
-          </DialogHeader>
-          <form className="space-y-4" onSubmit={generateForm.handleSubmit(generateOpenvpnProfile)}>
-            <div className="space-y-2">
-              <Label htmlFor="openvpn_client_name">Client name</Label>
-              <Input
-                id="openvpn_client_name"
-                placeholder="gateway-01"
-                autoFocus
-                {...generateForm.register("client_name")}
-              />
-              {generateForm.formState.errors.client_name ? (
-                <p className="text-xs text-destructive">
-                  {generateForm.formState.errors.client_name.message}
-                </p>
-              ) : null}
-              <p className="text-xs text-muted-foreground">
-                Use a unique client name per gateway to rotate profiles as needed.
-              </p>
-            </div>
-            <DialogFooter className="gap-2">
-              <Button type="button" variant="secondary" onClick={() => setGenerateOpen(false)}>
-                Cancel
-              </Button>
-              <Button type="submit" variant="primary" disabled={generating}>
-                {generating ? "Generating..." : "Generate profile"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <OpenVpnGenerateDialog
+        open={generateOpen}
+        onOpenChange={(isOpen) => {
+          setGenerateOpen(isOpen);
+          if (!isOpen) {
+            setTenantToGenerate(null);
+          }
+        }}
+        tenant={tenantToGenerate ? { id: tenantToGenerate.id, name: tenantToGenerate.name, slug: tenantToGenerate.slug } : null}
+        onGenerated={(client) => {
+          if (!tenantToGenerate) {
+            return;
+          }
+          setTenants((prev) =>
+            prev.map((tenant) =>
+              tenant.id === tenantToGenerate.id
+                ? {
+                    ...tenant,
+                    openvpn_generated_client_name: client.client_name,
+                    openvpn_generated_created_at: client.created_at,
+                    openvpn_clients: [...(tenant.openvpn_clients ?? []), client],
+                  }
+                : tenant
+            )
+          );
+        }}
+        onRefresh={refreshTenants}
+      />
+      <OpenVpnClientList
+        open={manageOpen}
+        onOpenChange={(isOpen) => {
+          setManageOpen(isOpen);
+          if (!isOpen) {
+            setTenantToManage(null);
+          }
+        }}
+        tenant={
+          tenantToManage
+            ? {
+                id: tenantToManage.id,
+                name: tenantToManage.name,
+                slug: tenantToManage.slug,
+                openvpn_clients: tenantToManage.openvpn_clients ?? [],
+              }
+            : null
+        }
+        onRefresh={refreshTenants}
+      />
       <Dialog open={controllerOpen} onOpenChange={setControllerOpen}>
         <DialogContent className="max-w-3xl">
           <DialogHeader>
@@ -816,6 +784,15 @@ export default function TenantsPage() {
                   <span className="h-5 w-9 rounded-full bg-muted transition peer-checked:bg-primary" />
                   <span className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition peer-checked:translate-x-4" />
                 </label>
+              </div>
+              <div className="rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                OpenVPN profiles are served for gateway devices only and do not route general traffic. The
+                API provides profiles; it does not join the VPN automatically. Profiles are split-tunnel
+                only (redirect-gateway is removed).{" "}
+                <Link className="text-primary underline-offset-4 hover:underline" href={openvpnDocsUrl}>
+                  Operations &amp; Security
+                </Link>
+                .
               </div>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div className="space-y-2">
