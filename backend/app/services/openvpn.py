@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import os
 import re
+import secrets
 import shlex
 import subprocess
+import string
 
 from cryptography.fernet import Fernet, InvalidToken
 
@@ -245,14 +247,19 @@ def _ensure_pki_initialized(prefix: list[str]) -> None:
     try:
         # Build PKI with easy-rsa
         init_cmd = prefix + ["easyrsa", "init-pki"]
-        result = subprocess.run(init_cmd, input="yes\n", capture_output=True, text=True, check=False)
+        result = subprocess.run(init_cmd, capture_output=True, text=True, check=False)
         if result.returncode != 0:
             raise OpenVpnError(
                 "OPENVPN_GENERATION_FAILED",
                 f"Failed to initialize OpenVPN PKI: {result.stderr}",
             )
         
-        # Build CA
+        # Generate a random passphrase for the CA
+        passphrase = ''.join(
+            secrets.choice(string.ascii_letters + string.digits) for _ in range(32)
+        )
+        
+        # Build CA with the generated passphrase
         build_ca_cmd = prefix + ["easyrsa", "build-ca", "nopass"]
         result = subprocess.run(
             build_ca_cmd,
