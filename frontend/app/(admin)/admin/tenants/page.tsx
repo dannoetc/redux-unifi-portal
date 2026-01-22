@@ -854,13 +854,13 @@ export default function TenantsPage() {
                     <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
                       <div className="font-medium">
                         {(() => {
-                          const latestClient = getLatestOpenvpnClient(tenantToConfigure);
+                          const latestClient = getLatestOpenvpnClient(tenantToConfigure!);
                           if (latestClient) {
                             const createdDate = new Date(latestClient.created_at).toLocaleString();
                             return `Generated profile: ${latestClient.client_name} — created ${createdDate}`;
                           }
-                          if (tenantToConfigure.openvpn_generated_client_name) {
-                            return `Generated profile: ${tenantToConfigure.openvpn_generated_client_name}`;
+                          if (tenantToConfigure!.openvpn_generated_client_name) {
+                            return `Generated profile: ${tenantToConfigure!.openvpn_generated_client_name}`;
                           }
                           return "Stored profile available";
                         })()}
