@@ -638,14 +638,14 @@ def generate_openvpn_profile(
             status_code=404,
             detail={"ok": False, "error": {"code": "NOT_FOUND", "message": "Tenant not found."}},
         )
-    if not tenant.openvpn_enabled or not tenant.openvpn_remote_host or not tenant.openvpn_remote_port:
+    if not tenant.openvpn_remote_host or not tenant.openvpn_remote_port:
         raise HTTPException(
             status_code=400,
             detail={
                 "ok": False,
                 "error": {
                     "code": "OPENVPN_NOT_CONFIGURED",
-                    "message": "OpenVPN generation is not configured for this tenant.",
+                    "message": "OpenVPN remote host and port are required for generation.",
                 },
             },
         )
