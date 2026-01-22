@@ -28,6 +28,7 @@ from app.models import (
     Site,
     SiteOidcSetting,
     Tenant,
+    TenantOpenvpnClientProfile,
     TenantOpenvpnSecret,
     TenantStatus,
     Voucher,
@@ -49,13 +50,19 @@ from app.schemas.admin_site import (
     SiteUpdateRequest,
     UnifiSiteDiscoveryResponse,
 )
-from app.schemas.admin_tenant import TenantCreateRequest, TenantResponse, TenantUpdateRequest
+from app.schemas.admin_tenant import (
+    OpenvpnGenerateRequest,
+    TenantCreateRequest,
+    TenantResponse,
+    TenantUpdateRequest,
+)
 from app.schemas.admin_voucher import VoucherBatchCreateRequest
 from app.security import create_session_token, hash_password, verify_password
 from app.services.openvpn import (
     OpenVpnError,
-    build_openvpn_profile,
+    decrypt_openvpn_secret,
     encrypt_openvpn_secret,
+    generate_openvpn_client_profile,
     profile_requires_remote_settings,
     resolve_openvpn_profile_template,
 )
@@ -575,21 +582,98 @@ def download_openvpn_profile(
     if not tenant.openvpn_enabled:
         raise HTTPException(
             status_code=400,
-            detail={"ok": False, "error": {"code": "OPENVPN_DISABLED", "message": "OpenVPN is not enabled."}},
+            detail={
+                "ok": False,
+                "error": {
+                    "code": "OPENVPN_NOT_CONFIGURED",
+                    "message": "OpenVPN generation is not configured for this tenant.",
+                },
+            },
+        )
+    profile_record = (
+        db.execute(
+            select(TenantOpenvpnClientProfile)
+            .where(TenantOpenvpnClientProfile.tenant_id == tenant_id)
+            .order_by(TenantOpenvpnClientProfile.created_at.desc())
+        )
+        .scalars()
+        .first()
+    )
+    if not profile_record:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "ok": False,
+                "error": {
+                    "code": "OPENVPN_PROFILE_NOT_GENERATED",
+                    "message": "Generate an OpenVPN profile before downloading.",
+                },
+            },
         )
     try:
-        profile = build_openvpn_profile(tenant)
+        profile = decrypt_openvpn_secret(profile_record.profile_encrypted)
     except OpenVpnError as exc:
         raise HTTPException(
             status_code=400,
             detail={"ok": False, "error": {"code": exc.code, "message": str(exc)}},
         ) from exc
-    filename = f"{tenant.slug}-openvpn.ovpn"
+    filename = f"{profile_record.client_name}.ovpn"
     return Response(
         content=profile,
         media_type="application/x-openvpn-profile",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@router.post("/tenants/{tenant_id}/openvpn/generate")
+def generate_openvpn_profile(
+    tenant_id: uuid.UUID,
+    payload: OpenvpnGenerateRequest,
+    db: Session = Depends(get_db),
+    _admin: AdminUser = Depends(require_tenant_role([AdminRole.TENANT_ADMIN])),
+) -> dict:
+    tenant = db.execute(select(Tenant).where(Tenant.id == tenant_id)).scalar_one_or_none()
+    if not tenant:
+        raise HTTPException(
+            status_code=404,
+            detail={"ok": False, "error": {"code": "NOT_FOUND", "message": "Tenant not found."}},
+        )
+    if not tenant.openvpn_enabled or not tenant.openvpn_remote_host or not tenant.openvpn_remote_port:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "ok": False,
+                "error": {
+                    "code": "OPENVPN_NOT_CONFIGURED",
+                    "message": "OpenVPN generation is not configured for this tenant.",
+                },
+            },
+        )
+    try:
+        profile = generate_openvpn_client_profile(payload.client_name)
+        encrypted_profile = encrypt_openvpn_secret(profile)
+    except OpenVpnError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"ok": False, "error": {"code": exc.code, "message": str(exc)}},
+        ) from exc
+
+    profile_record = TenantOpenvpnClientProfile(
+        tenant_id=tenant.id,
+        client_name=payload.client_name.strip(),
+        profile_encrypted=encrypted_profile,
+    )
+    db.add(profile_record)
+    db.commit()
+    db.refresh(profile_record)
+
+    return {
+        "ok": True,
+        "data": {
+            "client_name": profile_record.client_name,
+            "created_at": profile_record.created_at,
+        },
+    }
 
 
 @router.delete("/tenants/{tenant_id}")
@@ -1418,6 +1502,7 @@ def _normalize_secret_value(value: str | None) -> str | None:
 
 def _build_tenant_response(tenant: Tenant) -> dict:
     secret = tenant.openvpn_secret
+    latest_profile = tenant.openvpn_client_profiles[0] if tenant.openvpn_client_profiles else None
     return TenantResponse(
         id=str(tenant.id),
         name=tenant.name,
@@ -1435,6 +1520,8 @@ def _build_tenant_response(tenant: Tenant) -> dict:
         openvpn_ca_stored=bool(secret and secret.ca_bundle_encrypted),
         openvpn_remote_host=tenant.openvpn_remote_host,
         openvpn_remote_port=tenant.openvpn_remote_port,
+        openvpn_generated_client_name=latest_profile.client_name if latest_profile else None,
+        openvpn_generated_created_at=latest_profile.created_at if latest_profile else None,
     ).model_dump(mode="json")
 
 
