@@ -234,6 +234,7 @@ def _run_openvpn_command(
     *,
     capture_output: bool = False,
 ) -> str:
+    logger = logging.getLogger(__name__)
     try:
         result = subprocess.run(
             command,
@@ -242,9 +243,13 @@ def _run_openvpn_command(
             check=False,
         )
     except OSError as exc:
+        logger.error(f"Failed to run command {command}: {exc}")
         raise OpenVpnError("OPENVPN_GENERATION_FAILED", message) from exc
 
     if result.returncode != 0:
+        logger.error(f"Command failed with code {result.returncode}: {' '.join(command)}")
+        logger.error(f"stdout: {result.stdout}")
+        logger.error(f"stderr: {result.stderr}")
         raise OpenVpnError("OPENVPN_GENERATION_FAILED", message)
 
     if capture_output:
