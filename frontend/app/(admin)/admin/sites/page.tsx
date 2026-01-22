@@ -329,8 +329,8 @@ export default function SitesPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="mx-auto flex min-h-[calc(100vh-104px)] w-full max-w-7xl flex-col gap-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 pb-4">
         <div>
           <h1 className="text-2xl font-semibold">Sites</h1>
           <p className="mt-1 text-sm text-muted-foreground">Configure branding, policies, and UniFi connection.</p>
@@ -514,9 +514,9 @@ export default function SitesPage() {
           </Dialog>
         </div>
       </div>
-      <div className="space-y-4">
+      <section className="flex min-h-0 flex-1 flex-col">
         {loading ? (
-          <div className="space-y-3 rounded-lg bg-muted/30 p-4">
+          <div className="space-y-3 rounded-lg border border-border/60 bg-muted/20 p-4">
             {Array.from({ length: 6 }).map((_, index) => (
               <div
                 key={`site-skeleton-${index}`}
@@ -530,7 +530,7 @@ export default function SitesPage() {
             ))}
           </div>
         ) : sites.length === 0 ? (
-          <div className="flex flex-col items-start gap-2 rounded-lg bg-muted/30 p-6">
+          <div className="flex flex-col items-start gap-2 rounded-lg border border-dashed border-border/60 bg-background/80 p-6">
             <div className="text-sm font-semibold">No sites yet.</div>
             <div className="text-sm text-muted-foreground">
               Create a site or discover sites from the controller.
@@ -540,9 +540,11 @@ export default function SitesPage() {
             </Button>
           </div>
         ) : (
-          <DataTable columns={columns} data={sites} />
+          <div className="flex-1 overflow-visible rounded-lg border border-border/60 bg-background">
+            <DataTable columns={columns} data={sites} />
+          </div>
         )}
-      </div>
+      </section>
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogContent>
           <DialogHeader>
@@ -564,4 +566,3 @@ export default function SitesPage() {
     </div>
   );
 }
-
