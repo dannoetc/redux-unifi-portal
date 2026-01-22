@@ -233,49 +233,49 @@ def _resolve_openvpn_command_prefix() -> list[str]:
 
 def _ensure_pki_initialized(prefix: list[str]) -> None:
     """Ensure OpenVPN EasyRSA PKI is initialized."""
+    import logging
+    logger = logging.getLogger(__name__)
+    
     # Check if PKI is already initialized by testing if pki directory exists
     check_cmd = prefix + ["ls", "-la", "/etc/openvpn/pki"]
     try:
         result = subprocess.run(check_cmd, capture_output=True, text=True, check=False)
         if result.returncode == 0:
             # PKI exists, already initialized
+            logger.info("OpenVPN PKI already initialized")
             return
-    except OSError:
-        pass
+    except OSError as e:
+        logger.warning(f"Could not check PKI status: {e}")
     
-    # Initialize PKI
+    # Initialize PKI using kylemanna/openvpn helper scripts
     try:
-        # Build PKI with easy-rsa
-        init_cmd = prefix + ["easyrsa", "init-pki"]
-        result = subprocess.run(init_cmd, capture_output=True, text=True, check=False)
+        logger.info("Initializing OpenVPN PKI...")
+        
+        # First, generate OpenVPN config if not already done
+        genconfig_cmd = prefix + ["ovpn_genconfig", "-u", "udp://openvpn"]
+        result = subprocess.run(genconfig_cmd, capture_output=True, text=True, check=False)
         if result.returncode != 0:
+            logger.warning(f"ovpn_genconfig returned {result.returncode}: {result.stderr}")
+        
+        # Initialize PKI using the container's helper script
+        initpki_cmd = prefix + ["ovpn_initpki", "nopass"]
+        logger.info(f"Running: {' '.join(initpki_cmd)}")
+        result = subprocess.run(initpki_cmd, capture_output=True, text=True, check=False)
+        
+        if result.returncode != 0:
+            logger.error(f"ovpn_initpki failed with code {result.returncode}")
+            logger.error(f"stdout: {result.stdout}")
+            logger.error(f"stderr: {result.stderr}")
             raise OpenVpnError(
                 "OPENVPN_GENERATION_FAILED",
                 f"Failed to initialize OpenVPN PKI: {result.stderr}",
             )
         
-        # Generate a random passphrase for the CA
-        passphrase = ''.join(
-            secrets.choice(string.ascii_letters + string.digits) for _ in range(32)
-        )
-        
-        # Build CA with the generated passphrase
-        build_ca_cmd = prefix + ["easyrsa", "build-ca", "nopass"]
-        result = subprocess.run(
-            build_ca_cmd,
-            input="reduxtc\n",
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if result.returncode != 0:
-            raise OpenVpnError(
-                "OPENVPN_GENERATION_FAILED",
-                f"Failed to build OpenVPN CA: {result.stderr}",
-            )
+        logger.info("OpenVPN PKI initialized successfully")
     except OpenVpnError:
         raise
     except OSError as exc:
+        logger.error(f"OSError during PKI initialization: {exc}")
         raise OpenVpnError("OPENVPN_GENERATION_FAILED", "Failed to initialize OpenVPN PKI.") from exc
 
 
