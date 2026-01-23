@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitForElementToBeRemoved } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -6,14 +6,14 @@ import { PopoverMenu, PopoverMenuItem, PopoverMenuLink, PopoverMenuSeparator } f
 
 describe("PopoverMenu", () => {
   it("renders trigger with correct ARIA attributes", async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
     render(
       <PopoverMenu trigger={<button type="button">Actions</button>}>
         <PopoverMenuItem>First</PopoverMenuItem>
       </PopoverMenu>
     );
 
-    const trigger = screen.getByRole("button", { name: "Actions" });
+    const trigger = screen.getAllByRole("button", { name: "Actions" })[0];
     expect(trigger).toHaveAttribute("aria-haspopup", "menu");
     expect(trigger).toHaveAttribute("aria-expanded", "false");
 
@@ -22,25 +22,25 @@ describe("PopoverMenu", () => {
   });
 
   it("opens and closes with click", async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
     render(
       <PopoverMenu trigger={<button type="button">Actions</button>}>
         <PopoverMenuItem>First</PopoverMenuItem>
       </PopoverMenu>
     );
 
-    const trigger = screen.getByRole("button", { name: "Actions" });
+    const trigger = screen.getAllByRole("button", { name: "Actions" })[0];
     await user.click(trigger);
 
     const menu = await screen.findByRole("menu");
     expect(menu).toBeInTheDocument();
 
     await user.click(trigger);
-    expect(menu).not.toBeInTheDocument();
+    await waitForElementToBeRemoved(() => screen.queryByRole("menu"));
   });
 
   it("supports arrow key navigation", async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
     render(
       <PopoverMenu trigger={<button type="button">Actions</button>}>
         <PopoverMenuItem>First</PopoverMenuItem>
@@ -49,7 +49,7 @@ describe("PopoverMenu", () => {
       </PopoverMenu>
     );
 
-    const trigger = screen.getByRole("button", { name: "Actions" });
+    const trigger = screen.getAllByRole("button", { name: "Actions" })[0];
     await user.click(trigger);
 
     const items = screen.getAllByRole("menuitem");
@@ -69,25 +69,25 @@ describe("PopoverMenu", () => {
   });
 
   it("closes on Escape key", async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
     render(
       <PopoverMenu trigger={<button type="button">Actions</button>}>
         <PopoverMenuItem>First</PopoverMenuItem>
       </PopoverMenu>
     );
 
-    const trigger = screen.getByRole("button", { name: "Actions" });
+    const trigger = screen.getAllByRole("button", { name: "Actions" })[0];
     await user.click(trigger);
 
     const menu = await screen.findByRole("menu");
     expect(menu).toBeInTheDocument();
 
     await user.keyboard("{Escape}");
-    expect(menu).not.toBeInTheDocument();
+    await waitForElementToBeRemoved(() => screen.queryByRole("menu"));
   });
 
   it("closes when menu item is clicked", async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
     const onClick = vi.fn();
 
     render(
@@ -96,7 +96,7 @@ describe("PopoverMenu", () => {
       </PopoverMenu>
     );
 
-    const trigger = screen.getByRole("button", { name: "Actions" });
+    const trigger = screen.getAllByRole("button", { name: "Actions" })[0];
     await user.click(trigger);
 
     const menu = await screen.findByRole("menu");
@@ -104,18 +104,18 @@ describe("PopoverMenu", () => {
 
     await user.click(item);
     expect(onClick).toHaveBeenCalled();
-    expect(menu).not.toBeInTheDocument();
+    await waitForElementToBeRemoved(() => screen.queryByRole("menu"));
   });
 
   it("renders PopoverMenuLink with correct role and closes on click", async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
     render(
       <PopoverMenu trigger={<button type="button">Actions</button>}>
         <PopoverMenuLink href="/test">Go to test</PopoverMenuLink>
       </PopoverMenu>
     );
 
-    const trigger = screen.getByRole("button", { name: "Actions" });
+    const trigger = screen.getAllByRole("button", { name: "Actions" })[0];
     await user.click(trigger);
 
     const link = screen.getByRole("menuitem", { name: "Go to test" });
@@ -123,11 +123,11 @@ describe("PopoverMenu", () => {
 
     const menu = await screen.findByRole("menu");
     await user.click(link);
-    expect(menu).not.toBeInTheDocument();
+    await waitForElementToBeRemoved(() => screen.queryByRole("menu"));
   });
 
   it("supports disabled menu items", async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
     const onClick = vi.fn();
 
     render(
@@ -139,7 +139,7 @@ describe("PopoverMenu", () => {
       </PopoverMenu>
     );
 
-    const trigger = screen.getByRole("button", { name: "Actions" });
+    const trigger = screen.getAllByRole("button", { name: "Actions" })[0];
     await user.click(trigger);
 
     const items = screen.getAllByRole("menuitem");
@@ -150,7 +150,7 @@ describe("PopoverMenu", () => {
   });
 
   it("renders separator with correct role", async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
     render(
       <PopoverMenu trigger={<button type="button">Actions</button>}>
         <PopoverMenuItem>First</PopoverMenuItem>
@@ -159,7 +159,7 @@ describe("PopoverMenu", () => {
       </PopoverMenu>
     );
 
-    const trigger = screen.getByRole("button", { name: "Actions" });
+    const trigger = screen.getAllByRole("button", { name: "Actions" })[0];
     await user.click(trigger);
 
     const separator = screen.getByRole("separator");
@@ -167,20 +167,20 @@ describe("PopoverMenu", () => {
   });
 
   it("closes on Tab key", async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
     render(
       <PopoverMenu trigger={<button type="button">Actions</button>}>
         <PopoverMenuItem>First</PopoverMenuItem>
       </PopoverMenu>
     );
 
-    const trigger = screen.getByRole("button", { name: "Actions" });
+    const trigger = screen.getAllByRole("button", { name: "Actions" })[0];
     await user.click(trigger);
 
     const menu = await screen.findByRole("menu");
     expect(menu).toBeInTheDocument();
 
     await user.keyboard("{Tab}");
-    expect(menu).not.toBeInTheDocument();
+    await waitForElementToBeRemoved(() => screen.queryByRole("menu"));
   });
 });

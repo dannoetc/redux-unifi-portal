@@ -280,16 +280,24 @@ def _ensure_auth_user_pass(profile: str) -> str:
 
 
 def _ensure_tls_config(profile: str) -> str:
-    if re.search(r"^\s*tls-crypt\b", profile, flags=re.MULTILINE):
+    if re.search(r"<tls-crypt>", profile, flags=re.IGNORECASE):
         return profile
-    if re.search(r"^\s*tls-auth\b", profile, flags=re.MULTILINE):
+    if re.search(r"<tls-auth>", profile, flags=re.IGNORECASE):
         return profile
 
     config_path = settings.OPENVPN_SERVER_CONFIG_PATH
-    if not os.path.exists(config_path):
-        return profile
+    tls_mode = None
+    key_path = None
+    server_direction = None
+    if os.path.exists(config_path):
+        tls_mode, key_path, server_direction = _read_tls_settings(config_path)
+    else:
+        default_key_path = os.path.join(settings.OPENVPN_PKI_PATH, "ta.key")
+        if os.path.exists(default_key_path):
+            tls_mode = "tls-auth"
+            key_path = default_key_path
+            server_direction = 0
 
-    tls_mode, key_path, server_direction = _read_tls_settings(config_path)
     if not tls_mode or not key_path or not os.path.exists(key_path):
         return profile
 
@@ -300,8 +308,9 @@ def _ensure_tls_config(profile: str) -> str:
         return profile
 
     if tls_mode == "tls-crypt":
+        sanitized = _strip_tls_lines(profile)
         return (
-            f"{profile.rstrip()}\n"
+            f"{sanitized.rstrip()}\n"
             "tls-crypt [inline]\n"
             "<tls-crypt>\n"
             f"{key_body}\n"
@@ -312,8 +321,9 @@ def _ensure_tls_config(profile: str) -> str:
     if server_direction in (0, 1):
         client_direction = 1 - server_direction
     direction_line = f"key-direction {client_direction}\n" if client_direction is not None else ""
+    sanitized = _strip_tls_lines(profile)
     return (
-        f"{profile.rstrip()}\n"
+        f"{sanitized.rstrip()}\n"
         f"{direction_line}"
         "tls-auth [inline]\n"
         "<tls-auth>\n"
@@ -350,6 +360,13 @@ def _read_tls_settings(config_path: str) -> tuple[str | None, str | None, int | 
                 if len(parts) >= 2 and parts[1].isdigit():
                     server_direction = int(parts[1])
     return tls_mode, key_path, server_direction
+
+
+def _strip_tls_lines(profile: str) -> str:
+    profile = re.sub(r"^\s*tls-crypt\b.*\n", "", profile, flags=re.MULTILINE)
+    profile = re.sub(r"^\s*tls-auth\b.*\n", "", profile, flags=re.MULTILINE)
+    profile = re.sub(r"^\s*key-direction\b.*\n", "", profile, flags=re.MULTILINE)
+    return profile
 
 
 def _get_fernet() -> Fernet:
