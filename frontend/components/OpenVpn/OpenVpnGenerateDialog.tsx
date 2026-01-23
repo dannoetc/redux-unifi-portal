@@ -89,28 +89,17 @@ export function OpenVpnGenerateDialog({
       return;
     }
     try {
-      if (client.id) {
-        await apiDownloadFile(
-          `/api/admin/tenants/${tenant.id}/openvpn/clients/${client.id}`,
-          `${client.client_name}.ovpn`
-        );
-        toast.success("OpenVPN profile downloaded.");
-        return;
-      }
+      await apiDownloadFile(
+        `/api/admin/tenants/${tenant.id}/openvpn/profile`,
+        `${client.client_name}.ovpn`
+      );
+      toast.success("OpenVPN profile downloaded.");
     } catch (error: any) {
       if (error instanceof ApiError && error.code === "OPENVPN_PROFILE_NOT_GENERATED") {
         toast.error("No generated profile exists — click Generate to create one.");
         return;
       }
-      try {
-        await apiDownloadFile(
-          `/api/admin/tenants/${tenant.id}/openvpn/profile`,
-          `${tenant.slug}-openvpn.ovpn`
-        );
-        toast.success("OpenVPN profile downloaded.");
-      } catch (fallbackError: any) {
-        toast.error(fallbackError?.message ?? "Unable to download OpenVPN profile.");
-      }
+      toast.error(error?.message ?? "Unable to download OpenVPN profile.");
     }
   };
 

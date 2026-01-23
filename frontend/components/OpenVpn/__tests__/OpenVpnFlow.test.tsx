@@ -79,7 +79,7 @@ describe("OpenVPN flow", () => {
 
     await waitFor(() => {
       expect(apiDownloadMock).toHaveBeenCalledWith(
-        "/api/admin/tenants/tenant-1/openvpn/clients/client-1",
+        "/api/admin/tenants/tenant-1/openvpn/profile",
         "gateway-01.ovpn"
       );
     });

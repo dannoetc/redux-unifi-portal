@@ -69,7 +69,7 @@ export function OpenVpnClientList({
     }
     try {
       await apiDownloadFile(
-        `/api/admin/tenants/${tenant.id}/openvpn/clients/${client.id}`,
+        `/api/admin/tenants/${tenant.id}/openvpn/profile`,
         `${client.client_name}.ovpn`
       );
       toast.success("OpenVPN profile downloaded.");
@@ -78,15 +78,7 @@ export function OpenVpnClientList({
         toast.error("No generated profile exists — click Generate to create one.");
         return;
       }
-      try {
-        await apiDownloadFile(
-          `/api/admin/tenants/${tenant.id}/openvpn/profile`,
-          `${tenant.slug}-openvpn.ovpn`
-        );
-        toast.success("OpenVPN profile downloaded.");
-      } catch (fallbackError: any) {
-        toast.error(fallbackError?.message ?? "Unable to download OpenVPN profile.");
-      }
+      toast.error(error?.message ?? "Unable to download OpenVPN profile.");
     }
   };
 

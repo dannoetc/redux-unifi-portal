@@ -261,17 +261,8 @@ export default function TenantsPage() {
       return;
     }
     try {
-      if (latestClient) {
-        await apiDownloadFile(
-          `/api/admin/tenants/${tenant.id}/openvpn/clients/${latestClient.id}`,
-          `${latestClient.client_name}.ovpn`
-        );
-      } else {
-        await apiDownloadFile(
-          `/api/admin/tenants/${tenant.id}/openvpn/profile`,
-          `${tenant.slug}-openvpn.ovpn`
-        );
-      }
+      const filename = latestClient ? `${latestClient.client_name}.ovpn` : `${tenant.slug}-openvpn.ovpn`;
+      await apiDownloadFile(`/api/admin/tenants/${tenant.id}/openvpn/profile`, filename);
       toast.success("OpenVPN profile downloaded.");
     } catch (error: any) {
       if (error instanceof ApiError) {
