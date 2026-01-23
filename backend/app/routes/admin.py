@@ -61,6 +61,7 @@ from app.schemas.admin_voucher import VoucherBatchCreateRequest
 from app.security import create_session_token, hash_password, verify_password
 from app.services.openvpn import (
     OpenVpnError,
+    build_openvpn_client_profile_from_pki,
     decrypt_openvpn_secret,
     encrypt_openvpn_secret,
     ensure_openvpn_auth_credentials,
@@ -615,13 +616,18 @@ def download_openvpn_profile(
                 },
             },
         )
-    try:
-        profile = decrypt_openvpn_secret(profile_record.profile_encrypted)
-    except OpenVpnError as exc:
-        raise HTTPException(
-            status_code=400,
-            detail={"ok": False, "error": {"code": exc.code, "message": str(exc)}},
-        ) from exc
+    profile: str | None = None
+    if settings.OPENVPN_PROFILE_FORCE_CURRENT_TLS:
+        profile = build_openvpn_client_profile_from_pki(profile_record.client_name, tenant)
+
+    if not profile:
+        try:
+            profile = decrypt_openvpn_secret(profile_record.profile_encrypted)
+        except OpenVpnError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail={"ok": False, "error": {"code": exc.code, "message": str(exc)}},
+            ) from exc
     filename = f"{profile_record.client_name}.ovpn"
     return Response(
         content=profile,

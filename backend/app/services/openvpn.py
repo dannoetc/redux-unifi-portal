@@ -185,6 +185,43 @@ def generate_openvpn_client_profile(client_name: str, tenant: Tenant) -> str:
     return sanitize_openvpn_profile(profile)
 
 
+def build_openvpn_client_profile_from_pki(client_name: str, tenant: Tenant) -> str | None:
+    cleaned = client_name.strip()
+    if not cleaned:
+        return None
+    pki_path = settings.OPENVPN_PKI_PATH
+    client_cert_path = os.path.join(pki_path, "issued", f"{cleaned}.crt")
+    client_key_path = os.path.join(pki_path, "private", f"{cleaned}.key")
+    ca_cert_path = os.path.join(pki_path, "ca.crt")
+    if not os.path.exists(client_cert_path) or not os.path.exists(client_key_path) or not os.path.exists(ca_cert_path):
+        return None
+
+    with open(client_cert_path, "r", encoding="utf-8") as f:
+        client_cert = f.read()
+    with open(client_key_path, "r", encoding="utf-8") as f:
+        client_key = f.read()
+    with open(ca_cert_path, "r", encoding="utf-8") as f:
+        ca_cert = f.read()
+
+    profile = resolve_openvpn_profile_template(
+        openvpn_profile_template=None,
+        openvpn_profile_ref=None,
+        openvpn_secret=None,
+    )
+    if not profile:
+        return None
+
+    profile = _apply_placeholders(profile, tenant)
+    profile = _ensure_remote(profile, tenant)
+    profile = _ensure_auth_user_pass(profile)
+    profile = _ensure_tls_config(profile)
+    profile = profile.rstrip() + "\n"
+    profile += f"\n<cert>\n{client_cert}</cert>\n"
+    profile += f"<key>\n{client_key}</key>\n"
+    profile += f"<ca>\n{ca_cert}</ca>\n"
+    return sanitize_openvpn_profile(profile)
+
+
 def generate_openvpn_auth_credentials() -> tuple[str, str]:
     username = f"gw-{secrets.token_hex(3)}"
     alphabet = string.ascii_letters + string.digits

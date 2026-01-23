@@ -42,6 +42,7 @@ RUN_CERTBOT=0
 SKIP_PULL=0
 FORCE_PULL=0
 SEED_DEFAULTS=0
+BACKUP_CERTS=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -51,6 +52,7 @@ while [[ $# -gt 0 ]]; do
     --seed) SEED_DEFAULTS=1; shift ;;
     --full-reset) WIPE_VOLUMES=1; REBUILD=1; SEED_DEFAULTS=1; shift ;;
     --certbot) RUN_CERTBOT=1; shift ;;
+    --backup-certs) BACKUP_CERTS=1; shift ;;
     --skip-pull) SKIP_PULL=1; shift ;;
     --force) FORCE_PULL=1; shift ;;
     --status|--logs)
@@ -157,6 +159,21 @@ run_certbot() {
   compose restart nginx
 }
 
+backup_certs() {
+  if [[ "${BACKUP_CERTS}" -ne 1 ]]; then
+    return 0
+  fi
+  local backup_dir="${CERT_BACKUP_DIR:-${ROOT_DIR}/cert-backups}"
+  mkdir -p "${backup_dir}"
+  local stamp
+  stamp="$(date -u +%Y%m%d%H%M%S)"
+  local archive="${backup_dir}/letsencrypt-${stamp}.tgz"
+  echo "[INFO] Backing up /etc/letsencrypt to ${archive}"
+  compose exec -T nginx sh -lc "tar -czf /tmp/letsencrypt-backup.tgz -C /etc letsencrypt" || return 1
+  compose cp nginx:/tmp/letsencrypt-backup.tgz "${archive}"
+  compose exec -T nginx sh -lc "rm -f /tmp/letsencrypt-backup.tgz" || true
+  echo "[OK] Cert backup saved."
+}
 seed_defaults() {
   if [[ "${SEED_DEFAULTS}" -ne 1 ]]; then
     return 0
@@ -208,6 +225,7 @@ compose up -d --remove-orphans
 run_migrations
 wait_for_readiness
 seed_defaults
+backup_certs
 run_certbot
 
 GIT_SHA="$(git -C "${ROOT_DIR}" rev-parse HEAD)"
