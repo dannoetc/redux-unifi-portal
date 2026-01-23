@@ -336,13 +336,7 @@ export default function TenantsPage() {
         </PopoverMenuItem>
         <PopoverMenuSeparator />
         <PopoverMenuItem
-          disabled={!openvpnEnabled}
-          title={openvpnEnabled ? undefined : openvpnDisabledMessage}
           onClick={() => {
-            if (!openvpnEnabled) {
-              toast.error(openvpnDisabledMessage);
-              return;
-            }
             setTenantToGenerate(tenant);
             setGenerateOpen(true);
           }}
