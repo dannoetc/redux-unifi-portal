@@ -115,7 +115,7 @@ def test_generate_openvpn_profile_returns_credentials(client, db_session, monkey
 
     monkeypatch.setattr(
         "app.routes.admin.generate_openvpn_client_profile",
-        lambda _client_name: "client\nremote 1.2.3.4 1194\n",
+        lambda _client_name, _tenant: "client\nremote 1.2.3.4 1194\n",
     )
     monkeypatch.setattr(
         "app.routes.admin.ensure_openvpn_auth_credentials",

@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     OPENVPN_ENCRYPTION_KEY: str = ""
     OPENVPN_PKI_PATH: str = "/etc/openvpn/pki"
     OPENVPN_AUTH_FILE_PATH: str = "/etc/openvpn/auth/credentials"
+    OPENVPN_SERVER_CONFIG_PATH: str = "/etc/openvpn/openvpn.conf"
     LOG_LEVEL: str = "INFO"
     ADMIN_SESSION_MAX_AGE_SECONDS: int = 60 * 60 * 12
     ADMIN_SESSION_COOKIE_SECURE: bool = False

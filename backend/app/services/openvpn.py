@@ -125,7 +125,7 @@ def build_openvpn_profile(tenant: Tenant) -> str:
     return profile.rstrip() + "\n"
 
 
-def generate_openvpn_client_profile(client_name: str) -> str:
+def generate_openvpn_client_profile(client_name: str, tenant: Tenant) -> str:
     cleaned = client_name.strip()
     if not cleaned:
         raise OpenVpnError("OPENVPN_INVALID_CLIENT_NAME", "Client name is required.")
@@ -170,10 +170,12 @@ def generate_openvpn_client_profile(client_name: str) -> str:
     )
     if not profile:
         raise OpenVpnError("OPENVPN_GENERATION_FAILED", "OpenVPN profile template not available.")
-    
+
+    profile = _apply_placeholders(profile, tenant)
+    profile = _ensure_remote(profile, tenant)
     # Ensure client prompts for username/password when required by the server
     profile = _ensure_auth_user_pass(profile)
-
+    profile = _ensure_tls_config(profile)
     # Append certificates to the profile
     profile = profile.rstrip() + "\n"
     profile += f"\n<cert>\n{client_cert}</cert>\n"
@@ -275,6 +277,78 @@ def _ensure_auth_user_pass(profile: str) -> str:
     if re.search(r"^\s*auth-user-pass\b", profile, flags=re.MULTILINE):
         return profile
     return f"{profile.rstrip()}\nauth-user-pass\n"
+
+
+def _ensure_tls_config(profile: str) -> str:
+    if re.search(r"^\s*tls-crypt\b", profile, flags=re.MULTILINE):
+        return profile
+    if re.search(r"^\s*tls-auth\b", profile, flags=re.MULTILINE):
+        return profile
+
+    config_path = settings.OPENVPN_SERVER_CONFIG_PATH
+    if not os.path.exists(config_path):
+        return profile
+
+    tls_mode, key_path, server_direction = _read_tls_settings(config_path)
+    if not tls_mode or not key_path or not os.path.exists(key_path):
+        return profile
+
+    with open(key_path, "r", encoding="utf-8") as file:
+        key_body = file.read().strip()
+
+    if not key_body:
+        return profile
+
+    if tls_mode == "tls-crypt":
+        return (
+            f"{profile.rstrip()}\n"
+            "tls-crypt [inline]\n"
+            "<tls-crypt>\n"
+            f"{key_body}\n"
+            "</tls-crypt>\n"
+        )
+
+    client_direction = None
+    if server_direction in (0, 1):
+        client_direction = 1 - server_direction
+    direction_suffix = f" {client_direction}" if client_direction is not None else ""
+    return (
+        f"{profile.rstrip()}\n"
+        f"tls-auth [inline]{direction_suffix}\n"
+        "<tls-auth>\n"
+        f"{key_body}\n"
+        "</tls-auth>\n"
+    )
+
+
+def _read_tls_settings(config_path: str) -> tuple[str | None, str | None, int | None]:
+    tls_mode = None
+    key_path = None
+    server_direction: int | None = None
+    with open(config_path, "r", encoding="utf-8") as file:
+        for raw_line in file:
+            line = raw_line.strip()
+            if not line or line.startswith(("#", ";")):
+                continue
+            if line.startswith("tls-crypt "):
+                parts = line.split()
+                if len(parts) >= 2:
+                    tls_mode = "tls-crypt"
+                    key_path = parts[1]
+                continue
+            if line.startswith("tls-auth "):
+                parts = line.split()
+                if len(parts) >= 2:
+                    tls_mode = "tls-auth"
+                    key_path = parts[1]
+                    if len(parts) >= 3 and parts[2].isdigit():
+                        server_direction = int(parts[2])
+                continue
+            if line.startswith("key-direction "):
+                parts = line.split()
+                if len(parts) >= 2 and parts[1].isdigit():
+                    server_direction = int(parts[1])
+    return tls_mode, key_path, server_direction
 
 
 def _get_fernet() -> Fernet:

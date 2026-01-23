@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+import uuid
+
+from app.models import Tenant, TenantStatus
 
 from app.services import openvpn
 
@@ -30,7 +33,16 @@ def test_generate_openvpn_client_overwrites_existing_request(monkeypatch, tmp_pa
 
     monkeypatch.setattr(openvpn, "_run_openvpn_command", fake_run)
 
-    profile = openvpn.generate_openvpn_client_profile("events-gateway-01")
+    tenant = Tenant(
+        id=uuid.uuid4(),
+        slug="acme",
+        name="Acme",
+        status=TenantStatus.ACTIVE,
+        openvpn_enabled=True,
+        openvpn_remote_host="vpn.reduxtc.com",
+        openvpn_remote_port=1194,
+    )
+    profile = openvpn.generate_openvpn_client_profile("events-gateway-01", tenant)
 
     assert "new-cert" in profile
     assert "auth-user-pass" in profile

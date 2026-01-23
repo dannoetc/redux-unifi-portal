@@ -655,7 +655,7 @@ def generate_openvpn_profile(
             },
         )
     try:
-        profile = generate_openvpn_client_profile(payload.client_name)
+        profile = generate_openvpn_client_profile(payload.client_name, tenant)
         encrypted_profile = encrypt_openvpn_secret(profile)
     except OpenVpnError as exc:
         logger.error(f"OpenVPN generation error: {exc.code} - {str(exc)}")
