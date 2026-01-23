@@ -399,6 +399,38 @@ def _read_tls_settings(config_path: str) -> tuple[str | None, str | None, int | 
     return tls_mode, key_path, server_direction
 
 
+def get_openvpn_tls_hash_info() -> dict:
+    config_path = settings.OPENVPN_SERVER_CONFIG_PATH
+    tls_mode = None
+    key_path = None
+    server_direction = None
+    if os.path.exists(config_path):
+        tls_mode, key_path, server_direction = _read_tls_settings(config_path)
+    else:
+        default_key_path = os.path.join(settings.OPENVPN_PKI_PATH, "ta.key")
+        if os.path.exists(default_key_path):
+            tls_mode = "tls-auth"
+            key_path = default_key_path
+            server_direction = 0
+
+    key_hash = None
+    if key_path and os.path.exists(key_path):
+        with open(key_path, "rb") as file:
+            key_body = file.read().replace(b"\r\n", b"\n").strip()
+        if key_body:
+            import hashlib
+
+            key_hash = hashlib.sha256(key_body).hexdigest()
+
+    return {
+        "tls_mode": tls_mode,
+        "key_path": key_path,
+        "key_sha256": key_hash,
+        "server_key_direction": server_direction,
+        "config_path": config_path,
+    }
+
+
 def _strip_tls_lines(profile: str) -> str:
     profile = re.sub(r"^\s*tls-crypt\b.*\n", "", profile, flags=re.MULTILINE)
     profile = re.sub(r"^\s*tls-auth\b.*\n", "", profile, flags=re.MULTILINE)

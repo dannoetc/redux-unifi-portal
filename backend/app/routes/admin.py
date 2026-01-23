@@ -65,6 +65,7 @@ from app.services.openvpn import (
     decrypt_openvpn_secret,
     encrypt_openvpn_secret,
     ensure_openvpn_auth_credentials,
+    get_openvpn_tls_hash_info,
     generate_openvpn_auth_credentials,
     generate_openvpn_client_profile,
     profile_requires_remote_settings,
@@ -634,6 +635,20 @@ def download_openvpn_profile(
         media_type="application/x-openvpn-profile",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@router.get("/openvpn/tls")
+def get_openvpn_tls_status(
+    _admin: AdminUser = Depends(require_superadmin),
+) -> dict:
+    info = get_openvpn_tls_hash_info()
+    return {
+        "ok": True,
+        "data": {
+            **info,
+            "force_current_tls": settings.OPENVPN_PROFILE_FORCE_CURRENT_TLS,
+        },
+    }
 
 
 @router.post("/tenants/{tenant_id}/openvpn/generate")
