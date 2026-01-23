@@ -41,12 +41,15 @@ WIPE_VOLUMES=0
 RUN_CERTBOT=0
 SKIP_PULL=0
 FORCE_PULL=0
+SEED_DEFAULTS=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --clean-only) CLEAN_ONLY=1; shift ;;
     --rebuild) REBUILD=1; shift ;;
     --wipe-volumes) WIPE_VOLUMES=1; shift ;;
+    --seed) SEED_DEFAULTS=1; shift ;;
+    --full-reset) WIPE_VOLUMES=1; REBUILD=1; SEED_DEFAULTS=1; shift ;;
     --certbot) RUN_CERTBOT=1; shift ;;
     --skip-pull) SKIP_PULL=1; shift ;;
     --force) FORCE_PULL=1; shift ;;
@@ -154,6 +157,26 @@ run_certbot() {
   compose restart nginx
 }
 
+seed_defaults() {
+  if [[ "${SEED_DEFAULTS}" -ne 1 ]]; then
+    return 0
+  fi
+  echo "[INFO] Seeding default admin and tenant data."
+  compose exec -T api bash -lc "
+    SUPERADMIN_EMAIL='${SEED_SUPERADMIN_EMAIL:-dnelson@reduxtc.com}' \
+    SUPERADMIN_PASSWORD='${SEED_SUPERADMIN_PASSWORD:-changeme123}' \
+    TENANT_SLUG='${SEED_TENANT_SLUG:-reduxtc}' \
+    TENANT_NAME='${SEED_TENANT_NAME:-ReduxTC}' \
+    SITE_SLUGS='${SEED_SITE_SLUGS:-default}' \
+    SITE_DISPLAY_NAMES='${SEED_SITE_DISPLAY_NAMES:-Default}' \
+    SITE_UNIFI_SITE_IDS='${SEED_SITE_UNIFI_SITE_IDS:-default}' \
+    UNIFI_BASE_URL='${SEED_UNIFI_BASE_URL:-https://unifi.local}' \
+    UNIFI_API_KEY_REF='${SEED_UNIFI_API_KEY_REF:-dev-unifi-key}' \
+    python -m app.scripts.seed
+  "
+  echo "[OK] Seed complete."
+}
+
 print_summary() {
   echo "[SUMMARY] Container status"
   compose ps
@@ -184,6 +207,7 @@ compose up -d --remove-orphans
 
 run_migrations
 wait_for_readiness
+seed_defaults
 run_certbot
 
 GIT_SHA="$(git -C "${ROOT_DIR}" rev-parse HEAD)"
