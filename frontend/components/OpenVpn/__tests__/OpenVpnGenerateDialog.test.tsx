@@ -75,6 +75,8 @@ describe("OpenVpnGenerateDialog", () => {
         client_name: "gateway-02",
         created_at: "2024-01-03T10:00:00Z",
       },
+      auth_username: "unifi-user",
+      auth_password: "unifi-pass",
     });
 
     render(
@@ -82,8 +84,6 @@ describe("OpenVpnGenerateDialog", () => {
         open
         onOpenChange={() => {}}
         tenant={{ id: "tenant-1", name: "Acme", slug: "acme" }}
-        authUsername="unifi-user"
-        authPassword="unifi-pass"
       />
     );
 

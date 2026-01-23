@@ -180,6 +180,13 @@ def generate_openvpn_client_profile(client_name: str) -> str:
     return sanitize_openvpn_profile(profile)
 
 
+def generate_openvpn_auth_credentials() -> tuple[str, str]:
+    username = f"gw-{secrets.token_hex(3)}"
+    alphabet = string.ascii_letters + string.digits
+    password = "".join(secrets.choice(alphabet) for _ in range(16))
+    return username, password
+
+
 def sanitize_openvpn_profile(profile: str) -> str:
     sanitized_lines = []
     for line in profile.splitlines():

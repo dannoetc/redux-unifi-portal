@@ -63,6 +63,7 @@ from app.services.openvpn import (
     OpenVpnError,
     decrypt_openvpn_secret,
     encrypt_openvpn_secret,
+    generate_openvpn_auth_credentials,
     generate_openvpn_client_profile,
     profile_requires_remote_settings,
     resolve_openvpn_profile_template,
@@ -672,6 +673,50 @@ def generate_openvpn_profile(
         client_name=payload.client_name.strip(),
         profile_encrypted=encrypted_profile,
     )
+
+    auth_username: str | None = None
+    auth_password: str | None = None
+    auth_blob: str | None = None
+    if tenant.openvpn_secret and tenant.openvpn_secret.auth_blob_encrypted:
+        try:
+            auth_blob = decrypt_openvpn_secret(tenant.openvpn_secret.auth_blob_encrypted)
+        except OpenVpnError:
+            auth_blob = None
+
+    if auth_blob:
+        lines = [line for line in auth_blob.splitlines() if line.strip()]
+        if len(lines) >= 2:
+            auth_username, auth_password = lines[0], lines[1]
+    else:
+        auth_username, auth_password = generate_openvpn_auth_credentials()
+        auth_blob = f"{auth_username}\n{auth_password}"
+        encrypted_auth = encrypt_openvpn_secret(auth_blob)
+        if tenant.openvpn_secret:
+            tenant.openvpn_secret.auth_blob_encrypted = encrypted_auth
+        else:
+            profile_template = resolve_openvpn_profile_template(
+                openvpn_profile_template=None,
+                openvpn_profile_ref=tenant.openvpn_profile_ref,
+                openvpn_secret=None,
+            )
+            if not profile_template:
+                raise HTTPException(
+                    status_code=400,
+                    detail={
+                        "ok": False,
+                        "error": {
+                            "code": "OPENVPN_PROFILE_MISSING",
+                            "message": "OpenVPN profile template is required.",
+                        },
+                    },
+                )
+            tenant.openvpn_secret = TenantOpenvpnSecret(
+                tenant_id=tenant.id,
+                profile_template_encrypted=encrypt_openvpn_secret(profile_template),
+                auth_blob_encrypted=encrypted_auth,
+            )
+            db.add(tenant.openvpn_secret)
+
     db.add(profile_record)
     db.commit()
     db.refresh(profile_record)
@@ -684,6 +729,8 @@ def generate_openvpn_profile(
                 "client_name": profile_record.client_name,
                 "created_at": profile_record.created_at,
             },
+            "auth_username": auth_username,
+            "auth_password": auth_password,
         },
     }
 

@@ -68,6 +68,9 @@ export function OpenVpnGenerateDialog({
 }: OpenVpnGenerateDialogProps) {
   const [submitting, setSubmitting] = useState(false);
   const [generatedClient, setGeneratedClient] = useState<OpenVpnClient | null>(null);
+  const [generatedAuth, setGeneratedAuth] = useState<{ username: string; password: string } | null>(
+    null
+  );
 
   const form = useForm<GenerateFormValues>({
     resolver: zodResolver(openvpnGenerateSchema),
@@ -78,6 +81,7 @@ export function OpenVpnGenerateDialog({
     if (!open) {
       form.reset({ client_name: "", notes: "" });
       setGeneratedClient(null);
+      setGeneratedAuth(null);
       setSubmitting(false);
     }
   }, [open, form]);
@@ -119,7 +123,8 @@ export function OpenVpnGenerateDialog({
     setSubmitting(true);
     try {
       const data = await apiFetch<
-        { client: OpenVpnClient } | { id?: string; client_name?: string; created_at?: string }
+        | { client: OpenVpnClient; auth_username?: string | null; auth_password?: string | null }
+        | { id?: string; client_name?: string; created_at?: string; auth_username?: string | null; auth_password?: string | null }
       >(
         `/api/admin/tenants/${tenant.id}/openvpn/generate`,
         {
@@ -127,6 +132,8 @@ export function OpenVpnGenerateDialog({
           body: JSON.stringify({ client_name: values.client_name.trim() }),
         }
       );
+      const authUsername = "auth_username" in data ? data.auth_username ?? "" : "";
+      const authPassword = "auth_password" in data ? data.auth_password ?? "" : "";
       let resolvedClient: OpenVpnClient | null = null;
       if ("client" in data && data.client) {
         resolvedClient = data.client;
@@ -144,6 +151,11 @@ export function OpenVpnGenerateDialog({
         throw new Error("OpenVPN generation returned an invalid response.");
       }
       setGeneratedClient(resolvedClient);
+      if (authUsername && authPassword) {
+        setGeneratedAuth({ username: authUsername, password: authPassword });
+      } else {
+        setGeneratedAuth(null);
+      }
       toast.success(`OpenVPN profile generated for ${resolvedClient.client_name}.`);
       onGenerated?.(resolvedClient);
       await onRefresh?.();
@@ -212,17 +224,17 @@ export function OpenVpnGenerateDialog({
                   Created {formatDateTime(generatedClient.created_at)}
                 </span>
               </div>
-              {authUsername && authPassword ? (
+              {generatedAuth?.username && generatedAuth?.password ? (
                 <div className="mt-2 rounded-sm border border-emerald-200/70 bg-white/70 px-2 py-1 text-[11px] text-emerald-700">
                   <div className="font-medium">Gateway credentials</div>
                   <div className="mt-1 grid gap-1">
                     <div>
                       <span className="font-semibold">Username:</span>{" "}
-                      <span className="font-mono">{authUsername}</span>
+                      <span className="font-mono">{generatedAuth.username}</span>
                     </div>
                     <div>
                       <span className="font-semibold">Password:</span>{" "}
-                      <span className="font-mono">{authPassword}</span>
+                      <span className="font-mono">{generatedAuth.password}</span>
                     </div>
                   </div>
                 </div>
