@@ -311,10 +311,11 @@ def _ensure_tls_config(profile: str) -> str:
     client_direction = None
     if server_direction in (0, 1):
         client_direction = 1 - server_direction
-    direction_suffix = f" {client_direction}" if client_direction is not None else ""
+    direction_line = f"key-direction {client_direction}\n" if client_direction is not None else ""
     return (
         f"{profile.rstrip()}\n"
-        f"tls-auth [inline]{direction_suffix}\n"
+        f"{direction_line}"
+        "tls-auth [inline]\n"
         "<tls-auth>\n"
         f"{key_body}\n"
         "</tls-auth>\n"
