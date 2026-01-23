@@ -45,8 +45,6 @@ type OpenVpnGenerateDialogProps = {
   tenant: TenantSummary | null;
   onGenerated?: (client: OpenVpnClient) => void;
   onRefresh?: () => Promise<void> | void;
-  authUsername?: string;
-  authPassword?: string;
 };
 
 const formatDateTime = (value?: string | null) => {
@@ -63,8 +61,6 @@ export function OpenVpnGenerateDialog({
   tenant,
   onGenerated,
   onRefresh,
-  authUsername,
-  authPassword,
 }: OpenVpnGenerateDialogProps) {
   const [submitting, setSubmitting] = useState(false);
   const [generatedClient, setGeneratedClient] = useState<OpenVpnClient | null>(null);

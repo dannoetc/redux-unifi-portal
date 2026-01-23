@@ -1581,6 +1581,16 @@ def _build_tenant_response(tenant: Tenant) -> dict:
         openvpn_remote_port=tenant.openvpn_remote_port,
         openvpn_generated_client_name=latest_profile.client_name if latest_profile else None,
         openvpn_generated_created_at=latest_profile.created_at if latest_profile else None,
+        openvpn_clients=[
+            {
+                "id": str(profile.id),
+                "client_name": profile.client_name,
+                "created_at": profile.created_at,
+            }
+            for profile in tenant.openvpn_client_profiles
+        ]
+        if tenant.openvpn_client_profiles
+        else None,
     ).model_dump(mode="json")
 
 

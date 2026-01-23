@@ -101,7 +101,14 @@ class TenantResponse(BaseModel):
     openvpn_remote_port: int | None
     openvpn_generated_client_name: str | None = None
     openvpn_generated_created_at: datetime | None = None
+    openvpn_clients: list["OpenvpnClientResponse"] | None = None
 
 
 class OpenvpnGenerateRequest(BaseModel):
     client_name: str
+
+
+class OpenvpnClientResponse(BaseModel):
+    id: str
+    client_name: str
+    created_at: datetime
