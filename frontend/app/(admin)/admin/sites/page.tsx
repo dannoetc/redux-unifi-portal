@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PopoverMenu, PopoverMenuItem, PopoverMenuLink, PopoverMenuSeparator } from "@/components/ui/PopoverMenu";
 import StatusPill from "@/components/ui/StatusPill";
 
 type Site = {
@@ -171,51 +172,41 @@ export default function SitesPage() {
   }, [discoverOpen, tenantId]);
 
   const RowActions = ({ site }: { site: Site }) => {
-    const [open, setOpen] = useState(false);
-
     return (
-      <details
-        className="relative"
-        open={open}
-        onToggle={(event) => setOpen((event.target as HTMLDetailsElement).open)}
-      >
-        <summary
-          aria-label="Open row actions"
-          className="flex h-8 w-8 list-none items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
-        >
-          <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
-        </summary>
-        <div className="absolute right-0 z-20 mt-2 min-w-[180px] rounded-md border border-border bg-white p-1 shadow-soft">
-          <a
-            className="block w-full rounded-sm px-2 py-1.5 text-left text-sm text-foreground hover:bg-muted"
-            href={tenantSlug ? `/guest/s/${tenantSlug}/${site.slug}?preview=1` : "#"}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={() => setOpen(false)}
-          >
-            Preview
-          </a>
-          <a
-            className="block w-full rounded-sm px-2 py-1.5 text-left text-sm text-foreground hover:bg-muted"
-            href={`/admin/sites/${site.id}?tenant=${tenantId ?? ""}`}
-            onClick={() => setOpen(false)}
-          >
-            Edit
-          </a>
-          <div className="my-1 h-px bg-border/70" />
+      <PopoverMenu
+        trigger={
           <button
             type="button"
-            className="w-full rounded-sm px-2 py-1.5 text-left text-sm text-destructive hover:bg-muted"
-            onClick={() => {
-              setSiteToDelete(site);
-              setDeleteOpen(true);
-              setOpen(false);
-            }}
+            aria-label="Open row actions"
+            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
           >
-            Remove site
+            <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
           </button>
-        </div>
-      </details>
+        }
+      >
+        <PopoverMenuLink
+          href={tenantSlug ? `/guest/s/${tenantSlug}/${site.slug}?preview=1` : "#"}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Preview
+        </PopoverMenuLink>
+        <PopoverMenuLink
+          href={`/admin/sites/${site.id}?tenant=${tenantId ?? ""}`}
+        >
+          Edit
+        </PopoverMenuLink>
+        <PopoverMenuSeparator />
+        <PopoverMenuItem
+          className="text-destructive"
+          onClick={() => {
+            setSiteToDelete(site);
+            setDeleteOpen(true);
+          }}
+        >
+          Remove site
+        </PopoverMenuItem>
+      </PopoverMenu>
     );
   };
 

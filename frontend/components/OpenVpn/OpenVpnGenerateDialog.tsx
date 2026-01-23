@@ -44,6 +44,7 @@ type OpenVpnGenerateDialogProps = {
   onOpenChange: (open: boolean) => void;
   tenant: TenantSummary | null;
   onGenerated?: (client: OpenVpnClient) => void;
+  onGeneratedAuth?: (auth: { username: string; password: string }) => void;
   onRefresh?: () => Promise<void> | void;
 };
 
@@ -60,6 +61,7 @@ export function OpenVpnGenerateDialog({
   onOpenChange,
   tenant,
   onGenerated,
+  onGeneratedAuth,
   onRefresh,
 }: OpenVpnGenerateDialogProps) {
   const [submitting, setSubmitting] = useState(false);
@@ -148,7 +150,9 @@ export function OpenVpnGenerateDialog({
       }
       setGeneratedClient(resolvedClient);
       if (authUsername && authPassword) {
-        setGeneratedAuth({ username: authUsername, password: authPassword });
+        const auth = { username: authUsername, password: authPassword };
+        setGeneratedAuth(auth);
+        onGeneratedAuth?.(auth);
       } else {
         setGeneratedAuth(null);
       }

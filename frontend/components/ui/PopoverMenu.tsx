@@ -183,6 +183,34 @@ export const PopoverMenuItem = React.forwardRef<HTMLButtonElement, PopoverMenuIt
 );
 PopoverMenuItem.displayName = "PopoverMenuItem";
 
+type PopoverMenuLinkProps = React.AnchorHTMLAttributes<HTMLAnchorElement> & {
+  href: string;
+};
+
+export const PopoverMenuLink = React.forwardRef<HTMLAnchorElement, PopoverMenuLinkProps>(
+  ({ className, onClick, ...props }, ref) => {
+    const menu = React.useContext(PopoverMenuContext);
+
+    return (
+      <a
+        ref={ref}
+        role="menuitem"
+        tabIndex={-1}
+        className={cn(
+          "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm text-foreground outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-primary/40",
+          className
+        )}
+        onClick={(event) => {
+          onClick?.(event);
+          menu?.closeMenu();
+        }}
+        {...props}
+      />
+    );
+  }
+);
+PopoverMenuLink.displayName = "PopoverMenuLink";
+
 export function PopoverMenuSeparator({ className }: { className?: string }) {
   return <div role="separator" className={cn("my-1 h-px bg-border/70", className)} />;
 }

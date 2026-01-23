@@ -171,6 +171,9 @@ def generate_openvpn_client_profile(client_name: str) -> str:
     if not profile:
         raise OpenVpnError("OPENVPN_GENERATION_FAILED", "OpenVPN profile template not available.")
     
+    # Ensure client prompts for username/password when required by the server
+    profile = _ensure_auth_user_pass(profile)
+
     # Append certificates to the profile
     profile = profile.rstrip() + "\n"
     profile += f"\n<cert>\n{client_cert}</cert>\n"
@@ -186,6 +189,35 @@ def generate_openvpn_auth_credentials() -> tuple[str, str]:
     password = "".join(secrets.choice(alphabet) for _ in range(16))
     return username, password
 
+
+def ensure_openvpn_auth_credentials(username: str, password: str) -> None:
+    auth_path = settings.OPENVPN_AUTH_FILE_PATH
+    auth_dir = os.path.dirname(auth_path)
+    os.makedirs(auth_dir, exist_ok=True)
+    if not os.path.exists(auth_path):
+        with open(auth_path, "w", encoding="utf-8") as file:
+            file.write("")
+    with open(auth_path, "r", encoding="utf-8") as file:
+        lines = [line.strip() for line in file.readlines() if line.strip()]
+    entry = f"{username}:{password}"
+    if entry in lines:
+        return
+    lines.append(entry)
+    with open(auth_path, "w", encoding="utf-8") as file:
+        file.write("\n".join(lines) + "\n")
+
+
+def revoke_openvpn_client_profile(client_name: str) -> None:
+    pki_path = settings.OPENVPN_PKI_PATH
+    easyrsa_path = "/usr/share/easy-rsa/easyrsa"
+    _run_openvpn_command(
+        [easyrsa_path, "--batch", f"--pki={pki_path}", "revoke-issued", client_name],
+        "OpenVPN client revoke failed.",
+    )
+    _run_openvpn_command(
+        [easyrsa_path, "--batch", f"--pki={pki_path}", "gen-crl"],
+        "OpenVPN CRL update failed.",
+    )
 
 def sanitize_openvpn_profile(profile: str) -> str:
     sanitized_lines = []
@@ -237,6 +269,12 @@ def _ensure_auth(profile: str, auth_payload: str) -> str:
     if "<auth-user-pass>" not in updated:
         updated = f"{updated.rstrip()}\n<auth-user-pass>\n{auth_payload}\n</auth-user-pass>\n"
     return updated
+
+
+def _ensure_auth_user_pass(profile: str) -> str:
+    if re.search(r"^\s*auth-user-pass\b", profile, flags=re.MULTILINE):
+        return profile
+    return f"{profile.rstrip()}\nauth-user-pass\n"
 
 
 def _get_fernet() -> Fernet:

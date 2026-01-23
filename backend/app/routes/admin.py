@@ -63,10 +63,12 @@ from app.services.openvpn import (
     OpenVpnError,
     decrypt_openvpn_secret,
     encrypt_openvpn_secret,
+    ensure_openvpn_auth_credentials,
     generate_openvpn_auth_credentials,
     generate_openvpn_client_profile,
     profile_requires_remote_settings,
     resolve_openvpn_profile_template,
+    revoke_openvpn_client_profile,
 )
 from app.services.unifi import UnifiApiError, UnifiClient
 from app.settings import settings
@@ -717,6 +719,9 @@ def generate_openvpn_profile(
             )
             db.add(tenant.openvpn_secret)
 
+    if auth_username and auth_password:
+        ensure_openvpn_auth_credentials(auth_username, auth_password)
+
     db.add(profile_record)
     db.commit()
     db.refresh(profile_record)
@@ -733,6 +738,46 @@ def generate_openvpn_profile(
             "auth_password": auth_password,
         },
     }
+
+
+@router.delete("/tenants/{tenant_id}/openvpn/clients/{client_id}")
+def revoke_openvpn_profile(
+    tenant_id: uuid.UUID,
+    client_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    _admin: AdminUser = Depends(require_tenant_role([AdminRole.TENANT_ADMIN])),
+) -> dict:
+    tenant = db.execute(select(Tenant).where(Tenant.id == tenant_id)).scalar_one_or_none()
+    if not tenant:
+        raise HTTPException(
+            status_code=404,
+            detail={"ok": False, "error": {"code": "NOT_FOUND", "message": "Tenant not found."}},
+        )
+    profile = (
+        db.execute(
+            select(TenantOpenvpnClientProfile).where(
+                TenantOpenvpnClientProfile.id == client_id,
+                TenantOpenvpnClientProfile.tenant_id == tenant_id,
+            )
+        )
+        .scalars()
+        .first()
+    )
+    if not profile:
+        raise HTTPException(
+            status_code=404,
+            detail={"ok": False, "error": {"code": "NOT_FOUND", "message": "Profile not found."}},
+        )
+    try:
+        revoke_openvpn_client_profile(profile.client_name)
+    except OpenVpnError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"ok": False, "error": {"code": exc.code, "message": str(exc)}},
+        ) from exc
+    db.delete(profile)
+    db.commit()
+    return {"ok": True, "data": {"revoked": True}}
 
 
 @router.delete("/tenants/{tenant_id}")

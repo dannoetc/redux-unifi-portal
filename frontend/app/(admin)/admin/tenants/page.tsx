@@ -163,6 +163,10 @@ export default function TenantsPage() {
   const [manageOpen, setManageOpen] = useState(false);
   const [tenantToManage, setTenantToManage] = useState<Tenant | null>(null);
   const [showAdvancedOpenvpn, setShowAdvancedOpenvpn] = useState(false);
+  const [generatedGatewayAuth, setGeneratedGatewayAuth] = useState<{
+    username: string;
+    password: string;
+  } | null>(null);
   const [generateFromControllerOpen, setGenerateFromControllerOpen] = useState(false);
   const [controllerValidationError, setControllerValidationError] = useState<string>("");
 
@@ -311,6 +315,7 @@ export default function TenantsPage() {
         <PopoverMenuItem
           onClick={() => {
             setTenantToConfigure(tenant);
+            setGeneratedGatewayAuth(null);
             const hasAdvancedOpenvpn =
               Boolean(tenant.openvpn_profile_stored) ||
               Boolean(tenant.openvpn_ca_stored) ||
@@ -833,7 +838,7 @@ export default function TenantsPage() {
         onRefresh={refreshTenants}
       />
       <Dialog open={controllerOpen} onOpenChange={setControllerOpen}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Tenant networking</DialogTitle>
             <DialogDescription>
@@ -938,6 +943,28 @@ export default function TenantsPage() {
                           return "Stored profile available";
                         })()}
                       </div>
+                    </div>
+                  )}
+                  {generatedGatewayAuth ? (
+                    <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+                      <div className="font-medium">Gateway credentials</div>
+                      <div className="mt-1 grid gap-1">
+                        <div>
+                          <span className="font-semibold">Username:</span>{" "}
+                          <span className="font-mono">{generatedGatewayAuth.username}</span>
+                        </div>
+                        <div>
+                          <span className="font-semibold">Password:</span>{" "}
+                          <span className="font-mono">{generatedGatewayAuth.password}</span>
+                        </div>
+                      </div>
+                      <div className="mt-2 text-[11px] text-emerald-700/80">
+                        Copy these into UniFi when uploading the gateway profile.
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-md border border-border/60 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                      Generate a profile to receive gateway credentials for UniFi upload.
                     </div>
                   )}
 
@@ -1048,29 +1075,6 @@ export default function TenantsPage() {
                         </p>
                       </div>
                       <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <Label htmlFor="openvpn_auth_blob">Auth credentials content</Label>
-                          {tenantToConfigure?.openvpn_auth_stored ? (
-                            <span className="text-xs font-medium text-emerald-600">Stored</span>
-                          ) : null}
-                        </div>
-                        <Input
-                          id="openvpn_auth_blob_file"
-                          type="file"
-                          accept=".txt,.conf"
-                          onChange={loadFileIntoField("openvpn_auth_blob")}
-                        />
-                        <Textarea
-                          id="openvpn_auth_blob"
-                          placeholder="username\npassword"
-                          {...controllerForm.register("openvpn_auth_blob")}
-                        />
-                        <p className="text-xs text-muted-foreground">
-                          Optional: store auth-user-pass credentials to inline when missing from the template.
-                          Leave blank to keep the existing stored credentials.
-                        </p>
-                      </div>
-                      <div className="space-y-2">
                         <Label htmlFor="openvpn_profile_ref">OpenVPN profile template ref</Label>
                         <Input id="openvpn_profile_ref" {...controllerForm.register("openvpn_profile_ref")} />
                         <p className="text-xs text-muted-foreground">
@@ -1082,17 +1086,6 @@ export default function TenantsPage() {
                         <Input id="openvpn_ca_ref" {...controllerForm.register("openvpn_ca_ref")} />
                         <p className="text-xs text-muted-foreground">
                           Optional env var reference containing a CA bundle.
-                        </p>
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="openvpn_auth_ref">Auth credentials ref</Label>
-                        <Input
-                          id="openvpn_auth_ref"
-                          type="password"
-                          {...controllerForm.register("openvpn_auth_ref")}
-                        />
-                        <p className="text-xs text-muted-foreground">
-                          Optional env var reference containing username/password credentials.
                         </p>
                       </div>
                     </div>
@@ -1117,6 +1110,9 @@ export default function TenantsPage() {
           setGenerateFromControllerOpen(isOpen);
         }}
         tenant={tenantToConfigure ? { id: tenantToConfigure.id, name: tenantToConfigure.name, slug: tenantToConfigure.slug } : null}
+        onGeneratedAuth={(auth) => {
+          setGeneratedGatewayAuth(auth);
+        }}
         onGenerated={async (client) => {
           if (!tenantToConfigure) {
             return;

@@ -33,6 +33,7 @@ def test_generate_openvpn_client_overwrites_existing_request(monkeypatch, tmp_pa
     profile = openvpn.generate_openvpn_client_profile("events-gateway-01")
 
     assert "new-cert" in profile
+    assert "auth-user-pass" in profile
     assert not (pki_path / "reqs" / "events-gateway-01.req").exists()
     assert any("revoke-issued" in cmd for cmd in calls)
     assert any("gen-crl" in cmd for cmd in calls)

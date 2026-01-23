@@ -117,6 +117,10 @@ def test_generate_openvpn_profile_returns_credentials(client, db_session, monkey
         "app.routes.admin.generate_openvpn_client_profile",
         lambda _client_name: "client\nremote 1.2.3.4 1194\n",
     )
+    monkeypatch.setattr(
+        "app.routes.admin.ensure_openvpn_auth_credentials",
+        lambda _u, _p: None,
+    )
 
     _login_as(client, admin)
     response = client.post(f"/api/admin/tenants/{tenant.id}/openvpn/generate", json={"client_name": "gw-1"})
@@ -130,3 +134,46 @@ def test_generate_openvpn_profile_returns_credentials(client, db_session, monkey
     decrypted = decrypt_openvpn_secret(secret.auth_blob_encrypted)
     assert payload["auth_username"] in decrypted
     assert payload["auth_password"] in decrypted
+
+
+def test_revoke_openvpn_profile(client, db_session, monkeypatch):
+    settings.OPENVPN_ENCRYPTION_KEY = Fernet.generate_key().decode("utf-8")
+    tenant = Tenant(
+        id=uuid.uuid4(),
+        slug="acme",
+        name="Acme",
+        status=TenantStatus.ACTIVE,
+        openvpn_enabled=True,
+        openvpn_remote_host="vpn.reduxtc.com",
+        openvpn_remote_port=1194,
+    )
+    admin = AdminUser(
+        id=uuid.uuid4(),
+        email="tenant.admin@example.com",
+        password_hash=hash_password("secret"),
+        is_superadmin=False,
+    )
+    membership = AdminMembership(
+        id=uuid.uuid4(),
+        admin_user_id=admin.id,
+        tenant_id=tenant.id,
+        role=AdminRole.TENANT_ADMIN,
+    )
+    profile = TenantOpenvpnClientProfile(
+        id=uuid.uuid4(),
+        tenant_id=tenant.id,
+        client_name="gateway-01",
+        profile_encrypted=encrypt_openvpn_secret("client\nremote 1.2.3.4 1194\n"),
+    )
+    db_session.add_all([tenant, admin, membership, profile])
+    db_session.commit()
+
+    monkeypatch.setattr("app.routes.admin.revoke_openvpn_client_profile", lambda _name: None)
+
+    _login_as(client, admin)
+    response = client.delete(
+        f"/api/admin/tenants/{tenant.id}/openvpn/clients/{profile.id}"
+    )
+    assert response.status_code == 200
+    assert response.json()["data"]["revoked"] is True
+    assert db_session.query(TenantOpenvpnClientProfile).count() == 0

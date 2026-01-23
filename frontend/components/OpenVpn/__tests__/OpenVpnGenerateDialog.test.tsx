@@ -69,6 +69,7 @@ describe("OpenVpnGenerateDialog", () => {
 
   it("shows gateway credentials after generation when provided", async () => {
     const user = userEvent.setup({ pointerEventsCheck: 0 });
+    const spy = vi.fn();
     apiFetchMock.mockResolvedValueOnce({
       client: {
         id: "client-2",
@@ -84,6 +85,7 @@ describe("OpenVpnGenerateDialog", () => {
         open
         onOpenChange={() => {}}
         tenant={{ id: "tenant-1", name: "Acme", slug: "acme" }}
+        onGeneratedAuth={spy}
       />
     );
 
@@ -93,5 +95,6 @@ describe("OpenVpnGenerateDialog", () => {
     expect(await screen.findByText("Gateway credentials")).toBeInTheDocument();
     expect(screen.getByText("unifi-user")).toBeInTheDocument();
     expect(screen.getByText("unifi-pass")).toBeInTheDocument();
+    expect(spy).toHaveBeenCalledWith({ username: "unifi-user", password: "unifi-pass" });
   });
 });
