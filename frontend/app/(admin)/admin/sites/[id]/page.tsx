@@ -28,8 +28,10 @@ const siteSchema = z.object({
   success_url: z.string().optional().or(z.literal("")),
   enable_tos_only: z.boolean().default(false),
   unifi_base_url: z.string().optional().or(z.literal("")),
+  unifi_port: z.coerce.number().int().min(1).max(65535).optional(),
   unifi_site_id: z.string().optional().or(z.literal("")),
   unifi_api_key_ref: z.string().optional().or(z.literal("")),
+  unifi_api_key: z.string().optional().or(z.literal("")),
   default_time_limit_minutes: z.coerce.number().optional().nullable(),
   default_data_limit_mb: z.coerce.number().optional().nullable(),
   default_rx_kbps: z.coerce.number().optional().nullable(),
@@ -38,13 +40,14 @@ const siteSchema = z.object({
 
 type SiteFormValues = z.infer<typeof siteSchema>;
 
-type SiteResponse = SiteFormValues & { id: string };
+type SiteResponse = SiteFormValues & { id: string; unifi_api_key_stored?: boolean | null };
 
 type OidcProvider = {
   id: string;
   issuer: string;
   client_id: string;
   client_secret_ref?: string | null;
+  client_secret_stored?: boolean | null;
   scopes?: string | null;
 };
 
@@ -57,6 +60,37 @@ type SiteOidcForm = {
 };
 
 const UNIFI_INTEGRATION_PATH = "/proxy/network/integration";
+const DEFAULT_UNIFI_PORT = 443;
+
+const parseUnifiHostAndPort = (value?: string | null) => {
+  if (!value) {
+    return { host: "", port: DEFAULT_UNIFI_PORT };
+  }
+  const withProtocol = /^https?:\/\//i.test(value) ? value : `https://${value}`;
+  try {
+    const url = new URL(withProtocol);
+    const parsedPort = url.port ? Number(url.port) : DEFAULT_UNIFI_PORT;
+    return {
+      host: url.hostname,
+      port: Number.isNaN(parsedPort) ? DEFAULT_UNIFI_PORT : parsedPort,
+    };
+  } catch {
+    return { host: value, port: DEFAULT_UNIFI_PORT };
+  }
+};
+
+const applyUnifiPort = (value: string | undefined | null, port: number | undefined) => {
+  const trimmed = value?.trim() ?? "";
+  if (!trimmed) {
+    return "";
+  }
+  const { host, port: parsedPort } = parseUnifiHostAndPort(trimmed);
+  const resolvedPort = port ?? parsedPort;
+  if (!resolvedPort || resolvedPort === DEFAULT_UNIFI_PORT) {
+    return host;
+  }
+  return `${host}:${resolvedPort}`;
+};
 
 const normalizeUnifiBaseUrl = (value: string | undefined | null) => {
   const trimmed = value?.trim() ?? "";
@@ -71,11 +105,11 @@ const normalizeUnifiBaseUrl = (value: string | undefined | null) => {
 };
 
 const displayUnifiHost = (value?: string | null) => {
-  if (!value) {
-    return "";
-  }
-  const withoutProtocol = value.replace(/^https?:\/\//i, "");
-  return withoutProtocol.split("/")[0] ?? "";
+  return parseUnifiHostAndPort(value).host;
+};
+
+const displayUnifiPort = (value?: string | null) => {
+  return parseUnifiHostAndPort(value).port;
 };
 
 export default function SiteDetailPage() {
@@ -124,6 +158,8 @@ export default function SiteDetailPage() {
         const normalizedSite = {
           ...data.site,
           unifi_base_url: displayUnifiHost(data.site.unifi_base_url),
+          unifi_port: displayUnifiPort(data.site.unifi_base_url),
+          unifi_api_key: "",
         };
         setSite(normalizedSite);
         siteForm.reset(normalizedSite);
@@ -163,9 +199,13 @@ export default function SiteDetailPage() {
       return;
     }
     try {
+      const { unifi_port, ...rest } = values;
+      const unifiHost = applyUnifiPort(values.unifi_base_url, unifi_port);
       const payload = {
-        ...values,
-        unifi_base_url: normalizeUnifiBaseUrl(values.unifi_base_url),
+        ...rest,
+        unifi_base_url: normalizeUnifiBaseUrl(unifiHost),
+        unifi_api_key_ref: values.unifi_api_key_ref || undefined,
+        unifi_api_key: values.unifi_api_key?.trim() ? values.unifi_api_key : undefined,
       };
       const data = await apiFetch<{ site: SiteResponse }>(
         `/api/admin/tenants/${tenantId}/sites/${params.id}`,
@@ -174,10 +214,13 @@ export default function SiteDetailPage() {
           body: JSON.stringify(payload),
         }
       );
-      setSite({
+      const normalizedSite = {
         ...data.site,
         unifi_base_url: displayUnifiHost(data.site.unifi_base_url),
-      });
+        unifi_port: displayUnifiPort(data.site.unifi_base_url),
+        unifi_api_key: "",
+      };
+      setSite(normalizedSite);
       toast.success("Site updated.");
     } catch (err: any) {
       const message = err?.message ?? "Unable to update site.";
@@ -456,7 +499,7 @@ export default function SiteDetailPage() {
       <Card className="rounded-xl border bg-card shadow-soft">
         <CardHeader>
           <CardTitle>UniFi connection</CardTitle>
-          <CardDescription>Store secret references in the backend.</CardDescription>
+          <CardDescription>Store controller credentials encrypted in the backend.</CardDescription>
         </CardHeader>
         <CardContent>
           <form className="grid gap-4 md:grid-cols-2" onSubmit={siteForm.handleSubmit(saveSite)}>
@@ -468,13 +511,33 @@ export default function SiteDetailPage() {
               </p>
             </div>
             <div className="space-y-2">
+              <Label htmlFor="unifi_port">UniFi controller port</Label>
+              <Input
+                id="unifi_port"
+                type="number"
+                min={1}
+                max={65535}
+                {...siteForm.register("unifi_port", { valueAsNumber: true })}
+              />
+              <p className="text-xs text-muted-foreground">Defaults to {DEFAULT_UNIFI_PORT}.</p>
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="unifi_site_id">UniFi site ID</Label>
               <Input id="unifi_site_id" {...siteForm.register("unifi_site_id")} />
             </div>
             <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="unifi_api_key">UniFi API key (optional override)</Label>
+              <Input id="unifi_api_key" type="password" {...siteForm.register("unifi_api_key")} />
+              <p className="text-xs text-muted-foreground">
+                {site?.unifi_api_key_stored
+                  ? "Encrypted key is stored. Leave blank to keep the current value."
+                  : "Stored encrypted in the database."}
+              </p>
+            </div>
+            <div className="space-y-2 md:col-span-2">
               <Label htmlFor="unifi_api_key_ref">UniFi API key reference (optional override)</Label>
               <Input id="unifi_api_key_ref" type="password" {...siteForm.register("unifi_api_key_ref")} />
-              <p className="text-xs text-muted-foreground">Use a secret reference, not a raw key.</p>
+              <p className="text-xs text-muted-foreground">Legacy env var name (overridden by stored key).</p>
             </div>
             <div className="md:col-span-2">
               <Button type="submit" variant="primary">
@@ -565,4 +628,3 @@ export default function SiteDetailPage() {
     </div>
   );
 }
-

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from sqlalchemy import Boolean, ForeignKey, Index, Integer, String, Text, Uuid
+from sqlalchemy import Boolean, ForeignKey, Index, Integer, LargeBinary, String, Text, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
@@ -23,6 +23,7 @@ class Site(Base, TimestampMixin):
     unifi_base_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
     unifi_site_id: Mapped[str] = mapped_column(String(128), nullable=False)
     unifi_api_key_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    unifi_api_key_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
 
     default_time_limit_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
     default_data_limit_mb: Mapped[int | None] = mapped_column(Integer, nullable=True)

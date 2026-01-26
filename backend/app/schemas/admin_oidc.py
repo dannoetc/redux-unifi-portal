@@ -7,7 +7,8 @@ from pydantic import BaseModel
 class OidcProviderCreateRequest(BaseModel):
     issuer: str
     client_id: str
-    client_secret_ref: str
+    client_secret_ref: str | None = None
+    client_secret: str | None = None
     scopes: str
 
 
@@ -15,6 +16,7 @@ class OidcProviderUpdateRequest(BaseModel):
     issuer: str | None = None
     client_id: str | None = None
     client_secret_ref: str | None = None
+    client_secret: str | None = None
     scopes: str | None = None
 
 
@@ -22,7 +24,8 @@ class OidcProviderResponse(BaseModel):
     id: uuid.UUID
     issuer: str
     client_id: str
-    client_secret_ref: str
+    client_secret_ref: str | None
+    client_secret_stored: bool
     scopes: str
 
 

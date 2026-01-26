@@ -10,6 +10,10 @@ class TenantCreateRequest(BaseModel):
     status: str | None = None
     unifi_base_url: str | None = None
     unifi_api_key_ref: str | None = None
+    unifi_api_key: str | None = Field(
+        default=None,
+        description="Plaintext UniFi API key to encrypt and store.",
+    )
     is_roaming: bool | None = None
     openvpn_enabled: bool | None = None
     openvpn_profile_ref: str | None = Field(
@@ -46,6 +50,10 @@ class TenantUpdateRequest(BaseModel):
     status: str | None = None
     unifi_base_url: str | None = None
     unifi_api_key_ref: str | None = None
+    unifi_api_key: str | None = Field(
+        default=None,
+        description="Plaintext UniFi API key to encrypt and store.",
+    )
     is_roaming: bool | None = None
     openvpn_enabled: bool | None = None
     openvpn_profile_ref: str | None = Field(
@@ -83,6 +91,7 @@ class TenantResponse(BaseModel):
     status: str
     unifi_base_url: str | None
     unifi_api_key_ref: str | None
+    unifi_api_key_stored: bool
     is_roaming: bool
     openvpn_enabled: bool
     openvpn_profile_ref: str | None = Field(

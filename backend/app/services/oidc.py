@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import secrets
 import uuid
 from dataclasses import dataclass
@@ -13,6 +12,7 @@ from authlib.jose import jwt
 from authlib.jose.errors import BadSignatureError, DecodeError, ExpiredTokenError, JoseError
 from redis import Redis
 
+from app.services.secrets import SecretError, resolve_secret_value
 from app.settings import settings
 
 logger = structlog.get_logger(__name__)
@@ -98,11 +98,16 @@ def generate_code_verifier() -> str:
     return secrets.token_urlsafe(32)
 
 
-def resolve_secret(ref: str) -> str:
-    value = os.environ.get(ref)
-    if not value:
-        raise OidcError("OIDC_SECRET_MISSING", "OIDC client secret is not configured.")
-    return value
+def resolve_secret(*, ref: str | None, encrypted: bytes | None) -> str:
+    try:
+        return resolve_secret_value(
+            encrypted=encrypted,
+            ref=ref,
+            missing_code="OIDC_SECRET_MISSING",
+            missing_message="OIDC client secret is not configured.",
+        )
+    except SecretError as exc:
+        raise OidcError(exc.code, str(exc)) from exc
 
 
 def discover_provider_metadata(issuer: str) -> OidcProviderMetadata:
@@ -127,8 +132,15 @@ def discover_provider_metadata(issuer: str) -> OidcProviderMetadata:
         raise OidcError("OIDC_CONFIG_INVALID", "OIDC configuration missing fields.") from exc
 
 
-def build_oauth_client(*, client_id: str, client_secret_ref: str, scopes: str, redirect_uri: str) -> OAuth2Client:
-    client_secret = resolve_secret(client_secret_ref)
+def build_oauth_client(
+    *,
+    client_id: str,
+    client_secret_ref: str | None,
+    client_secret_encrypted: bytes | None,
+    scopes: str,
+    redirect_uri: str,
+) -> OAuth2Client:
+    client_secret = resolve_secret(ref=client_secret_ref, encrypted=client_secret_encrypted)
     client = OAuth2Client(
         client_id=client_id,
         client_secret=client_secret,
@@ -156,7 +168,8 @@ def exchange_code_for_claims(
     *,
     issuer: str,
     client_id: str,
-    client_secret_ref: str,
+    client_secret_ref: str | None,
+    client_secret_encrypted: bytes | None,
     scopes: str,
     redirect_uri: str,
     code: str,
@@ -167,6 +180,7 @@ def exchange_code_for_claims(
     client = build_oauth_client(
         client_id=client_id,
         client_secret_ref=client_secret_ref,
+        client_secret_encrypted=client_secret_encrypted,
         scopes=scopes,
         redirect_uri=redirect_uri,
     )

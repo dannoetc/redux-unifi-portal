@@ -19,6 +19,7 @@ const schema = z.object({
   issuer: z.string().url(),
   client_id: z.string().min(2),
   client_secret_ref: z.string().optional().or(z.literal("")),
+  client_secret: z.string().optional().or(z.literal("")),
   scopes: z.string().optional().or(z.literal("")),
 });
 
@@ -27,6 +28,7 @@ type Provider = {
   issuer: string;
   client_id: string;
   client_secret_ref?: string | null;
+  client_secret_stored?: boolean | null;
   scopes?: string | null;
 };
 
@@ -95,11 +97,16 @@ export default function OidcProvidersPage() {
       return;
     }
     try {
+      const payload = {
+        ...values,
+        client_secret_ref: values.client_secret_ref || undefined,
+        client_secret: values.client_secret?.trim() ? values.client_secret : undefined,
+      };
       const data = await apiFetch<{ provider: Provider }>(
         `/api/admin/tenants/${tenantId}/oidc-providers`,
         {
           method: "POST",
-          body: JSON.stringify(values),
+          body: JSON.stringify(payload),
         }
       );
       setProviders((prev) => [data.provider, ...prev]);
@@ -141,8 +148,14 @@ export default function OidcProvidersPage() {
                   <Input id="client_id" {...form.register("client_id")} />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="client_secret_ref">Client secret ref</Label>
+                  <Label htmlFor="client_secret">Client secret</Label>
+                  <Input id="client_secret" type="password" {...form.register("client_secret")} />
+                  <p className="text-xs text-muted-foreground">Stored encrypted in the database.</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="client_secret_ref">Client secret ref (optional)</Label>
                   <Input id="client_secret_ref" type="password" {...form.register("client_secret_ref")} />
+                  <p className="text-xs text-muted-foreground">Legacy env var name (overridden by stored key).</p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="scopes">Scopes</Label>

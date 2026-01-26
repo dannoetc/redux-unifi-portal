@@ -36,6 +36,7 @@ class SiteCreateRequest(BaseModel):
     unifi_base_url: str | None = None
     unifi_site_id: str
     unifi_api_key_ref: str | None = None
+    unifi_api_key: str | None = None
     default_time_limit_minutes: int = 60
     default_data_limit_mb: int | None = None
     default_rx_kbps: int | None = None
@@ -57,6 +58,7 @@ class SiteUpdateRequest(BaseModel):
     unifi_base_url: str | None = None
     unifi_site_id: str | None = None
     unifi_api_key_ref: str | None = None
+    unifi_api_key: str | None = None
     default_time_limit_minutes: int | None = None
     default_data_limit_mb: int | None = None
     default_rx_kbps: int | None = None
@@ -79,6 +81,7 @@ class SiteResponse(BaseModel):
     unifi_base_url: str | None
     unifi_site_id: str
     unifi_api_key_ref: str | None
+    unifi_api_key_stored: bool
     default_time_limit_minutes: int
     default_data_limit_mb: int | None
     default_rx_kbps: int | None
