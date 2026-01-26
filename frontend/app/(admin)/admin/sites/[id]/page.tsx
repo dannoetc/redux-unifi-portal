@@ -124,6 +124,7 @@ export default function SiteDetailPage() {
   const [testing, setTesting] = useState(false);
   const [tenantSlug, setTenantSlug] = useState<string | null>(null);
   const logoInputRef = useRef<HTMLInputElement | null>(null);
+  const originalUnifiPortRef = useRef<number | undefined>(undefined);
 
   const siteForm = useForm<SiteFormValues>({
     resolver: zodResolver(siteSchema),
@@ -157,10 +158,14 @@ export default function SiteDetailPage() {
         if (!active) {
           return;
         }
+        const computedPort = displayUnifiPort(data.site.unifi_base_url);
+        const normalizedPort = computedPort !== DEFAULT_UNIFI_PORT ? computedPort : undefined;
+        originalUnifiPortRef.current = normalizedPort;
+
         const normalizedSite = {
           ...data.site,
           unifi_base_url: displayUnifiHost(data.site.unifi_base_url),
-          unifi_port: displayUnifiPort(data.site.unifi_base_url),
+          unifi_port: normalizedPort,
           unifi_api_key: "",
         };
         setSite(normalizedSite);
@@ -204,7 +209,8 @@ export default function SiteDetailPage() {
     }
     try {
       const { unifi_port, ...rest } = values;
-      const unifiHost = applyUnifiPort(values.unifi_base_url, unifi_port);
+      const portToUse = typeof unifi_port === "number" ? unifi_port : originalUnifiPortRef.current;
+      const unifiHost = applyUnifiPort(values.unifi_base_url, portToUse);
       const payload = {
         ...rest,
         unifi_base_url: normalizeUnifiBaseUrl(unifiHost),
