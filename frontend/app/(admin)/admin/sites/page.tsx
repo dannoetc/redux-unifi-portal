@@ -51,11 +51,17 @@ const optionalNumber = z.preprocess(
   z.coerce.number().optional()
 );
 
+const optionalPort = z.preprocess(
+  (value) => (value === "" || value === null ? undefined : value),
+  z.coerce.number().int().min(1).max(65535).optional()
+);
+
 const siteSchema = z.object({
   display_name: z.string().min(2),
   slug: z.string().min(2),
   enabled: z.boolean().default(true),
   unifi_base_url: z.string().optional().or(z.literal("")),
+  unifi_port: optionalPort,
   unifi_site_id: z.string().min(1),
   unifi_api_key_ref: z.string().optional().or(z.literal("")),
   default_time_limit_minutes: z.coerce.number().min(1),
@@ -67,6 +73,37 @@ const siteSchema = z.object({
 type CreateSite = z.infer<typeof siteSchema>;
 
 const UNIFI_INTEGRATION_PATH = "/proxy/network/integration";
+const DEFAULT_UNIFI_PORT = 443;
+
+const parseUnifiHostAndPort = (value?: string | null) => {
+  if (!value) {
+    return { host: "", port: DEFAULT_UNIFI_PORT };
+  }
+  const withProtocol = /^https?:\/\//i.test(value) ? value : `https://${value}`;
+  try {
+    const url = new URL(withProtocol);
+    const parsedPort = url.port ? Number(url.port) : DEFAULT_UNIFI_PORT;
+    return {
+      host: url.hostname,
+      port: Number.isNaN(parsedPort) ? DEFAULT_UNIFI_PORT : parsedPort,
+    };
+  } catch {
+    return { host: value, port: DEFAULT_UNIFI_PORT };
+  }
+};
+
+const applyUnifiPort = (value: string | undefined | null, port: number | undefined) => {
+  const trimmed = value?.trim() ?? "";
+  if (!trimmed) {
+    return "";
+  }
+  const { host, port: parsedPort } = parseUnifiHostAndPort(trimmed);
+  const resolvedPort = port ?? parsedPort;
+  if (!resolvedPort || resolvedPort === DEFAULT_UNIFI_PORT) {
+    return host;
+  }
+  return `${host}:${resolvedPort}`;
+};
 
 const normalizeUnifiBaseUrl = (value: string | undefined | null) => {
   const trimmed = value?.trim() ?? "";
@@ -94,7 +131,7 @@ export default function SitesPage() {
 
   const form = useForm<CreateSite>({
     resolver: zodResolver(siteSchema),
-    defaultValues: { enabled: true, default_time_limit_minutes: 60 },
+    defaultValues: { enabled: true, default_time_limit_minutes: 60, unifi_port: DEFAULT_UNIFI_PORT },
   });
 
   const activeTenant = useMemo(
@@ -253,9 +290,11 @@ export default function SitesPage() {
       return;
     }
     try {
+      const { unifi_port, ...rest } = values;
+      const unifiHost = applyUnifiPort(values.unifi_base_url, unifi_port);
       const payload = {
-        ...values,
-        unifi_base_url: normalizeUnifiBaseUrl(values.unifi_base_url),
+        ...rest,
+        unifi_base_url: normalizeUnifiBaseUrl(unifiHost),
       };
       const data = await apiFetch<{ site: Site }>(`/api/admin/tenants/${tenantId}/sites`, {
         method: "POST",
@@ -372,6 +411,17 @@ export default function SitesPage() {
                   <p className="text-xs text-muted-foreground">
                     We append {UNIFI_INTEGRATION_PATH} automatically.
                   </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="unifi_port">UniFi controller port</Label>
+                  <Input
+                    id="unifi_port"
+                    type="number"
+                    min={1}
+                    max={65535}
+                    {...form.register("unifi_port", { valueAsNumber: true })}
+                  />
+                  <p className="text-xs text-muted-foreground">Defaults to {DEFAULT_UNIFI_PORT}.</p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="unifi_site_id">UniFi site ID</Label>
