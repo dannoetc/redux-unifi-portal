@@ -344,6 +344,8 @@ export default function SiteDetailPage() {
               const isValid = await siteForm.trigger();
               if (isValid) {
                 await saveSite(siteForm.getValues());
+              } else {
+                toast.error("Please fix the highlighted fields.");
               }
             }}
             disabled={!formIsDirty}
@@ -499,7 +501,7 @@ export default function SiteDetailPage() {
                   type="checkbox"
                   className="peer sr-only"
                   checked={Boolean(siteForm.watch("enabled"))}
-                  onChange={() => siteForm.setValue("enabled", !siteForm.getValues("enabled"))}
+                  onChange={() => siteForm.setValue("enabled", !siteForm.getValues("enabled"), { shouldDirty: true })}
                 />
                 <span className="h-5 w-9 rounded-full bg-muted transition peer-checked:bg-primary" />
                 <span className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition peer-checked:translate-x-4" />
@@ -598,9 +600,14 @@ export default function SiteDetailPage() {
                     type="number"
                     min={1}
                     max={65535}
-                    {...siteForm.register("unifi_port", { valueAsNumber: true })}
+                    {...siteForm.register("unifi_port", {
+                      setValueAs: (v) => (v === "" || v === null || typeof v === "undefined" ? undefined : Number(v)),
+                    })}
                   />
                   <p className="text-xs text-muted-foreground">Defaults to {DEFAULT_UNIFI_PORT}.</p>
+                  {siteForm.formState.errors.unifi_port && (
+                    <p className="text-xs text-destructive">{siteForm.formState.errors.unifi_port.message as string}</p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="unifi_site_id">UniFi site ID</Label>
