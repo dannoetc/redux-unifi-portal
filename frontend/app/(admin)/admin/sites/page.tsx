@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { MoreHorizontal } from "lucide-react";
+import { MoreHorizontal, Pencil } from "lucide-react";
 
 import { apiFetch } from "@/lib/api";
 import { useTenantSelection } from "@/lib/use-tenant";
@@ -63,7 +63,6 @@ const siteSchema = z.object({
   unifi_base_url: z.string().optional().or(z.literal("")),
   unifi_port: optionalPort,
   unifi_site_id: z.string().min(1),
-  unifi_api_key_ref: z.string().optional().or(z.literal("")),
   unifi_api_key: z.string().optional().or(z.literal("")),
   default_time_limit_minutes: z.coerce.number().min(1),
   default_data_limit_mb: optionalNumber,
@@ -281,7 +280,18 @@ export default function SitesPage() {
         id: "actions",
         header: () => <span className="sr-only">Actions</span>,
         cell: ({ row }) => (
-          <div className="flex items-center justify-end">
+          <div className="flex items-center justify-end gap-1">
+            <Button
+              asChild
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0"
+            >
+              <a href={`/admin/sites/${row.original.id}?tenant=${tenantId ?? ""}`}>
+                <Pencil className="h-4 w-4" />
+                <span className="sr-only">Edit {row.original.display_name}</span>
+              </a>
+            </Button>
             <RowActions site={row.original} />
           </div>
         ),
@@ -301,7 +311,6 @@ export default function SitesPage() {
       const payload = {
         ...rest,
         unifi_base_url: normalizeUnifiBaseUrl(unifiHost),
-        unifi_api_key_ref: values.unifi_api_key_ref || undefined,
         unifi_api_key: values.unifi_api_key?.trim() ? values.unifi_api_key : undefined,
       };
       const data = await apiFetch<{ site: Site }>(`/api/admin/tenants/${tenantId}/sites`, {
@@ -444,16 +453,6 @@ export default function SitesPage() {
                     {...form.register("unifi_api_key")}
                   />
                   <p className="text-xs text-muted-foreground">Stored encrypted in the database.</p>
-                </div>
-                <div className="space-y-2 md:col-span-2">
-                  <Label htmlFor="unifi_api_key_ref">UniFi API key reference (optional override)</Label>
-                  <Input
-                    id="unifi_api_key_ref"
-                    type="password"
-                    placeholder="Use tenant controller"
-                    {...form.register("unifi_api_key_ref")}
-                  />
-                  <p className="text-xs text-muted-foreground">Legacy env var name (overridden by stored key).</p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="default_time_limit_minutes">Time limit (minutes)</Label>

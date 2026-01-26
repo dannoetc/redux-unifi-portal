@@ -14,6 +14,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 const siteSchema = z.object({
   display_name: z.string().min(2),
@@ -30,7 +31,6 @@ const siteSchema = z.object({
   unifi_base_url: z.string().optional().or(z.literal("")),
   unifi_port: z.coerce.number().int().min(1).max(65535).optional(),
   unifi_site_id: z.string().optional().or(z.literal("")),
-  unifi_api_key_ref: z.string().optional().or(z.literal("")),
   unifi_api_key: z.string().optional().or(z.literal("")),
   default_time_limit_minutes: z.coerce.number().optional().nullable(),
   default_data_limit_mb: z.coerce.number().optional().nullable(),
@@ -208,7 +208,6 @@ export default function SiteDetailPage() {
       const payload = {
         ...rest,
         unifi_base_url: normalizeUnifiBaseUrl(unifiHost),
-        unifi_api_key_ref: values.unifi_api_key_ref || undefined,
         unifi_api_key: values.unifi_api_key?.trim() ? values.unifi_api_key : undefined,
       };
       const data = await apiFetch<{ site: SiteResponse }>(
@@ -355,21 +354,42 @@ export default function SiteDetailPage() {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-      <Card className="rounded-xl border bg-card shadow-soft">
-        <CardHeader>
-          <CardTitle>Branding</CardTitle>
-          <CardDescription>Guest-facing identity and support info.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="display_name">Display name</Label>
-              <Input id="display_name" autoFocus {...siteForm.register("display_name")} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="slug">Slug</Label>
-              <Input id="slug" {...siteForm.register("slug")} />
-            </div>
+      
+      <Tabs defaultValue="branding" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="branding">Branding</TabsTrigger>
+          <TabsTrigger value="portal">Portal Template</TabsTrigger>
+          <TabsTrigger value="policy">Policy Defaults</TabsTrigger>
+          <TabsTrigger value="unifi">UniFi Connection</TabsTrigger>
+          <TabsTrigger value="oidc">SSO (OIDC)</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="branding">
+          <Card className="rounded-xl border bg-card shadow-soft">
+            <CardHeader>
+              <CardTitle>Branding</CardTitle>
+              <CardDescription>Guest-facing identity and support info.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="display_name">
+                    Display name <span className="text-destructive">*</span>
+                  </Label>
+                  <Input id="display_name" autoFocus {...siteForm.register("display_name")} />
+                  {siteForm.formState.errors.display_name && (
+                    <p className="text-xs text-destructive">{siteForm.formState.errors.display_name.message}</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="slug">
+                    Slug <span className="text-destructive">*</span>
+                  </Label>
+                  <Input id="slug" {...siteForm.register("slug")} />
+                  {siteForm.formState.errors.slug && (
+                    <p className="text-xs text-destructive">{siteForm.formState.errors.slug.message}</p>
+                  )}
+                </div>
             <div className="space-y-2 md:col-span-2">
               <Label>Logo source</Label>
               <div className="flex gap-4">
@@ -480,193 +500,203 @@ export default function SiteDetailPage() {
                 <span className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition peer-checked:translate-x-4" />
               </label>
             </div>
-            <div className="flex items-center gap-2 md:col-span-2">
-              <input
-                id="enable_tos_only"
-                type="checkbox"
-                className="h-4 w-4 rounded border border-input"
-                {...siteForm.register("enable_tos_only")}
-              />
-              <Label htmlFor="enable_tos_only">Enable TOS-only guest access</Label>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
-      <Card className="rounded-xl border bg-card shadow-soft">
-        <CardHeader>
-          <CardTitle>Portal template</CardTitle>
-          <CardDescription>
-            Optional custom HTML wrapper. Use the {"{{portal}}"} token to insert the built-in portal card.
-            If omitted, only the template renders.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form className="grid gap-4">
-            <div className="flex items-center gap-2">
-              <input
-                id="portal_template_enabled"
-                type="checkbox"
-                className="h-4 w-4 rounded border border-input"
-                {...siteForm.register("portal_template_enabled")}
-              />
-              <Label htmlFor="portal_template_enabled">Enable custom template</Label>
-            </div>
-            <div className="text-xs text-muted-foreground">
-              Tokens: {`{{display_name}}`}, {`{{logo_url}}`}, {`{{primary_color}}`}, {`{{terms_html}}`}, {`{{support_contact}}`}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="portal_template_html">HTML template</Label>
-              <textarea
-                id="portal_template_html"
-                className="min-h-[200px] w-full rounded-md border border-input bg-background p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2 focus:ring-offset-white"
-                placeholder="<section>{{portal}}</section>"
-                disabled={!portalTemplateEnabled}
-                {...siteForm.register("portal_template_html")}
-              />
-            </div>
-          </form>
-        </CardContent>
-      </Card>
-      <Card className="rounded-xl border bg-card shadow-soft">
-        <CardHeader>
-          <CardTitle>Default policy</CardTitle>
-          <CardDescription>Applied for voucher and OTP authorization.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form className="grid gap-4 md:grid-cols-2">
-            {policyFields.map((field) => (
-              <div key={field.key} className="space-y-2">
-                <Label htmlFor={field.key}>{field.label}</Label>
-                <Input id={field.key} type="number" {...siteForm.register(field.key as keyof SiteFormValues)} />
-              </div>
-            ))}
-          </form>
-        </CardContent>
-      </Card>
-      <Card className="rounded-xl border bg-card shadow-soft">
-        <CardHeader>
-          <CardTitle>UniFi connection</CardTitle>
-          <CardDescription>Store controller credentials encrypted in the backend.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="unifi_base_url">UniFi controller IP (optional override)</Label>
-              <Input id="unifi_base_url" placeholder="71.162.143.124" {...siteForm.register("unifi_base_url")} />
-              <p className="text-xs text-muted-foreground">
-                We append {UNIFI_INTEGRATION_PATH} automatically.
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="unifi_port">UniFi controller port</Label>
-              <Input
-                id="unifi_port"
-                type="number"
-                min={1}
-                max={65535}
-                {...siteForm.register("unifi_port", { valueAsNumber: true })}
-              />
-              <p className="text-xs text-muted-foreground">Defaults to {DEFAULT_UNIFI_PORT}.</p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="unifi_site_id">UniFi site ID</Label>
-              <Input id="unifi_site_id" {...siteForm.register("unifi_site_id")} />
-            </div>
-            <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="unifi_api_key">UniFi API key (optional override)</Label>
-              <Input id="unifi_api_key" type="password" {...siteForm.register("unifi_api_key")} />
-              <p className="text-xs text-muted-foreground">
-                {site?.unifi_api_key_stored
-                  ? "Encrypted key is stored. Leave blank to keep the current value."
-                  : "Stored encrypted in the database."}
-              </p>
-            </div>
-            <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="unifi_api_key_ref">UniFi API key reference (optional override)</Label>
-              <Input id="unifi_api_key_ref" type="password" {...siteForm.register("unifi_api_key_ref")} />
-              <p className="text-xs text-muted-foreground">Legacy env var name (overridden by stored key).</p>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
-      <Card className="rounded-xl border bg-card shadow-soft">
-        <CardHeader>
-          <CardTitle>UniFi API health check</CardTitle>
-          <CardDescription>Verify that the controller can be reached with the configured credentials.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {testStatus ? (
-            <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700">
-              Connected in {testStatus.latencyMs}ms
-              {testStatus.siteName ? ` - ${testStatus.siteName}` : null}
-            </div>
-          ) : (
-            <div className="text-sm text-muted-foreground">Run a quick request to validate UniFi API access.</div>
-          )}
-          {testError ? (
-            <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-              {testError}
-            </div>
-          ) : null}
-          <Button variant="secondary" onClick={runUnifiTest} disabled={testing}>
-            {testing ? "Testing..." : "Run test"}
-          </Button>
-        </CardContent>
-      </Card>
-      <Card className="rounded-xl border bg-card shadow-soft">
-        <CardHeader>
-          <CardTitle>OIDC enablement</CardTitle>
-          <CardDescription>Allow guest SSO by tenant provider.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="oidc_provider">OIDC provider</Label>
-              <select
-                id="oidc_provider"
-                className="h-10 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2 focus:ring-offset-white"
-                value={oidcForm.oidc_provider_id}
-                onChange={(event) =>
-                  setOidcForm((prev) => ({ ...prev, oidc_provider_id: event.target.value }))
-                }
-              >
-                <option value="">Select provider</option>
-                {providers.map((provider) => (
-                  <option key={provider.id} value={provider.id}>
-                    {provider.issuer}
-                  </option>
+                <div className="flex items-center gap-2 md:col-span-2">
+                  <input
+                    id="enable_tos_only"
+                    type="checkbox"
+                    className="h-4 w-4 rounded border border-input"
+                    {...siteForm.register("enable_tos_only")}
+                  />
+                  <Label htmlFor="enable_tos_only">Enable TOS-only guest access</Label>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="portal">
+          <Card className="rounded-xl border bg-card shadow-soft">
+            <CardHeader>
+              <CardTitle>Portal template</CardTitle>
+              <CardDescription>
+                Optional custom HTML wrapper. Use the {"{{portal}}"} token to insert the built-in portal card.
+                If omitted, only the template renders.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form className="grid gap-4">
+                <div className="flex items-center gap-2">
+                  <input
+                    id="portal_template_enabled"
+                    type="checkbox"
+                    className="h-4 w-4 rounded border border-input"
+                    {...siteForm.register("portal_template_enabled")}
+                  />
+                  <Label htmlFor="portal_template_enabled">Enable custom template</Label>
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Tokens: {`{{display_name}}`}, {`{{logo_url}}`}, {`{{primary_color}}`}, {`{{terms_html}}`}, {`{{support_contact}}`}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="portal_template_html">HTML template</Label>
+                  <textarea
+                    id="portal_template_html"
+                    className="min-h-[200px] w-full rounded-md border border-input bg-background p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2 focus:ring-offset-white"
+                    placeholder="<section>{{portal}}</section>"
+                    disabled={!portalTemplateEnabled}
+                    {...siteForm.register("portal_template_html")}
+                  />
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="policy">
+          <Card className="rounded-xl border bg-card shadow-soft">
+            <CardHeader>
+              <CardTitle>Default policy</CardTitle>
+              <CardDescription>Applied for voucher and OTP authorization.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form className="grid gap-4 md:grid-cols-2">
+                {policyFields.map((field) => (
+                  <div key={field.key} className="space-y-2">
+                    <Label htmlFor={field.key}>{field.label}</Label>
+                    <Input id={field.key} type="number" {...siteForm.register(field.key as keyof SiteFormValues)} />
+                  </div>
                 ))}
-              </select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="allowed_domains">Allowed email domains</Label>
-              <Input
-                id="allowed_domains"
-                placeholder="example.com, corp.io"
-                value={oidcForm.allowed_email_domains}
-                onChange={(event) =>
-                  setOidcForm((prev) => ({ ...prev, allowed_email_domains: event.target.value }))
-                }
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <input
-                id="oidc_enabled"
-                type="checkbox"
-                className="h-4 w-4 rounded border border-input"
-                checked={oidcForm.enabled}
-                onChange={(event) =>
-                  setOidcForm((prev) => ({ ...prev, enabled: event.target.checked }))
-                }
-              />
-              <Label htmlFor="oidc_enabled">Enable OIDC for this site</Label>
-            </div>
-          </div>
-          <Button variant="primary" onClick={saveOidc}>
-            Save OIDC settings
-          </Button>
-        </CardContent>
-      </Card>
+              </form>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="unifi">
+          <Card className="rounded-xl border bg-card shadow-soft">
+            <CardHeader>
+              <CardTitle>UniFi connection</CardTitle>
+              <CardDescription>Store controller credentials encrypted in the backend.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="unifi_base_url">UniFi controller IP (optional override)</Label>
+                  <Input id="unifi_base_url" placeholder="71.162.143.124" {...siteForm.register("unifi_base_url")} />
+                  <p className="text-xs text-muted-foreground">
+                    We append {UNIFI_INTEGRATION_PATH} automatically.
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="unifi_port">UniFi controller port</Label>
+                  <Input
+                    id="unifi_port"
+                    type="number"
+                    min={1}
+                    max={65535}
+                    {...siteForm.register("unifi_port", { valueAsNumber: true })}
+                  />
+                  <p className="text-xs text-muted-foreground">Defaults to {DEFAULT_UNIFI_PORT}.</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="unifi_site_id">UniFi site ID</Label>
+                  <Input id="unifi_site_id" {...siteForm.register("unifi_site_id")} />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="unifi_api_key">UniFi API key (optional override)</Label>
+                  <Input id="unifi_api_key" type="password" {...siteForm.register("unifi_api_key")} />
+                  <p className="text-xs text-muted-foreground">
+                    {site?.unifi_api_key_stored
+                      ? "Encrypted key is stored. Leave blank to keep the current value."
+                      : "Stored encrypted in the database."}
+                  </p>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+          
+          <Card className="mt-6 rounded-xl border bg-card shadow-soft">
+            <CardHeader>
+              <CardTitle>UniFi API health check</CardTitle>
+              <CardDescription>Verify that the controller can be reached with the configured credentials.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {testStatus ? (
+                <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700">
+                  Connected in {testStatus.latencyMs}ms
+                  {testStatus.siteName ? ` - ${testStatus.siteName}` : null}
+                </div>
+              ) : (
+                <div className="text-sm text-muted-foreground">Run a quick request to validate UniFi API access.</div>
+              )}
+              {testError ? (
+                <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+                  {testError}
+                </div>
+              ) : null}
+              <Button variant="secondary" onClick={runUnifiTest} disabled={testing}>
+                {testing ? "Testing..." : "Run test"}
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="oidc">
+          <Card className="rounded-xl border bg-card shadow-soft">
+            <CardHeader>
+              <CardTitle>OIDC enablement</CardTitle>
+              <CardDescription>Allow guest SSO by tenant provider.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="oidc_provider">OIDC provider</Label>
+                  <select
+                    id="oidc_provider"
+                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2 focus:ring-offset-white"
+                    value={oidcForm.oidc_provider_id}
+                    onChange={(event) =>
+                      setOidcForm((prev) => ({ ...prev, oidc_provider_id: event.target.value }))
+                    }
+                  >
+                    <option value="">Select provider</option>
+                    {providers.map((provider) => (
+                      <option key={provider.id} value={provider.id}>
+                        {provider.issuer}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="allowed_domains">Allowed email domains</Label>
+                  <Input
+                    id="allowed_domains"
+                    placeholder="example.com, corp.io"
+                    value={oidcForm.allowed_email_domains}
+                    onChange={(event) =>
+                      setOidcForm((prev) => ({ ...prev, allowed_email_domains: event.target.value }))
+                    }
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    id="oidc_enabled"
+                    type="checkbox"
+                    className="h-4 w-4 rounded border border-input"
+                    checked={oidcForm.enabled}
+                    onChange={(event) =>
+                      setOidcForm((prev) => ({ ...prev, enabled: event.target.checked }))
+                    }
+                  />
+                  <Label htmlFor="oidc_enabled">Enable OIDC for this site</Label>
+                </div>
+              </div>
+              <Button variant="primary" onClick={saveOidc}>
+                Save OIDC settings
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
