@@ -340,7 +340,12 @@ export default function SiteDetailPage() {
             </Button>
           ) : null}
           <Button
-            onClick={() => siteForm.handleSubmit(saveSite)()}
+            onClick={async () => {
+              const isValid = await siteForm.trigger();
+              if (isValid) {
+                await saveSite(siteForm.getValues());
+              }
+            }}
             disabled={!formIsDirty}
             variant="default"
             size="sm"
