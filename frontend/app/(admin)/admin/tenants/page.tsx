@@ -40,6 +40,7 @@ const schema = z.object({
   slug: z.string().min(2),
   status: z.string().optional(),
   unifi_base_url: z.string().optional().or(z.literal("")),
+  unifi_port: optionalPort,
   unifi_api_key_ref: z.string().optional().or(z.literal("")),
   is_roaming: z.boolean().optional(),
   openvpn_enabled: z.boolean().optional(),
@@ -55,6 +56,7 @@ const schema = z.object({
 
 const controllerSchema = z.object({
   unifi_base_url: z.string().optional().or(z.literal("")),
+  unifi_port: optionalPort,
   unifi_api_key_ref: z.string().optional().or(z.literal("")),
   is_roaming: z.boolean().optional(),
   openvpn_enabled: z.boolean().optional(),
@@ -106,6 +108,37 @@ const formatStatus = (status?: string) => {
 };
 
 const UNIFI_INTEGRATION_PATH = "/proxy/network/integration";
+const DEFAULT_UNIFI_PORT = 443;
+
+const parseUnifiHostAndPort = (value?: string | null) => {
+  if (!value) {
+    return { host: "", port: DEFAULT_UNIFI_PORT };
+  }
+  const withProtocol = /^https?:\/\//i.test(value) ? value : `https://${value}`;
+  try {
+    const url = new URL(withProtocol);
+    const parsedPort = url.port ? Number(url.port) : DEFAULT_UNIFI_PORT;
+    return {
+      host: url.hostname,
+      port: Number.isNaN(parsedPort) ? DEFAULT_UNIFI_PORT : parsedPort,
+    };
+  } catch {
+    return { host: value, port: DEFAULT_UNIFI_PORT };
+  }
+};
+
+const applyUnifiPort = (value: string | undefined | null, port: number | undefined) => {
+  const trimmed = value?.trim() ?? "";
+  if (!trimmed) {
+    return "";
+  }
+  const { host, port: parsedPort } = parseUnifiHostAndPort(trimmed);
+  const resolvedPort = port ?? parsedPort;
+  if (!resolvedPort || resolvedPort === DEFAULT_UNIFI_PORT) {
+    return host;
+  }
+  return `${host}:${resolvedPort}`;
+};
 
 const normalizeUnifiBaseUrl = (value: string | undefined | null) => {
   const trimmed = value?.trim() ?? "";
@@ -120,11 +153,11 @@ const normalizeUnifiBaseUrl = (value: string | undefined | null) => {
 };
 
 const displayUnifiHost = (value?: string | null) => {
-  if (!value) {
-    return "";
-  }
-  const withoutProtocol = value.replace(/^https?:\/\//i, "");
-  return withoutProtocol.split("/")[0] ?? "";
+  return parseUnifiHostAndPort(value).host;
+};
+
+const displayUnifiPort = (value?: string | null) => {
+  return parseUnifiHostAndPort(value).port;
 };
 
 const openvpnDocsUrl = "/docs/operations-security.md";
@@ -172,7 +205,7 @@ export default function TenantsPage() {
 
   const form = useForm<CreateTenant>({
     resolver: zodResolver(schema),
-    defaultValues: { status: "ACTIVE" },
+    defaultValues: { status: "ACTIVE", unifi_port: DEFAULT_UNIFI_PORT },
   });
   const controllerForm = useForm<z.infer<typeof controllerSchema>>({
     resolver: zodResolver(controllerSchema),
@@ -186,6 +219,7 @@ export default function TenantsPage() {
       openvpn_ca_ref: "",
       openvpn_ca_bundle: "",
       openvpn_remote_host: "",
+      unifi_port: DEFAULT_UNIFI_PORT,
     },
   });
 
@@ -315,8 +349,10 @@ export default function TenantsPage() {
               Boolean(tenant.openvpn_ca_ref) ||
               Boolean(tenant.openvpn_auth_ref);
             setShowAdvancedOpenvpn(hasAdvancedOpenvpn);
+            const { host, port } = parseUnifiHostAndPort(tenant.unifi_base_url);
             controllerForm.reset({
-              unifi_base_url: displayUnifiHost(tenant.unifi_base_url),
+              unifi_base_url: host,
+              unifi_port: port,
               unifi_api_key_ref: tenant.unifi_api_key_ref ?? "",
               is_roaming: tenant.is_roaming ?? false,
               openvpn_enabled: tenant.openvpn_enabled ?? false,
@@ -444,10 +480,12 @@ export default function TenantsPage() {
 
   const onSubmit = async (values: CreateTenant) => {
     try {
+      const { unifi_port, ...rest } = values;
+      const unifiHost = applyUnifiPort(values.unifi_base_url, unifi_port);
       const payload = {
-        ...values,
+        ...rest,
         status: values.status ?? "ACTIVE",
-        unifi_base_url: normalizeUnifiBaseUrl(values.unifi_base_url),
+        unifi_base_url: normalizeUnifiBaseUrl(unifiHost),
       };
       const data = await apiFetch<{ tenant: Tenant }>("/api/admin/tenants", {
         method: "POST",
@@ -508,8 +546,9 @@ export default function TenantsPage() {
         values.openvpn_remote_port && Number.isNaN(values.openvpn_remote_port)
           ? undefined
           : values.openvpn_remote_port;
+      const unifiHost = applyUnifiPort(values.unifi_base_url, values.unifi_port);
       const payload = {
-        unifi_base_url: normalizeUnifiBaseUrl(values.unifi_base_url),
+        unifi_base_url: normalizeUnifiBaseUrl(unifiHost),
         unifi_api_key_ref: values.unifi_api_key_ref || undefined,
         is_roaming: values.is_roaming,
         openvpn_enabled: values.openvpn_enabled,
@@ -575,8 +614,9 @@ export default function TenantsPage() {
         currentValuesForSave.openvpn_remote_port && Number.isNaN(currentValuesForSave.openvpn_remote_port)
           ? undefined
           : currentValuesForSave.openvpn_remote_port;
+      const unifiHost = applyUnifiPort(currentValuesForSave.unifi_base_url, currentValuesForSave.unifi_port);
       const payload = {
-        unifi_base_url: normalizeUnifiBaseUrl(currentValuesForSave.unifi_base_url),
+        unifi_base_url: normalizeUnifiBaseUrl(unifiHost),
         is_roaming: currentValuesForSave.is_roaming,
         openvpn_enabled: currentValuesForSave.openvpn_enabled,
         openvpn_profile_ref: currentValuesForSave.openvpn_profile_ref || undefined,
@@ -688,6 +728,17 @@ export default function TenantsPage() {
                 <p className="text-xs text-muted-foreground">
                   We append {UNIFI_INTEGRATION_PATH} automatically.
                 </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="unifi_port">UniFi controller port</Label>
+                <Input
+                  id="unifi_port"
+                  type="number"
+                  min={1}
+                  max={65535}
+                  {...form.register("unifi_port", { valueAsNumber: true })}
+                />
+                <p className="text-xs text-muted-foreground">Defaults to {DEFAULT_UNIFI_PORT}.</p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="unifi_api_key_ref">UniFi API key reference</Label>
@@ -847,6 +898,17 @@ export default function TenantsPage() {
                   <p className="text-xs text-muted-foreground">
                     We append {UNIFI_INTEGRATION_PATH} automatically.
                   </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="controller_port">UniFi controller port</Label>
+                  <Input
+                    id="controller_port"
+                    type="number"
+                    min={1}
+                    max={65535}
+                    {...controllerForm.register("unifi_port", { valueAsNumber: true })}
+                  />
+                  <p className="text-xs text-muted-foreground">Defaults to {DEFAULT_UNIFI_PORT}.</p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="controller_api_key_ref">API key reference</Label>
