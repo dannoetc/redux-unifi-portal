@@ -125,6 +125,7 @@ export default function SiteDetailPage() {
   const [tenantSlug, setTenantSlug] = useState<string | null>(null);
   const logoInputRef = useRef<HTMLInputElement | null>(null);
   const originalUnifiPortRef = useRef<number | undefined>(undefined);
+  const [activeTab, setActiveTab] = useState("branding");
 
   const siteForm = useForm<SiteFormValues>({
     resolver: zodResolver(siteSchema),
@@ -296,6 +297,48 @@ export default function SiteDetailPage() {
     ],
     []
   );
+  const fieldLabels: Record<keyof SiteFormValues, string> = {
+    display_name: "Display name",
+    slug: "Slug",
+    enabled: "Site enabled",
+    logo_url: "Logo URL",
+    primary_color: "Primary color",
+    terms_html: "Terms HTML",
+    portal_template_html: "Portal template HTML",
+    portal_template_enabled: "Portal template enabled",
+    support_contact: "Support contact",
+    success_url: "Success URL",
+    enable_tos_only: "TOS-only access",
+    unifi_base_url: "UniFi controller IP",
+    unifi_port: "UniFi controller port",
+    unifi_site_id: "UniFi site ID",
+    unifi_api_key: "UniFi API key",
+    default_time_limit_minutes: "Time limit (minutes)",
+    default_data_limit_mb: "Data limit (MB)",
+    default_rx_kbps: "RX limit (kbps)",
+    default_tx_kbps: "TX limit (kbps)",
+  };
+  const fieldTabs: Record<keyof SiteFormValues, string> = {
+    display_name: "branding",
+    slug: "branding",
+    enabled: "branding",
+    logo_url: "branding",
+    primary_color: "branding",
+    terms_html: "branding",
+    support_contact: "branding",
+    success_url: "branding",
+    enable_tos_only: "branding",
+    portal_template_enabled: "portal",
+    portal_template_html: "portal",
+    default_time_limit_minutes: "policy",
+    default_data_limit_mb: "policy",
+    default_rx_kbps: "policy",
+    default_tx_kbps: "policy",
+    unifi_base_url: "unifi",
+    unifi_port: "unifi",
+    unifi_site_id: "unifi",
+    unifi_api_key: "unifi",
+  };
 
   const handleLogoUpload = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -351,16 +394,24 @@ export default function SiteDetailPage() {
               if (isValid) {
                 await saveSite(siteForm.getValues());
               } else {
-                const firstErrorKey = Object.keys(siteForm.formState.errors)[0];
+                const errorKeys = Object.keys(siteForm.formState.errors) as Array<keyof SiteFormValues>;
+                const firstErrorKey = errorKeys[0];
                 if (firstErrorKey) {
+                  setActiveTab(fieldTabs[firstErrorKey]);
                   const element = document.getElementById(firstErrorKey);
                   if (element) {
                     element.scrollIntoView({ behavior: "smooth", block: "center" });
                     element.focus();
                   }
                 }
-                const errorCount = Object.keys(siteForm.formState.errors).length;
-                toast.error(`${errorCount} field${errorCount !== 1 ? "s" : ""} have errors. Check the form for details.`);
+                const errorCount = errorKeys.length;
+                const listedErrors = errorKeys.map((key) => fieldLabels[key] ?? key).slice(0, 3);
+                const suffix = errorCount > listedErrors.length ? " and more" : "";
+                toast.error(
+                  `${errorCount} field${errorCount !== 1 ? "s" : ""} have errors: ${listedErrors.join(
+                    ", "
+                  )}${suffix}.`
+                );
               }
             }}
             disabled={!formIsDirty}
@@ -377,7 +428,7 @@ export default function SiteDetailPage() {
         </Alert>
       )}
       
-      <Tabs defaultValue="branding" className="space-y-4">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList>
           <TabsTrigger value="branding">Branding</TabsTrigger>
           <TabsTrigger value="portal">Portal Template</TabsTrigger>
@@ -568,6 +619,11 @@ export default function SiteDetailPage() {
                     disabled={!portalTemplateEnabled}
                     {...siteForm.register("portal_template_html")}
                   />
+                  {siteForm.formState.errors.portal_template_html && (
+                    <p className="text-xs text-destructive">
+                      {siteForm.formState.errors.portal_template_html.message as string}
+                    </p>
+                  )}
                 </div>
               </form>
             </CardContent>
@@ -586,6 +642,11 @@ export default function SiteDetailPage() {
                   <div key={field.key} className="space-y-2">
                     <Label htmlFor={field.key}>{field.label}</Label>
                     <Input id={field.key} type="number" {...siteForm.register(field.key as keyof SiteFormValues)} />
+                    {siteForm.formState.errors[field.key as keyof SiteFormValues] && (
+                      <p className="text-xs text-destructive">
+                        {siteForm.formState.errors[field.key as keyof SiteFormValues]?.message as string}
+                      </p>
+                    )}
                   </div>
                 ))}
               </form>
