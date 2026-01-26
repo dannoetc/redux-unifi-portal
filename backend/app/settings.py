@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+psycopg://postgres:postgres@localhost:5432/redux_portal"
     REDIS_URL: str = "redis://localhost:6379/0"
     SECRET_KEY: str = "dev-change-me"
+    SECRETS_ENCRYPTION_KEY: str = ""
     OPENVPN_ENCRYPTION_KEY: str = ""
     OPENVPN_PKI_PATH: str = "/etc/openvpn/pki"
     OPENVPN_AUTH_FILE_PATH: str = "/etc/openvpn/auth/credentials"

@@ -35,6 +35,7 @@ from app.services.oidc import (
     store_oidc_state,
 )
 from app.services.portal_session import set_status
+from app.services.secrets import SecretError, resolve_secret_value
 from app.services.unifi import UnifiClient, UnifiPolicy
 from app.settings import settings
 
@@ -78,6 +79,7 @@ def oidc_start(
     client = build_oauth_client(
         client_id=provider.client_id,
         client_secret_ref=provider.client_secret_ref,
+        client_secret_encrypted=provider.client_secret_encrypted,
         scopes=provider.scopes,
         redirect_uri=redirect_uri,
     )
@@ -135,6 +137,7 @@ def oidc_callback(
             issuer=provider.issuer,
             client_id=provider.client_id,
             client_secret_ref=provider.client_secret_ref,
+            client_secret_encrypted=provider.client_secret_encrypted,
             scopes=provider.scopes,
             redirect_uri=redirect_uri,
             code=code,
@@ -260,14 +263,36 @@ def _get_oidc_setting(db: Session, site: Site) -> tuple[SiteOidcSetting, OidcPro
     return setting, provider
 
 
+def _resolve_unifi_api_key(site: Site, tenant: Tenant) -> str | None:
+    api_key_ref = site.unifi_api_key_ref or tenant.unifi_api_key_ref
+    api_key_encrypted = site.unifi_api_key_encrypted or tenant.unifi_api_key_encrypted
+    if not (api_key_ref or api_key_encrypted):
+        return None
+    try:
+        return resolve_secret_value(
+            encrypted=api_key_encrypted,
+            ref=api_key_ref,
+            missing_code="UNIFI_CONFIG_MISSING",
+            missing_message="UniFi controller settings are required.",
+        )
+    except SecretError as exc:
+        logger.error(
+            "unifi_secret_resolve_failed",
+            tenant_id=str(site.tenant_id),
+            site_id=str(site.id),
+            code=exc.code,
+        )
+        return None
+
+
 def _authorize_unifi(site: Site, tenant: Tenant, client_mac: str) -> tuple[bool, str | None, str | None]:
     base_url = site.unifi_base_url or tenant.unifi_base_url
-    api_key_ref = site.unifi_api_key_ref or tenant.unifi_api_key_ref
-    if not base_url or not api_key_ref:
+    api_key = _resolve_unifi_api_key(site, tenant)
+    if not base_url or not api_key:
         return False, "UNIFI_CONFIG_MISSING", None
     client = UnifiClient(
         base_url,
-        api_key_ref,
+        api_key,
         site.unifi_site_id,
         tenant_id=str(site.tenant_id),
         site_uuid=str(site.id),

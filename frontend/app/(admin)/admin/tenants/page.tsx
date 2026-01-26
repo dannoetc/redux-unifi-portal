@@ -42,6 +42,7 @@ const schema = z.object({
   unifi_base_url: z.string().optional().or(z.literal("")),
   unifi_port: optionalPort,
   unifi_api_key_ref: z.string().optional().or(z.literal("")),
+  unifi_api_key: z.string().optional().or(z.literal("")),
   is_roaming: z.boolean().optional(),
   openvpn_enabled: z.boolean().optional(),
   openvpn_profile_ref: z.string().optional().or(z.literal("")),
@@ -58,6 +59,7 @@ const controllerSchema = z.object({
   unifi_base_url: z.string().optional().or(z.literal("")),
   unifi_port: optionalPort,
   unifi_api_key_ref: z.string().optional().or(z.literal("")),
+  unifi_api_key: z.string().optional().or(z.literal("")),
   is_roaming: z.boolean().optional(),
   openvpn_enabled: z.boolean().optional(),
   openvpn_profile_ref: z.string().optional().or(z.literal("")),
@@ -77,6 +79,7 @@ type Tenant = {
   status?: string;
   unifi_base_url?: string | null;
   unifi_api_key_ref?: string | null;
+  unifi_api_key_stored?: boolean | null;
   is_roaming?: boolean;
   openvpn_enabled?: boolean;
   openvpn_profile_ref?: string | null;
@@ -205,7 +208,7 @@ export default function TenantsPage() {
 
   const form = useForm<CreateTenant>({
     resolver: zodResolver(schema),
-    defaultValues: { status: "ACTIVE", unifi_port: DEFAULT_UNIFI_PORT },
+    defaultValues: { status: "ACTIVE", unifi_port: DEFAULT_UNIFI_PORT, unifi_api_key: "" },
   });
   const controllerForm = useForm<z.infer<typeof controllerSchema>>({
     resolver: zodResolver(controllerSchema),
@@ -220,6 +223,7 @@ export default function TenantsPage() {
       openvpn_ca_bundle: "",
       openvpn_remote_host: "",
       unifi_port: DEFAULT_UNIFI_PORT,
+      unifi_api_key: "",
     },
   });
 
@@ -354,6 +358,7 @@ export default function TenantsPage() {
               unifi_base_url: host,
               unifi_port: port,
               unifi_api_key_ref: tenant.unifi_api_key_ref ?? "",
+              unifi_api_key: "",
               is_roaming: tenant.is_roaming ?? false,
               openvpn_enabled: tenant.openvpn_enabled ?? false,
               openvpn_profile_ref: tenant.openvpn_profile_ref ?? "",
@@ -486,6 +491,8 @@ export default function TenantsPage() {
         ...rest,
         status: values.status ?? "ACTIVE",
         unifi_base_url: normalizeUnifiBaseUrl(unifiHost),
+        unifi_api_key_ref: values.unifi_api_key_ref || undefined,
+        unifi_api_key: values.unifi_api_key?.trim() ? values.unifi_api_key : undefined,
       };
       const data = await apiFetch<{ tenant: Tenant }>("/api/admin/tenants", {
         method: "POST",
@@ -550,6 +557,7 @@ export default function TenantsPage() {
       const payload = {
         unifi_base_url: normalizeUnifiBaseUrl(unifiHost),
         unifi_api_key_ref: values.unifi_api_key_ref || undefined,
+        unifi_api_key: values.unifi_api_key?.trim() ? values.unifi_api_key : undefined,
         is_roaming: values.is_roaming,
         openvpn_enabled: values.openvpn_enabled,
         openvpn_profile_ref: values.openvpn_profile_ref || undefined,
@@ -634,6 +642,9 @@ export default function TenantsPage() {
         openvpn_remote_host: currentValuesForSave.openvpn_remote_host,
         openvpn_remote_port: openvpnPort,
         unifi_api_key_ref: currentValuesForSave.unifi_api_key_ref || undefined,
+        unifi_api_key: currentValuesForSave.unifi_api_key?.trim()
+          ? currentValuesForSave.unifi_api_key
+          : undefined,
       };
 
       await apiFetch<{ tenant: Tenant }>(`/api/admin/tenants/${tenantToConfigure.id}`, {
@@ -741,9 +752,14 @@ export default function TenantsPage() {
                 <p className="text-xs text-muted-foreground">Defaults to {DEFAULT_UNIFI_PORT}.</p>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="unifi_api_key_ref">UniFi API key reference</Label>
+                <Label htmlFor="unifi_api_key">UniFi API key</Label>
+                <Input id="unifi_api_key" type="password" {...form.register("unifi_api_key")} />
+                <p className="text-xs text-muted-foreground">Stored encrypted in the database.</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="unifi_api_key_ref">UniFi API key reference (optional)</Label>
                 <Input id="unifi_api_key_ref" type="password" {...form.register("unifi_api_key_ref")} />
-                <p className="text-xs text-muted-foreground">Use a secret reference, not a raw key.</p>
+                <p className="text-xs text-muted-foreground">Legacy env var name (overridden by stored key).</p>
               </div>
               <DialogFooter>
                 <Button type="submit" variant="primary">
@@ -911,13 +927,26 @@ export default function TenantsPage() {
                   <p className="text-xs text-muted-foreground">Defaults to {DEFAULT_UNIFI_PORT}.</p>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="controller_api_key_ref">API key reference</Label>
+                  <Label htmlFor="controller_api_key">UniFi API key</Label>
+                  <Input
+                    id="controller_api_key"
+                    type="password"
+                    {...controllerForm.register("unifi_api_key")}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {tenantToConfigure?.unifi_api_key_stored
+                      ? "Encrypted key is stored. Leave blank to keep the current value."
+                      : "Stored encrypted in the database."}
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="controller_api_key_ref">API key reference (optional)</Label>
                   <Input
                     id="controller_api_key_ref"
                     type="password"
                     {...controllerForm.register("unifi_api_key_ref")}
                   />
-                  <p className="text-xs text-muted-foreground">Use a secret reference, not a raw key.</p>
+                  <p className="text-xs text-muted-foreground">Legacy env var name (overridden by stored key).</p>
                 </div>
               </TabsContent>
               <TabsContent value="openvpn" className="space-y-4">

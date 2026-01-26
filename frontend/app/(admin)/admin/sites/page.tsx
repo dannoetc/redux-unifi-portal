@@ -64,6 +64,7 @@ const siteSchema = z.object({
   unifi_port: optionalPort,
   unifi_site_id: z.string().min(1),
   unifi_api_key_ref: z.string().optional().or(z.literal("")),
+  unifi_api_key: z.string().optional().or(z.literal("")),
   default_time_limit_minutes: z.coerce.number().min(1),
   default_data_limit_mb: optionalNumber,
   default_rx_kbps: optionalNumber,
@@ -131,7 +132,12 @@ export default function SitesPage() {
 
   const form = useForm<CreateSite>({
     resolver: zodResolver(siteSchema),
-    defaultValues: { enabled: true, default_time_limit_minutes: 60, unifi_port: DEFAULT_UNIFI_PORT },
+    defaultValues: {
+      enabled: true,
+      default_time_limit_minutes: 60,
+      unifi_port: DEFAULT_UNIFI_PORT,
+      unifi_api_key: "",
+    },
   });
 
   const activeTenant = useMemo(
@@ -295,6 +301,8 @@ export default function SitesPage() {
       const payload = {
         ...rest,
         unifi_base_url: normalizeUnifiBaseUrl(unifiHost),
+        unifi_api_key_ref: values.unifi_api_key_ref || undefined,
+        unifi_api_key: values.unifi_api_key?.trim() ? values.unifi_api_key : undefined,
       };
       const data = await apiFetch<{ site: Site }>(`/api/admin/tenants/${tenantId}/sites`, {
         method: "POST",
@@ -428,9 +436,24 @@ export default function SitesPage() {
                   <Input id="unifi_site_id" {...form.register("unifi_site_id")} />
                 </div>
                 <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="unifi_api_key">UniFi API key (optional override)</Label>
+                  <Input
+                    id="unifi_api_key"
+                    type="password"
+                    placeholder="Use tenant controller"
+                    {...form.register("unifi_api_key")}
+                  />
+                  <p className="text-xs text-muted-foreground">Stored encrypted in the database.</p>
+                </div>
+                <div className="space-y-2 md:col-span-2">
                   <Label htmlFor="unifi_api_key_ref">UniFi API key reference (optional override)</Label>
-                  <Input id="unifi_api_key_ref" type="password" placeholder="Use tenant controller" {...form.register("unifi_api_key_ref")} />
-                  <p className="text-xs text-muted-foreground">Use a secret reference, not a raw key.</p>
+                  <Input
+                    id="unifi_api_key_ref"
+                    type="password"
+                    placeholder="Use tenant controller"
+                    {...form.register("unifi_api_key_ref")}
+                  />
+                  <p className="text-xs text-muted-foreground">Legacy env var name (overridden by stored key).</p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="default_time_limit_minutes">Time limit (minutes)</Label>
