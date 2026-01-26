@@ -522,10 +522,10 @@ export default function GuestLanding() {
     }
     const segments = resolvedTemplate.split(PORTAL_TEMPLATE_TOKEN);
     if (segments.length === 1) {
+      // If {{portal}} token is omitted, render only the template without the built-in card.
       return (
         <div className="space-y-6">
           <div dangerouslySetInnerHTML={{ __html: segments[0] }} />
-          {portalCard}
         </div>
       );
     }
