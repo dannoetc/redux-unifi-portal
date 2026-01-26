@@ -1,7 +1,7 @@
 "use client";
 
 import type { CSSProperties } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 
@@ -19,6 +19,17 @@ const applyTemplateTokens = (
   tokens: Record<string, string | null | undefined>
 ) => {
   let output = template;
+
+  // Minimal support for `{{#if key}}...{{else}}...{{/if}}` blocks so templates can toggle logo fallbacks.
+  output = output.replace(
+    /{{#if (\w+)}}([\s\S]*?)(?:{{else}}([\s\S]*?))?{{\/if}}/g,
+    (_match, key: string, truthy: string, falsy?: string) => {
+      const value = tokens[key];
+      const hasValue = value !== null && value !== undefined && value !== "";
+      return hasValue ? truthy : falsy ?? "";
+    }
+  );
+
   Object.entries(tokens).forEach(([key, value]) => {
     output = output.replaceAll(`{{${key}}}`, value ?? "");
   });
@@ -165,7 +176,7 @@ export default function GuestLanding() {
     };
   }, [params, portalParam, searchParams]);
 
-  const executeWithClientRetry = async <T,>(action: () => Promise<T>) => {
+  const executeWithClientRetry = useCallback(async <T,>(action: () => Promise<T>) => {
     const maxAttempts = 3;
     const baseDelayMs = 900;
     setAuthPending(true);
@@ -187,7 +198,7 @@ export default function GuestLanding() {
     } finally {
       setAuthPending(false);
     }
-  };
+  }, []);
 
   const sendVoucher = async () => {
     if (!portalSessionId || !params?.tenant || !params?.site) {
@@ -250,7 +261,7 @@ export default function GuestLanding() {
     }
   };
 
-  const acceptTos = async () => {
+  const acceptTos = useCallback(async () => {
     if (!portalSessionId || !params?.tenant || !params?.site) {
       toast.error("Missing portal session.");
       return;
@@ -268,7 +279,7 @@ export default function GuestLanding() {
     } catch (error: any) {
       toast.error(error?.message ?? "Unable to connect.");
     }
-  };
+  }, [executeWithClientRetry, params?.site, params?.tenant, portalSessionId]);
 
   const startSso = () => {
     if (!portalSessionId || !params?.tenant || !params?.site) {
@@ -529,6 +540,34 @@ export default function GuestLanding() {
       </div>
     );
   }, [resolvedTemplate, portalCard]);
+
+  useEffect(() => {
+    if (!resolvedTemplate) {
+      return;
+    }
+
+    const btn = document.getElementById("sponsored-connect") as HTMLButtonElement | null;
+    if (!btn) {
+      return;
+    }
+
+    const handleClick = () => {
+      void acceptTos();
+    };
+
+    btn.disabled = Boolean(previewParam) || !portalSessionId || authPending;
+    btn.addEventListener("click", handleClick);
+
+    // Expose for templates that execute their own scripts.
+    (window as any).acceptTosFromTemplate = acceptTos;
+
+    return () => {
+      btn.removeEventListener("click", handleClick);
+      if ((window as any).acceptTosFromTemplate === acceptTos) {
+        delete (window as any).acceptTosFromTemplate;
+      }
+    };
+  }, [acceptTos, authPending, portalSessionId, previewParam, resolvedTemplate]);
 
   return (
     <main className="surface-grid min-h-screen px-4 py-8">
