@@ -30,6 +30,7 @@ from app.schemas.guest import (
 from app.services.otp import start_challenge, verify_code
 from app.services.portal_session import create_or_reuse_session, get_session, normalize_mac, set_status
 from app.services.ratelimit import enforce_rate_limit, limit_key_ip, limit_key_mac
+from app.services.secrets import SecretError, resolve_secret_value
 from app.services.unifi import UnifiClient, UnifiPolicy
 from app.services.vouchers import VoucherError, redeem_voucher
 from app.tasks.otp import send_otp_email
@@ -670,6 +671,28 @@ def _get_site(db: Session, tenant_slug: str, site_slug: str) -> Site:
     return site
 
 
+def _resolve_unifi_api_key(site: Site, tenant: Tenant) -> str | None:
+    api_key_ref = site.unifi_api_key_ref or tenant.unifi_api_key_ref
+    api_key_encrypted = site.unifi_api_key_encrypted or tenant.unifi_api_key_encrypted
+    if not (api_key_ref or api_key_encrypted):
+        return None
+    try:
+        return resolve_secret_value(
+            encrypted=api_key_encrypted,
+            ref=api_key_ref,
+            missing_code="UNIFI_CONFIG_MISSING",
+            missing_message="UniFi controller settings are required.",
+        )
+    except SecretError as exc:
+        logger.warning(
+            "unifi_secret_resolve_failed",
+            tenant_id=str(site.tenant_id),
+            site_id=str(site.id),
+            code=exc.code,
+        )
+        return None
+
+
 def _resolve_site_by_unifi(db: Session, client_mac: str, ap_mac: str | None) -> tuple[Site, Tenant]:
     tenant_results = db.execute(select(Tenant)).scalars().all()
     if ap_mac:
@@ -679,13 +702,13 @@ def _resolve_site_by_unifi(db: Session, client_mac: str, ap_mac: str | None) -> 
                 if not site.enabled:
                     continue
                 base_url = site.unifi_base_url or tenant.unifi_base_url
-                api_key_ref = site.unifi_api_key_ref or tenant.unifi_api_key_ref
-                if not base_url or not api_key_ref:
+                api_key = _resolve_unifi_api_key(site, tenant)
+                if not base_url or not api_key:
                     continue
                 try:
                     client = UnifiClient(
                         base_url,
-                        api_key_ref,
+                        api_key,
                         site.unifi_site_id,
                         tenant_id=str(site.tenant_id),
                         site_uuid=str(site.id),
@@ -732,13 +755,13 @@ def _resolve_site_by_unifi(db: Session, client_mac: str, ap_mac: str | None) -> 
             if not site.enabled:
                 continue
             base_url = site.unifi_base_url or tenant.unifi_base_url
-            api_key_ref = site.unifi_api_key_ref or tenant.unifi_api_key_ref
-            if not base_url or not api_key_ref:
+            api_key = _resolve_unifi_api_key(site, tenant)
+            if not base_url or not api_key:
                 continue
             try:
                 client = UnifiClient(
                     base_url,
-                    api_key_ref,
+                    api_key,
                     site.unifi_site_id,
                     tenant_id=str(site.tenant_id),
                     site_uuid=str(site.id),
@@ -814,12 +837,12 @@ def _authorize_unifi(site: Site, tenant: Tenant | None, client_mac: str) -> tupl
     if not tenant:
         return False, "TENANT_NOT_FOUND", None
     base_url = site.unifi_base_url or tenant.unifi_base_url
-    api_key_ref = site.unifi_api_key_ref or tenant.unifi_api_key_ref
-    if not base_url or not api_key_ref:
+    api_key = _resolve_unifi_api_key(site, tenant)
+    if not base_url or not api_key:
         return False, "UNIFI_CONFIG_MISSING", None
     client = UnifiClient(
         base_url,
-        api_key_ref,
+        api_key,
         site.unifi_site_id,
         tenant_id=str(site.tenant_id),
         site_uuid=str(site.id),

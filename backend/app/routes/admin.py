@@ -72,6 +72,7 @@ from app.services.openvpn import (
     resolve_openvpn_profile_template,
     revoke_openvpn_client_profile,
 )
+from app.services.secrets import SecretError, encrypt_secret, resolve_secret_value
 from app.services.unifi import UnifiApiError, UnifiClient
 from app.settings import settings
 
@@ -409,6 +410,7 @@ def create_tenant(
     openvpn_profile_template = _empty_to_none(payload.openvpn_profile_template)
     openvpn_ca_bundle = _empty_to_none(payload.openvpn_ca_bundle)
     openvpn_auth_blob = _empty_to_none(payload.openvpn_auth_blob)
+    unifi_api_key = _normalize_secret_value(payload.unifi_api_key)
 
     tenant = Tenant(
         id=uuid.uuid4(),
@@ -425,6 +427,16 @@ def create_tenant(
         openvpn_remote_host=_empty_to_none(payload.openvpn_remote_host),
         openvpn_remote_port=_validate_openvpn_port(payload.openvpn_remote_port),
     )
+    if unifi_api_key:
+        try:
+            tenant.unifi_api_key_encrypted = encrypt_secret(unifi_api_key)
+        except SecretError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail={"ok": False, "error": {"code": exc.code, "message": str(exc)}},
+            ) from exc
+        if payload.unifi_api_key_ref in (None, ""):
+            tenant.unifi_api_key_ref = None
     _validate_openvpn_requirements(
         is_roaming=tenant.is_roaming,
         openvpn_enabled=tenant.openvpn_enabled,
@@ -507,6 +519,20 @@ def update_tenant(
         tenant.unifi_base_url = _empty_to_none(payload.unifi_base_url)
     if payload.unifi_api_key_ref is not None:
         tenant.unifi_api_key_ref = _empty_to_none(payload.unifi_api_key_ref)
+    unifi_api_key = _normalize_secret_value(payload.unifi_api_key)
+    if unifi_api_key is not None:
+        if unifi_api_key == "":
+            tenant.unifi_api_key_encrypted = None
+        else:
+            try:
+                tenant.unifi_api_key_encrypted = encrypt_secret(unifi_api_key)
+            except SecretError as exc:
+                raise HTTPException(
+                    status_code=400,
+                    detail={"ok": False, "error": {"code": exc.code, "message": str(exc)}},
+                ) from exc
+            if payload.unifi_api_key_ref in (None, ""):
+                tenant.unifi_api_key_ref = None
     if payload.is_roaming is not None:
         tenant.is_roaming = payload.is_roaming
     if payload.openvpn_enabled is not None:
@@ -830,7 +856,7 @@ def discover_unifi_sites(
             status_code=404,
             detail={"ok": False, "error": {"code": "NOT_FOUND", "message": "Tenant not found."}},
         )
-    if not tenant.unifi_base_url or not tenant.unifi_api_key_ref:
+    if not tenant.unifi_base_url or not (tenant.unifi_api_key_ref or tenant.unifi_api_key_encrypted):
         raise HTTPException(
             status_code=400,
             detail={
@@ -838,9 +864,21 @@ def discover_unifi_sites(
                 "error": {"code": "UNIFI_CONFIG_REQUIRED", "message": "UniFi controller settings are required."},
             },
         )
+    try:
+        api_key = resolve_secret_value(
+            encrypted=tenant.unifi_api_key_encrypted,
+            ref=tenant.unifi_api_key_ref,
+            missing_code="UNIFI_CONFIG_REQUIRED",
+            missing_message="UniFi controller settings are required.",
+        )
+    except SecretError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"ok": False, "error": {"code": exc.code, "message": str(exc)}},
+        ) from exc
     client = UnifiClient(
         tenant.unifi_base_url,
-        tenant.unifi_api_key_ref,
+        api_key,
         "tenant",
         tenant_id=str(tenant.id),
         verify_ssl=settings.UNIFI_VERIFY_SSL,
@@ -891,7 +929,7 @@ def provision_sites(
             status_code=404,
             detail={"ok": False, "error": {"code": "NOT_FOUND", "message": "Tenant not found."}},
         )
-    if not tenant.unifi_base_url or not tenant.unifi_api_key_ref:
+    if not tenant.unifi_base_url or not (tenant.unifi_api_key_ref or tenant.unifi_api_key_encrypted):
         raise HTTPException(
             status_code=400,
             detail={
@@ -899,10 +937,21 @@ def provision_sites(
                 "error": {"code": "UNIFI_CONFIG_REQUIRED", "message": "UniFi controller settings are required."},
             },
         )
-
+    try:
+        api_key = resolve_secret_value(
+            encrypted=tenant.unifi_api_key_encrypted,
+            ref=tenant.unifi_api_key_ref,
+            missing_code="UNIFI_CONFIG_REQUIRED",
+            missing_message="UniFi controller settings are required.",
+        )
+    except SecretError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"ok": False, "error": {"code": exc.code, "message": str(exc)}},
+        ) from exc
     client = UnifiClient(
         tenant.unifi_base_url,
-        tenant.unifi_api_key_ref,
+        api_key,
         "tenant",
         tenant_id=str(tenant.id),
         verify_ssl=settings.UNIFI_VERIFY_SSL,
@@ -1004,7 +1053,10 @@ def create_site(
 
     base_url = _empty_to_none(payload.unifi_base_url) or tenant.unifi_base_url
     api_key_ref = _empty_to_none(payload.unifi_api_key_ref) or tenant.unifi_api_key_ref
-    if not base_url or not api_key_ref:
+    api_key_encrypted = tenant.unifi_api_key_encrypted
+    unifi_api_key = _normalize_secret_value(payload.unifi_api_key)
+    has_payload_key = unifi_api_key not in (None, "")
+    if not base_url or not (api_key_ref or api_key_encrypted or has_payload_key):
         raise HTTPException(
             status_code=400,
             detail={
@@ -1034,6 +1086,19 @@ def create_site(
         default_rx_kbps=payload.default_rx_kbps,
         default_tx_kbps=payload.default_tx_kbps,
     )
+    if unifi_api_key is not None:
+        if unifi_api_key == "":
+            site.unifi_api_key_encrypted = None
+        else:
+            try:
+                site.unifi_api_key_encrypted = encrypt_secret(unifi_api_key)
+            except SecretError as exc:
+                raise HTTPException(
+                    status_code=400,
+                    detail={"ok": False, "error": {"code": exc.code, "message": str(exc)}},
+                ) from exc
+            if payload.unifi_api_key_ref in (None, ""):
+                site.unifi_api_key_ref = None
     db.add(site)
     db.commit()
     db.refresh(site)
@@ -1129,6 +1194,20 @@ def update_site(
         site.unifi_site_id = _empty_to_none(payload.unifi_site_id) or site.unifi_site_id
     if payload.unifi_api_key_ref is not None:
         site.unifi_api_key_ref = _empty_to_none(payload.unifi_api_key_ref)
+    unifi_api_key = _normalize_secret_value(payload.unifi_api_key)
+    if unifi_api_key is not None:
+        if unifi_api_key == "":
+            site.unifi_api_key_encrypted = None
+        else:
+            try:
+                site.unifi_api_key_encrypted = encrypt_secret(unifi_api_key)
+            except SecretError as exc:
+                raise HTTPException(
+                    status_code=400,
+                    detail={"ok": False, "error": {"code": exc.code, "message": str(exc)}},
+                ) from exc
+            if payload.unifi_api_key_ref in (None, ""):
+                site.unifi_api_key_ref = None
     if payload.default_time_limit_minutes is not None:
         site.default_time_limit_minutes = payload.default_time_limit_minutes
     if payload.default_data_limit_mb is not None:
@@ -1138,7 +1217,12 @@ def update_site(
     if payload.default_tx_kbps is not None:
         site.default_tx_kbps = payload.default_tx_kbps
 
-    if not (site.unifi_base_url or tenant.unifi_base_url) or not (site.unifi_api_key_ref or tenant.unifi_api_key_ref):
+    if not (site.unifi_base_url or tenant.unifi_base_url) or not (
+        site.unifi_api_key_ref
+        or tenant.unifi_api_key_ref
+        or site.unifi_api_key_encrypted
+        or tenant.unifi_api_key_encrypted
+    ):
         raise HTTPException(
             status_code=400,
             detail={
@@ -1191,12 +1275,12 @@ def test_unifi_connection(
             detail={"ok": False, "error": {"code": "NOT_FOUND", "message": "Tenant not found."}},
         )
 
-    base_url, api_key_ref = _resolve_unifi_credentials(site, tenant)
+    base_url, api_key = _resolve_unifi_credentials(site, tenant)
 
     start = time.monotonic()
     client = UnifiClient(
         base_url,
-        api_key_ref,
+        api_key,
         site.unifi_site_id,
         tenant_id=str(site.tenant_id),
         site_uuid=str(site.id),
@@ -1252,6 +1336,7 @@ def list_oidc_providers(
                     issuer=provider.issuer,
                     client_id=provider.client_id,
                     client_secret_ref=provider.client_secret_ref,
+                    client_secret_stored=bool(provider.client_secret_encrypted),
                     scopes=provider.scopes,
                 ).model_dump(mode="json")
                 for provider in providers
@@ -1267,13 +1352,32 @@ def create_oidc_provider(
     db: Session = Depends(get_db),
     _admin: AdminUser = Depends(require_tenant_role([AdminRole.TENANT_ADMIN])),
 ) -> dict:
+    client_secret = _normalize_secret_value(payload.client_secret)
+    if client_secret in (None, "") and not _empty_to_none(payload.client_secret_ref):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "ok": False,
+                "error": {"code": "OIDC_SECRET_REQUIRED", "message": "OIDC client secret is required."},
+            },
+        )
     provider = OidcProvider(
         tenant_id=tenant_id,
         issuer=payload.issuer,
         client_id=payload.client_id,
-        client_secret_ref=payload.client_secret_ref,
+        client_secret_ref=_empty_to_none(payload.client_secret_ref),
         scopes=payload.scopes,
     )
+    if client_secret:
+        try:
+            provider.client_secret_encrypted = encrypt_secret(client_secret)
+        except SecretError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail={"ok": False, "error": {"code": exc.code, "message": str(exc)}},
+            ) from exc
+        if payload.client_secret_ref in (None, ""):
+            provider.client_secret_ref = None
     db.add(provider)
     db.commit()
     db.refresh(provider)
@@ -1285,6 +1389,7 @@ def create_oidc_provider(
                 issuer=provider.issuer,
                 client_id=provider.client_id,
                 client_secret_ref=provider.client_secret_ref,
+                client_secret_stored=bool(provider.client_secret_encrypted),
                 scopes=provider.scopes,
             ).model_dump(mode="json")
         },
@@ -1314,6 +1419,7 @@ def get_oidc_provider(
                 issuer=provider.issuer,
                 client_id=provider.client_id,
                 client_secret_ref=provider.client_secret_ref,
+                client_secret_stored=bool(provider.client_secret_encrypted),
                 scopes=provider.scopes,
             ).model_dump(mode="json")
         },
@@ -1341,9 +1447,31 @@ def update_oidc_provider(
     if payload.client_id is not None:
         provider.client_id = payload.client_id
     if payload.client_secret_ref is not None:
-        provider.client_secret_ref = payload.client_secret_ref
+        provider.client_secret_ref = _empty_to_none(payload.client_secret_ref)
+    client_secret = _normalize_secret_value(payload.client_secret)
+    if client_secret is not None:
+        if client_secret == "":
+            provider.client_secret_encrypted = None
+        else:
+            try:
+                provider.client_secret_encrypted = encrypt_secret(client_secret)
+            except SecretError as exc:
+                raise HTTPException(
+                    status_code=400,
+                    detail={"ok": False, "error": {"code": exc.code, "message": str(exc)}},
+                ) from exc
+            if payload.client_secret_ref in (None, ""):
+                provider.client_secret_ref = None
     if payload.scopes is not None:
         provider.scopes = payload.scopes
+    if not (provider.client_secret_ref or provider.client_secret_encrypted):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "ok": False,
+                "error": {"code": "OIDC_SECRET_REQUIRED", "message": "OIDC client secret is required."},
+            },
+        )
     db.add(provider)
     db.commit()
     db.refresh(provider)
@@ -1355,6 +1483,7 @@ def update_oidc_provider(
                 issuer=provider.issuer,
                 client_id=provider.client_id,
                 client_secret_ref=provider.client_secret_ref,
+                client_secret_stored=bool(provider.client_secret_encrypted),
                 scopes=provider.scopes,
             ).model_dump(mode="json")
         },
@@ -1635,6 +1764,7 @@ def _build_tenant_response(tenant: Tenant) -> dict:
         status=tenant.status.value,
         unifi_base_url=tenant.unifi_base_url,
         unifi_api_key_ref=tenant.unifi_api_key_ref,
+        unifi_api_key_stored=bool(tenant.unifi_api_key_encrypted),
         is_roaming=tenant.is_roaming,
         openvpn_enabled=tenant.openvpn_enabled,
         openvpn_profile_ref=tenant.openvpn_profile_ref,
@@ -1795,7 +1925,8 @@ def _slugify(value: str | None) -> str | None:
 def _resolve_unifi_credentials(site: Site, tenant: Tenant) -> tuple[str, str]:
     base_url = _empty_to_none(site.unifi_base_url) or tenant.unifi_base_url
     api_key_ref = _empty_to_none(site.unifi_api_key_ref) or tenant.unifi_api_key_ref
-    if not base_url or not api_key_ref:
+    api_key_encrypted = site.unifi_api_key_encrypted or tenant.unifi_api_key_encrypted
+    if not base_url or not (api_key_ref or api_key_encrypted):
         raise HTTPException(
             status_code=400,
             detail={
@@ -1803,7 +1934,19 @@ def _resolve_unifi_credentials(site: Site, tenant: Tenant) -> tuple[str, str]:
                 "error": {"code": "UNIFI_CONFIG_REQUIRED", "message": "UniFi controller settings are required."},
             },
         )
-    return base_url, api_key_ref
+    try:
+        api_key = resolve_secret_value(
+            encrypted=api_key_encrypted,
+            ref=api_key_ref,
+            missing_code="UNIFI_CONFIG_REQUIRED",
+            missing_message="UniFi controller settings are required.",
+        )
+    except SecretError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"ok": False, "error": {"code": exc.code, "message": str(exc)}},
+        ) from exc
+    return base_url, api_key
 
 
 def _site_response(site: Site) -> SiteResponse:
@@ -1823,6 +1966,7 @@ def _site_response(site: Site) -> SiteResponse:
         unifi_base_url=site.unifi_base_url,
         unifi_site_id=site.unifi_site_id,
         unifi_api_key_ref=site.unifi_api_key_ref,
+        unifi_api_key_stored=bool(site.unifi_api_key_encrypted),
         default_time_limit_minutes=site.default_time_limit_minutes,
         default_data_limit_mb=site.default_data_limit_mb,
         default_rx_kbps=site.default_rx_kbps,

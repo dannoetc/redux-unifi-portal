@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from sqlalchemy import Boolean, ForeignKey, Index, String, UniqueConstraint, Uuid
+from sqlalchemy import Boolean, ForeignKey, Index, LargeBinary, String, UniqueConstraint, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -18,7 +18,8 @@ class OidcProvider(Base):
     )
     issuer: Mapped[str] = mapped_column(String(255), nullable=False)
     client_id: Mapped[str] = mapped_column(String(255), nullable=False)
-    client_secret_ref: Mapped[str] = mapped_column(String(255), nullable=False)
+    client_secret_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    client_secret_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     scopes: Mapped[str] = mapped_column(String(255), nullable=False)
 
     tenant = relationship("Tenant", back_populates="oidc_providers")
