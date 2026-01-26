@@ -351,7 +351,16 @@ export default function SiteDetailPage() {
               if (isValid) {
                 await saveSite(siteForm.getValues());
               } else {
-                toast.error("Please fix the highlighted fields.");
+                const firstErrorKey = Object.keys(siteForm.formState.errors)[0];
+                if (firstErrorKey) {
+                  const element = document.getElementById(firstErrorKey);
+                  if (element) {
+                    element.scrollIntoView({ behavior: "smooth", block: "center" });
+                    element.focus();
+                  }
+                }
+                const errorCount = Object.keys(siteForm.formState.errors).length;
+                toast.error(`${errorCount} field${errorCount !== 1 ? "s" : ""} have errors. Check the form for details.`);
               }
             }}
             disabled={!formIsDirty}
