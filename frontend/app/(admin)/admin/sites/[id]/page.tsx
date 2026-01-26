@@ -134,8 +134,10 @@ export default function SiteDetailPage() {
     oidc_provider_id: "",
     allowed_email_domains: "",
   });
+  const [logoSource, setLogoSource] = useState<"upload" | "url" | "none">("none");
   const logoValue = siteForm.watch("logo_url");
   const portalTemplateEnabled = siteForm.watch("portal_template_enabled");
+  const formIsDirty = siteForm.formState.isDirty;
 
   useEffect(() => {
     if (!tenantId) {
@@ -163,6 +165,8 @@ export default function SiteDetailPage() {
         };
         setSite(normalizedSite);
         siteForm.reset(normalizedSite);
+        // Initialize logoSource based on whether logo_url is set
+        setLogoSource(normalizedSite.logo_url ? "url" : "none");
         const providersData = await apiFetch<OidcProviderList>(
           `/api/admin/tenants/${tenantId}/oidc-providers`
         );
@@ -309,6 +313,7 @@ export default function SiteDetailPage() {
 
   const clearLogo = () => {
     siteForm.setValue("logo_url", "", { shouldDirty: true });
+    setLogoSource("none");
     if (logoInputRef.current) {
       logoInputRef.current.value = "";
     }
@@ -316,22 +321,34 @@ export default function SiteDetailPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Site settings</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {site?.display_name ?? "Branding, policy defaults, and UniFi connection."}
-        </p>
-        {tenantSlug && site?.slug ? (
-          <Button asChild variant="secondary" size="sm" className="mt-3">
-            <a
-              href={`/guest/s/${tenantSlug}/${site.slug}?preview=1`}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Preview portal
-            </a>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold">Site settings</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {site?.display_name ?? "Branding, policy defaults, and UniFi connection."}
+          </p>
+        </div>
+        <div className="flex gap-2">
+          {tenantSlug && site?.slug ? (
+            <Button asChild variant="secondary" size="sm">
+              <a
+                href={`/guest/s/${tenantSlug}/${site.slug}?preview=1`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Preview portal
+              </a>
+            </Button>
+          ) : null}
+          <Button
+            onClick={() => siteForm.handleSubmit(saveSite)()}
+            disabled={!formIsDirty}
+            variant="default"
+            size="sm"
+          >
+            Save changes
           </Button>
-        ) : null}
+        </div>
       </div>
       {error && (
         <Alert className="border-destructive/40">
@@ -344,7 +361,7 @@ export default function SiteDetailPage() {
           <CardDescription>Guest-facing identity and support info.</CardDescription>
         </CardHeader>
         <CardContent>
-          <form className="grid gap-4 md:grid-cols-2" onSubmit={siteForm.handleSubmit(saveSite)}>
+          <form className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="display_name">Display name</Label>
               <Input id="display_name" autoFocus {...siteForm.register("display_name")} />
@@ -354,36 +371,82 @@ export default function SiteDetailPage() {
               <Input id="slug" {...siteForm.register("slug")} />
             </div>
             <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="logo_upload">Logo upload</Label>
-              <Input
-                id="logo_upload"
-                type="file"
-                accept="image/*"
-                ref={logoInputRef}
-                onChange={handleLogoUpload}
-              />
-              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                <span>Uploads are stored as data URLs. Use a small PNG/SVG.</span>
+              <Label>Logo source</Label>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="logo_source"
+                    value="upload"
+                    checked={logoSource === "upload"}
+                    onChange={() => {
+                      setLogoSource("upload");
+                      siteForm.setValue("logo_url", "", { shouldDirty: true });
+                    }}
+                  />
+                  Upload
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="logo_source"
+                    value="url"
+                    checked={logoSource === "url"}
+                    onChange={() => setLogoSource("url")}
+                  />
+                  URL
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="logo_source"
+                    value="none"
+                    checked={logoSource === "none"}
+                    onChange={() => clearLogo()}
+                  />
+                  None
+                </label>
+              </div>
+            </div>
+            {logoSource === "upload" && (
+              <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="logo_upload">Upload image</Label>
+                <Input
+                  id="logo_upload"
+                  type="file"
+                  accept="image/*"
+                  ref={logoInputRef}
+                  onChange={handleLogoUpload}
+                />
+                <div className="text-xs text-muted-foreground">
+                  Uploads are stored as data URLs. Use a small PNG/SVG (max 512KB).
+                </div>
                 {logoValue ? (
-                  <Button type="button" variant="ghost" size="sm" onClick={clearLogo}>
-                    Clear logo
-                  </Button>
+                  <div className="flex items-center gap-3">
+                    <img src={logoValue} alt="Logo preview" className="h-12 w-12 rounded-md object-contain" />
+                    <span className="text-xs text-muted-foreground">Current logo preview</span>
+                  </div>
                 ) : null}
               </div>
-              {logoValue ? (
-                <div className="flex items-center gap-3">
-                  <img src={logoValue} alt="Logo preview" className="h-12 w-12 rounded-md object-contain" />
-                  <span className="text-xs text-muted-foreground">Current logo preview</span>
-                </div>
-              ) : null}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="logo_url">Logo URL</Label>
-              <Input id="logo_url" {...siteForm.register("logo_url")} />
-            </div>
+            )}
+            {logoSource === "url" && (
+              <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="logo_url">Logo URL</Label>
+                <Input id="logo_url" placeholder="https://example.com/logo.png" {...siteForm.register("logo_url")} />
+                {logoValue ? (
+                  <div className="flex items-center gap-3">
+                    <img src={logoValue} alt="Logo preview" className="h-12 w-12 rounded-md object-contain" onError={() => {}} />
+                    <span className="text-xs text-muted-foreground">Logo preview</span>
+                  </div>
+                ) : null}
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="primary_color">Primary color</Label>
-              <Input id="primary_color" placeholder="#1f6feb" {...siteForm.register("primary_color")} />
+              <div className="flex gap-2">
+                <Input id="primary_color" type="color" className="h-10 w-20 cursor-pointer" {...siteForm.register("primary_color")} />
+                <Input id="primary_color_text" type="text" placeholder="#1f6feb" {...siteForm.register("primary_color")} />
+              </div>
             </div>
             <div className="space-y-2 md:col-span-2">
               <Label htmlFor="terms_html">Terms HTML</Label>
@@ -426,11 +489,6 @@ export default function SiteDetailPage() {
               />
               <Label htmlFor="enable_tos_only">Enable TOS-only guest access</Label>
             </div>
-            <div className="md:col-span-2">
-              <Button type="submit" variant="primary">
-                Save site
-              </Button>
-            </div>
           </form>
         </CardContent>
       </Card>
@@ -438,12 +496,12 @@ export default function SiteDetailPage() {
         <CardHeader>
           <CardTitle>Portal template</CardTitle>
           <CardDescription>
-            Optional custom HTML wrapper. Use {"{{portal}}"} to insert the built-in portal card.
-            If omitted, the portal card is appended.
+            Optional custom HTML wrapper. Use the {"{{portal}}"} token to insert the built-in portal card.
+            If omitted, only the template renders.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form className="grid gap-4" onSubmit={siteForm.handleSubmit(saveSite)}>
+          <form className="grid gap-4">
             <div className="flex items-center gap-2">
               <input
                 id="portal_template_enabled"
@@ -454,8 +512,7 @@ export default function SiteDetailPage() {
               <Label htmlFor="portal_template_enabled">Enable custom template</Label>
             </div>
             <div className="text-xs text-muted-foreground">
-              Tokens: {"{{display_name}}"}, {"{{logo_url}}"}, {"{{primary_color}}"}, {"{{terms_html}}"},{" "}
-              {"{{support_contact}}"}.
+              Tokens: {`{{display_name}}`}, {`{{logo_url}}`}, {`{{primary_color}}`}, {`{{terms_html}}`}, {`{{support_contact}}`}
             </div>
             <div className="space-y-2">
               <Label htmlFor="portal_template_html">HTML template</Label>
@@ -467,11 +524,6 @@ export default function SiteDetailPage() {
                 {...siteForm.register("portal_template_html")}
               />
             </div>
-            <div>
-              <Button type="submit" variant="primary">
-                Save template
-              </Button>
-            </div>
           </form>
         </CardContent>
       </Card>
@@ -481,18 +533,13 @@ export default function SiteDetailPage() {
           <CardDescription>Applied for voucher and OTP authorization.</CardDescription>
         </CardHeader>
         <CardContent>
-          <form className="grid gap-4 md:grid-cols-2" onSubmit={siteForm.handleSubmit(saveSite)}>
+          <form className="grid gap-4 md:grid-cols-2">
             {policyFields.map((field) => (
               <div key={field.key} className="space-y-2">
                 <Label htmlFor={field.key}>{field.label}</Label>
                 <Input id={field.key} type="number" {...siteForm.register(field.key as keyof SiteFormValues)} />
               </div>
             ))}
-            <div className="md:col-span-2">
-              <Button type="submit" variant="primary">
-                Save policy
-              </Button>
-            </div>
           </form>
         </CardContent>
       </Card>
@@ -502,7 +549,7 @@ export default function SiteDetailPage() {
           <CardDescription>Store controller credentials encrypted in the backend.</CardDescription>
         </CardHeader>
         <CardContent>
-          <form className="grid gap-4 md:grid-cols-2" onSubmit={siteForm.handleSubmit(saveSite)}>
+          <form className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="unifi_base_url">UniFi controller IP (optional override)</Label>
               <Input id="unifi_base_url" placeholder="71.162.143.124" {...siteForm.register("unifi_base_url")} />
@@ -538,11 +585,6 @@ export default function SiteDetailPage() {
               <Label htmlFor="unifi_api_key_ref">UniFi API key reference (optional override)</Label>
               <Input id="unifi_api_key_ref" type="password" {...siteForm.register("unifi_api_key_ref")} />
               <p className="text-xs text-muted-foreground">Legacy env var name (overridden by stored key).</p>
-            </div>
-            <div className="md:col-span-2">
-              <Button type="submit" variant="primary">
-                Save UniFi settings
-              </Button>
             </div>
           </form>
         </CardContent>
