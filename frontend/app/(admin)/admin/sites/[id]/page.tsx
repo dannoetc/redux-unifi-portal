@@ -16,22 +16,28 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
+const optionalText = z.string().optional().nullable().or(z.literal(""));
+const optionalPort = z.preprocess(
+  (value) => (value === "" || value === null || typeof value === "undefined" ? undefined : value),
+  z.coerce.number().int().min(1).max(65535).optional()
+);
+
 const siteSchema = z.object({
   display_name: z.string().min(2),
   slug: z.string().min(2),
   enabled: z.boolean().default(true),
-  logo_url: z.string().optional().or(z.literal("")),
-  primary_color: z.string().optional().or(z.literal("")),
-  terms_html: z.string().optional().or(z.literal("")),
-  portal_template_html: z.string().optional().or(z.literal("")),
+  logo_url: optionalText,
+  primary_color: optionalText,
+  terms_html: optionalText,
+  portal_template_html: optionalText,
   portal_template_enabled: z.boolean().default(false),
-  support_contact: z.string().optional().or(z.literal("")),
-  success_url: z.string().optional().or(z.literal("")),
+  support_contact: optionalText,
+  success_url: optionalText,
   enable_tos_only: z.boolean().default(false),
-  unifi_base_url: z.string().optional().or(z.literal("")),
-  unifi_port: z.coerce.number().int().min(1).max(65535).optional(),
-  unifi_site_id: z.string().optional().or(z.literal("")),
-  unifi_api_key: z.string().optional().or(z.literal("")),
+  unifi_base_url: optionalText,
+  unifi_port: optionalPort,
+  unifi_site_id: optionalText,
+  unifi_api_key: optionalText,
   default_time_limit_minutes: z.coerce.number().optional().nullable(),
   default_data_limit_mb: z.coerce.number().optional().nullable(),
   default_rx_kbps: z.coerce.number().optional().nullable(),
