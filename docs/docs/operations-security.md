@@ -91,6 +91,7 @@ Basic rule: **don’t bake secrets into code**.
 - Any signing keys / peppers
 
 In dev, `.env` is fine. In prod, store secrets in your secret manager and reference them via env vars.
+Use `.env-sample` at the repo root as the complete configuration reference.
 
 ---
 

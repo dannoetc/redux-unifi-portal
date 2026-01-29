@@ -21,6 +21,7 @@ Administrators can configure per-site settings including:
 - **Portal branding** (logo and colors).
 - **Guest policy defaults** such as time limits and bandwidth caps.
 - **Custom portal HTML** (optional), with the built-in portal injected at `{{portal}}`.
+- **Roaming access**: download OpenVPN client profiles when a tenant is marked as roaming.
 
 ## Authentication methods
 

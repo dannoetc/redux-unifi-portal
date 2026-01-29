@@ -84,6 +84,8 @@ A few real-world tips:
 - Rate limits apply (by design) to prevent abuse.
 - If users report “no code received,” check deliverability first (spam folder, blocks, bounced messages).
 
+SMTP settings live in `.env` (start from `.env-sample` at the repo root).
+
 ---
 
 ## Redis and background jobs

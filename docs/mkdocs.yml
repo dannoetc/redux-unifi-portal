@@ -13,7 +13,9 @@ theme:
 
 nav:
   - Home: index.md
+  - Cheat Sheet: cheat-sheet.md
   - Guest Experience: guest-experience.md
   - Admin Console: admin-console.md
   - Integrations: integrations.md
   - Operations & Security: operations-security.md
+  - UniFi Quick Reference: unifi-quickref.md

@@ -9,7 +9,7 @@ This repository is a **two-package** monorepo overlay for:
 ## Local Dev (quickstart)
 
 ### 1) Configure env
-Copy `.env.example` to `.env` and fill values.
+Copy `.env-sample` to `.env` and fill values (or start from `.env.example`).
 
 ### 2) Start infrastructure
 ```bash
@@ -35,6 +35,10 @@ npm run dev
 
 Frontend runs on http://localhost:3000  
 Backend runs on http://localhost:8000
+
+## Docs
+- One-page setup cheat sheet: `docs/docs/cheat-sheet.md`
+- Full documentation site (MkDocs): `docs/docs`
 
 ## shadcn/ui setup
 This scaffold includes the expected folders for shadcn/ui. Initialize when ready:
