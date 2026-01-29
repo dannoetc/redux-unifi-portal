@@ -16,14 +16,14 @@ def _split_env(name: str) -> list[str]:
 
 
 def main() -> None:
-    super_email = os.environ.get("SUPERADMIN_EMAIL")
+    super_email = os.environ.get("SUPERADMIN_EMAIL", "jhalon@reduxtc.com")
     super_password = os.environ.get("SUPERADMIN_PASSWORD")
     tenant_slug = os.environ.get("TENANT_SLUG")
     tenant_name = os.environ.get("TENANT_NAME", "Sample Tenant")
     site_slugs = _split_env("SITE_SLUGS")
 
-    if not super_email or not super_password:
-        raise SystemExit("SUPERADMIN_EMAIL and SUPERADMIN_PASSWORD are required.")
+    if not super_password:
+        raise SystemExit("SUPERADMIN_PASSWORD is required.")
     if not tenant_slug:
         raise SystemExit("TENANT_SLUG is required.")
     if not site_slugs:

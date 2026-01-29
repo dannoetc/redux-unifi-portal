@@ -1,7 +1,7 @@
 ## Backend notes
 
 ### Seed data (dev only)
-Set env vars and run:
+Set env vars and run (SUPERADMIN_EMAIL defaults to `jhalon@reduxtc.com`):
 ```bash
 cd backend
 SUPERADMIN_EMAIL=admin@example.com \

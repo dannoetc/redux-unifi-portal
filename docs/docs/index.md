@@ -32,6 +32,7 @@ We use the redirect parameters UniFi sends to figure out *which tenant/site* tha
 
 ## Documentation map
 
+- [Cheat Sheet](cheat-sheet.md) — idiot-proof, step-by-step “get it running” guide.
 - [Guest Experience](guest-experience.md) — what guests see and how the flows work.
 - [Admin Console](admin-console.md) — how staff manage tenants, sites, auth methods, and reporting.
 - [Integrations](integrations.md) — UniFi + identity providers + email delivery.

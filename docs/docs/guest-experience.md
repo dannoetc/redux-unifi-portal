@@ -11,6 +11,8 @@ presents the site’s branding, terms, and available authentication options.
 4. The guest selects an authentication method and completes it.
 5. ReduxTC authorizes the guest on the UniFi controller and shows a success screen.
 
+If the guest reconnects, we try to reuse the existing portal session so they don’t have to start over.
+
 ## Guest-friendly features
 
 - **Captive portal readiness** with clear status steps for slow or walled-garden browsers.
