@@ -45,7 +45,7 @@ def resolve_secret_value(
 
 
 def _get_fernet() -> Fernet:
-    key = settings.SECRETS_ENCRYPTION_KEY or settings.OPENVPN_ENCRYPTION_KEY
+    key = settings.SECRETS_ENCRYPTION_KEY
     if not key:
         raise SecretError("SECRET_KEY_MISSING", "Secret encryption key is not configured.")
     try:

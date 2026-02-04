@@ -4,7 +4,7 @@ What changed in this update:
 
 - Added a one-page “idiot-proof” cheat sheet with step-by-step setup.
 - Added `.env-sample` and expanded `.env.example` so all config variables are documented in one place.
-- Updated admin + ops docs to mention OpenVPN and the config reference.
+- Updated admin + ops docs to reflect removal of the OpenVPN integration and added a removal report.
 - Integrations now includes:
   - a friendlier explanation of UniFi behavior (including messy redirect URLs)
   - the “tenant-mode endpoints” rule in plain language

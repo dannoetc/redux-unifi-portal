@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
@@ -11,11 +12,6 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
     SECRET_KEY: str = "dev-change-me"
     SECRETS_ENCRYPTION_KEY: str = ""
-    OPENVPN_ENCRYPTION_KEY: str = ""
-    OPENVPN_PKI_PATH: str = "/etc/openvpn/pki"
-    OPENVPN_AUTH_FILE_PATH: str = "/etc/openvpn/auth/credentials"
-    OPENVPN_SERVER_CONFIG_PATH: str = "/etc/openvpn/openvpn.conf"
-    OPENVPN_PROFILE_FORCE_CURRENT_TLS: bool = False
     LOG_LEVEL: str = "INFO"
     ADMIN_SESSION_MAX_AGE_SECONDS: int = 60 * 60 * 12
     ADMIN_SESSION_COOKIE_SECURE: bool = False
@@ -45,21 +41,6 @@ class Settings(BaseSettings):
     UNIFI_VERIFY_SSL: bool = True
     UNIFI_CLIENT_LOOKUP_ATTEMPTS: int = 6
     UNIFI_CLIENT_LOOKUP_BACKOFF_SECONDS: float = 0.6
-
-    # OpenVPN default template
-    OPENVPN_DEFAULT_TEMPLATE: str = """client
-dev tun
-proto udp
-remote {{REMOTE_HOST}} {{REMOTE_PORT}}
-resolv-retry infinite
-nobind
-persist-key
-persist-tun
-cipher AES-256-GCM
-auth SHA256
-comp-lzo
-verb 3
-"""
 
     # CORS
     CORS_ALLOW_ORIGINS: str = "http://localhost:3000"

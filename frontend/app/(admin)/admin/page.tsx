@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
-import { apiFetch } from "@/lib/api";
+import { ApiError, apiFetch } from "@/lib/api";
 
 type AdminMe = {
   admin_user: {
@@ -15,6 +16,7 @@ type AdminMe = {
 };
 
 export default function AdminHome() {
+  const router = useRouter();
   const [me, setMe] = useState<AdminMe | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -27,6 +29,10 @@ export default function AdminHome() {
         }
       })
       .catch((error) => {
+        if (error instanceof ApiError && error.status === 401) {
+          router.replace("/admin/login");
+          return;
+        }
         toast.error(error?.message ?? "Unable to load admin profile.");
       })
       .finally(() => {

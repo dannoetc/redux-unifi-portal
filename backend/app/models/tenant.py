@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from sqlalchemy import Boolean, Enum, Integer, LargeBinary, String, Uuid
+from sqlalchemy import Enum, LargeBinary, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
@@ -22,13 +22,6 @@ class Tenant(Base, TimestampMixin):
     unifi_base_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
     unifi_api_key_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
     unifi_api_key_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
-    is_roaming: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    openvpn_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    openvpn_profile_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    openvpn_auth_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    openvpn_ca_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    openvpn_remote_host: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    openvpn_remote_port: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     sites = relationship("Site", back_populates="tenant", cascade="all, delete-orphan")
     memberships = relationship("AdminMembership", back_populates="tenant", cascade="all, delete-orphan")
@@ -37,15 +30,3 @@ class Tenant(Base, TimestampMixin):
     auth_events = relationship("AuthEvent", back_populates="tenant", passive_deletes=True)
     voucher_batches = relationship("VoucherBatch", back_populates="tenant", passive_deletes=True)
     oidc_providers = relationship("OidcProvider", back_populates="tenant", passive_deletes=True)
-    openvpn_secret = relationship(
-        "TenantOpenvpnSecret",
-        back_populates="tenant",
-        cascade="all, delete-orphan",
-        uselist=False,
-    )
-    openvpn_client_profiles = relationship(
-        "TenantOpenvpnClientProfile",
-        back_populates="tenant",
-        cascade="all, delete-orphan",
-        order_by="TenantOpenvpnClientProfile.created_at.desc()",
-    )
