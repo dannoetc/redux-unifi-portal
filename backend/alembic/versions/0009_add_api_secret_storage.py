@@ -1,7 +1,7 @@
 """Add encrypted API secret storage
 
 Revision ID: 0009_add_api_secret_storage
-Revises: 0008_openvpn_client_profiles
+Revises: 0005_merge_heads
 Create Date: 2026-01-27 00:00:00.000000
 """
 
@@ -12,7 +12,7 @@ from alembic import op
 
 
 revision = "0009_add_api_secret_storage"
-down_revision = "0008_openvpn_client_profiles"
+down_revision = "0005_merge_heads"
 branch_labels = None
 depends_on = None
 

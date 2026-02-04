@@ -173,8 +173,6 @@ Server actions:
 
 ### UniFi controller (tenant-level)
 - `tenants` includes `unifi_base_url`, `unifi_api_key_ref` for the shared controller per tenant.
-- `tenants` can be marked `is_roaming` and store OpenVPN fields (`openvpn_enabled`, `openvpn_profile_ref`,
-  `openvpn_auth_ref`, `openvpn_ca_ref`, `openvpn_remote_host`, `openvpn_remote_port`) for roaming gateways.
 
 ### Guest & audit
 - `portal_sessions` (tenant_id, site_id, client_mac, ap_mac, ssid, orig_url, status, ip, user_agent, timestamps)
@@ -216,7 +214,6 @@ Server actions:
 - `POST /api/admin/tenants/{tenant_id}/sites/{site_id}/vouchers/batches`
 - `GET  /api/admin/tenants/{tenant_id}/sites/{site_id}/vouchers/batches/{batch_id}/export.csv`
 - `GET  /api/admin/tenants/{tenant_id}/auth-events` (+ export)
-- `GET  /api/admin/tenants/{tenant_id}/openvpn/profile` (returns `application/x-openvpn-profile`)
 
 ---
 
@@ -254,26 +251,7 @@ Server actions:
 
 ---
 
-## 11) Roaming tenants & OpenVPN
-
-Some deployments require UniFi gateways to connect over an OpenVPN tunnel when venue NAT/firewalls are unknown.
-For those tenants:
-
-- Mark the tenant as `is_roaming=true`.
-- Enable `openvpn_enabled=true` to allow profile downloads.
-- Provide OpenVPN settings:
-  - `openvpn_remote_host`, `openvpn_remote_port`
-  - `openvpn_profile_ref` (env var containing a base `.ovpn` template, supports `{{REMOTE_HOST}}` and
-    `{{REMOTE_PORT}}` tokens)
-  - Optional `openvpn_ca_ref` to inline the CA bundle.
-  - Optional `openvpn_auth_ref` to inline `auth-user-pass` credentials for gateways.
-
-The admin API exposes a downloadable `.ovpn` file for tenant admins. Secret refs are resolved from server-side
-environment variables so that raw keys/certs are not stored in the database.
-
----
-
-## 12) Acceptance Criteria (v1)
+## 11) Acceptance Criteria (v1)
 
 - Supports tenants -> sites from day one.
 - For each site:
