@@ -417,7 +417,9 @@ export default function GuestLanding() {
                 id="voucher"
                 placeholder="ABC123"
                 value={voucherCode}
-                onChange={(event) => setVoucherCode(event.target.value)}
+                autoCapitalize="characters"
+                autoCorrect="off"
+                onChange={(event) => setVoucherCode(event.target.value.trim().toUpperCase())}
               />
             </div>
             <div className="flex gap-2">
@@ -441,6 +443,7 @@ export default function GuestLanding() {
               <Input
                 id="email"
                 type="email"
+                autoComplete="email"
                 placeholder="you@example.com"
                 value={otpEmail}
                 onChange={(event) => setOtpEmail(event.target.value)}
@@ -467,8 +470,10 @@ export default function GuestLanding() {
               <Input
                 id="code"
                 placeholder="123456"
+                inputMode="numeric"
+                autoComplete="one-time-code"
                 value={otpCode}
-                onChange={(event) => setOtpCode(event.target.value)}
+                onChange={(event) => setOtpCode(event.target.value.replace(/\D+/g, ""))}
               />
             </div>
             <div className="flex gap-2">
