@@ -38,3 +38,4 @@ We use the redirect parameters UniFi sends to figure out *which tenant/site* tha
 - [Integrations](integrations.md) — UniFi + identity providers + email delivery.
 - [Operations & Security](operations-security.md) — what we store, how we isolate tenants, and how to keep things running.
 - [UniFi Quick Reference](unifi-quickref.md) — a short “cheat sheet” for the exact UniFi calls we make (handy for debugging).
+- [OpenVPN Removal Report](openvpn-removal-report.md) — details on the removed OpenVPN integration.

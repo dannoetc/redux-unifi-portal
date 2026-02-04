@@ -15,19 +15,6 @@ services:
     ports:
       - "6379:6379"
 
-  openvpn:
-    image: kylemanna/openvpn:2.4
-    ports:
-      - "1194:1194/udp"
-    cap_add:
-      - NET_ADMIN
-    devices:
-      - /dev/net/tun:/dev/net/tun
-    volumes:
-      - openvpn_data:/etc/openvpn
-      - ./openvpn-init.sh:/usr/local/bin/openvpn-init.sh:ro
-    entrypoint: /bin/bash /usr/local/bin/openvpn-init.sh
-
   api:
     build:
       context: ./backend
@@ -50,12 +37,9 @@ services:
       CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
     ports:
       - "8000:8000"
-    volumes:
-      - openvpn_data:/etc/openvpn
     depends_on:
       - postgres
       - redis
-      - openvpn
 
   celery:
     build:
@@ -145,4 +129,3 @@ volumes:
   postgres_data:
   certbot-etc:
   certbot-var:
-  openvpn_data:
