@@ -30,6 +30,32 @@ UniFi can be configured to send everyone to a single external portal URL.
 We use the redirect parameters UniFi sends to figure out *which tenant/site* that guest belongs to.  
 (And yes — UniFi sometimes sends those parameters in… creative ways. We handle it.)
 
+## Getting started (basic operation)
+
+Use this checklist after the platform is running.
+
+1) **Log in**
+   - Visit `/admin/login` and sign in with your admin credentials.
+
+2) **Create your first tenant**
+   - Go to **Tenants** and create a tenant with a slug and name.
+
+3) **Add your UniFi controller credentials**
+   - From the tenant row, choose **Configure UniFi**.
+   - Enter the UniFi controller host/port and API key, then save.
+
+4) **Test the UniFi connection**
+   - In the same dialog, click **Test UniFi connection** to confirm API access.
+
+5) **Discover/import sites**
+   - Go to **Sites** and use **Discover from UniFi** to import sites from the controller.
+   - Provision the sites you want to manage in the portal.
+
+6) **Customize the portal template**
+   - Open a site and go to the **Portal Template** tab.
+   - Enable the custom template and paste your HTML.
+   - Include the `{{portal}}` token where the built-in portal UI should render; omit it to fully replace the UI.
+
 ## Documentation map
 
 - [Cheat Sheet](cheat-sheet.md) — idiot-proof, step-by-step “get it running” guide.
