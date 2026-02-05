@@ -24,6 +24,81 @@ compose() {
   DOCKER_CONFIG="${DOCKER_CONFIG}" docker compose --env-file "${ENV_FILE}" "${COMPOSE_FILES[@]}" "$@"
 }
 
+set_env_value() {
+  local key="$1"
+  local value="$2"
+  local file="$3"
+
+  if grep -qE "^${key}=" "${file}"; then
+    local escaped
+    escaped="$(printf '%s' "${value}" | sed -e 's/[\\/&]/\\&/g')"
+    sed -i "s|^${key}=.*|${key}=${escaped}|" "${file}"
+  else
+    printf '\n%s=%s\n' "${key}" "${value}" >> "${file}"
+  fi
+}
+
+get_env_value() {
+  local key="$1"
+  local file="$2"
+  local line
+  line="$(grep -E "^${key}=" "${file}" | tail -n 1 || true)"
+  if [[ -z "${line}" ]]; then
+    echo ""
+    return 0
+  fi
+  echo "${line#${key}=}"
+}
+
+ensure_secrets_encryption_key() {
+  local current
+  current="$(get_env_value "SECRETS_ENCRYPTION_KEY" "${ENV_FILE}")"
+  if [[ -n "${current}" ]]; then
+    return 0
+  fi
+
+  local generated=""
+  if command -v openssl >/dev/null 2>&1; then
+    generated="$(openssl rand 32 | base64 | tr '+/' '-_' | tr -d '\n')"
+  elif command -v python3 >/dev/null 2>&1; then
+    generated="$(python3 - <<'PY'
+import base64, os
+print(base64.urlsafe_b64encode(os.urandom(32)).decode())
+PY
+)"
+  elif command -v python >/dev/null 2>&1; then
+    generated="$(python - <<'PY'
+import base64, os
+print(base64.urlsafe_b64encode(os.urandom(32)).decode())
+PY
+)"
+  else
+    echo "[ERROR] Unable to generate SECRETS_ENCRYPTION_KEY (need openssl or python)."
+    exit 1
+  fi
+
+  set_env_value "SECRETS_ENCRYPTION_KEY" "${generated}" "${ENV_FILE}"
+  echo "[INFO] Generated SECRETS_ENCRYPTION_KEY and saved to .env."
+}
+
+ensure_docker_env() {
+  local key
+  for key in DATABASE_URL REDIS_URL CELERY_BROKER_URL CELERY_RESULT_BACKEND; do
+    local value
+    value="$(get_env_value "${key}" "${ENV_FILE}")"
+    if [[ -z "${value}" ]]; then
+      continue
+    fi
+    if [[ "${value}" == *"localhost"* || "${value}" == *"127.0.0.1"* ]]; then
+      echo "[ERROR] ${key} points to localhost. Docker services must use service names (postgres/redis)."
+      echo "[ERROR] Update ${ENV_FILE} and re-run. Example:"
+      echo "  DATABASE_URL=postgresql+psycopg://postgres:postgres@postgres:5432/redux_portal"
+      echo "  REDIS_URL=redis://redis:6379/0"
+      exit 1
+    fi
+  done
+}
+
 if [[ ${1-} == "--status" ]]; then
   compose ps
   exit 0
@@ -213,6 +288,8 @@ if [[ "${CLEAN_ONLY}" -eq 1 && "${REBUILD}" -eq 0 ]]; then
 fi
 
 update_repo
+ensure_secrets_encryption_key
+ensure_docker_env
 pull_images
 
 if [[ "${REBUILD}" -eq 1 ]]; then
