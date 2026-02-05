@@ -1,6 +1,6 @@
 # ReduxTC WiFi Portal Documentation
 
-Hey 👋 — this is the human-friendly guide to running the ReduxTC UniFi Captive Portal platform.
+Hey 👋 — this is the user-friendly guide to running the ReduxTC UniFi Captive Portal platform.
 
 If you’re here to *operate* the platform (add tenants, set up sites, issue vouchers, troubleshoot captive portal weirdness),
 you’re in the right place. If you’re here to *develop* the platform, the deeper technical spec lives in `SPEC.md` in the repo.
