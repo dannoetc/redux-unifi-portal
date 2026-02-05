@@ -1,4 +1,4 @@
-# ReduxTC Portal Cheat Sheet (idiot-proof)
+# ReduxTC Portal Cheat Sheet (step-by-step)
 
 This is the **one-page, do-this-in-order** guide to get the portal running **in production** on a Linux server using the repo’s Docker setup (nginx + Certbot included).
 

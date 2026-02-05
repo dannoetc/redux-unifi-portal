@@ -2,7 +2,7 @@
 
 What changed in this update:
 
-- Added a one-page “idiot-proof” cheat sheet with step-by-step setup.
+- Added a one-page “step-by-step” cheat sheet with step-by-step setup.
 - Added `.env-sample` and expanded `.env.example` so all config variables are documented in one place.
 - Updated admin + ops docs to reflect removal of the OpenVPN integration and added a removal report.
 - Integrations now includes:

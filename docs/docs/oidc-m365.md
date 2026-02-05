@@ -1,4 +1,4 @@
-# OIDC SSO per Tenant/Site (Microsoft Entra ID / M365) — idiot-proof
+# OIDC SSO per Tenant/Site (Microsoft Entra ID / M365) — step-by-step
 
 This is the **do-this-in-order** guide to enable Microsoft SSO (OIDC) for a tenant/site.
 

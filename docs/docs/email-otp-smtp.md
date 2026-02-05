@@ -1,4 +1,4 @@
-# Email OTP (SMTP) Setup (idiot-proof)
+# Email OTP (SMTP) Setup (step-by-step)
 
 Email OTP lets guests verify an email address and receive a one-time code.
 

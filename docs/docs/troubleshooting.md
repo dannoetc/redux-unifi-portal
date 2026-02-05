@@ -1,4 +1,4 @@
-# Troubleshooting (idiot-proof)
+# Troubleshooting (step-by-step)
 
 This is the “what do I check first?” page.
 
