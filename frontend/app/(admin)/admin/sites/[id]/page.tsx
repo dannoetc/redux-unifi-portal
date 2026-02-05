@@ -67,6 +67,7 @@ type SiteOidcForm = {
 
 const UNIFI_INTEGRATION_PATH = "/proxy/network/integration";
 const DEFAULT_UNIFI_PORT = 443;
+const EXTERNAL_PORTAL_IP = process.env.NEXT_PUBLIC_PORTAL_IP ?? "0.0.0.0";
 
 const parseUnifiHostAndPort = (value?: string | null) => {
   if (!value) {
@@ -130,6 +131,7 @@ export default function SiteDetailPage() {
   const [testing, setTesting] = useState(false);
   const [tenantSlug, setTenantSlug] = useState<string | null>(null);
   const logoInputRef = useRef<HTMLInputElement | null>(null);
+  const portalUrlRef = useRef<HTMLInputElement | null>(null);
   const originalUnifiPortRef = useRef<number | undefined>(undefined);
   const [activeTab, setActiveTab] = useState("branding");
 
@@ -373,6 +375,43 @@ export default function SiteDetailPage() {
     }
   };
 
+  const copyPortalIp = async () => {
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(EXTERNAL_PORTAL_IP);
+        toast.success("Portal IP copied.");
+        return;
+      }
+    } catch (error) {
+      console.error("Clipboard write failed", error);
+    }
+
+    let copied = false;
+    const input = portalUrlRef.current;
+    if (input) {
+      input.focus();
+      input.select();
+      input.setSelectionRange(0, EXTERNAL_PORTAL_IP.length);
+      copied = document.execCommand("copy");
+    } else {
+      const textarea = document.createElement("textarea");
+      textarea.value = EXTERNAL_PORTAL_IP;
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      copied = document.execCommand("copy");
+      document.body.removeChild(textarea);
+    }
+
+    if (copied) {
+      toast.success("Portal IP copied.");
+    } else {
+      toast.error("Unable to copy portal IP.");
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -433,7 +472,22 @@ export default function SiteDetailPage() {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-      
+      <div className="rounded-lg border border-border/60 bg-muted/20 p-4">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-foreground">External portal IP</p>
+            <p className="text-xs text-muted-foreground">
+              Share this IP with anyone configuring UniFi&apos;s external portal settings.
+            </p>
+          </div>
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+            <Input readOnly value={EXTERNAL_PORTAL_IP} ref={portalUrlRef} className="sm:w-[280px]" />
+            <Button type="button" variant="secondary" onClick={copyPortalIp}>
+              Copy
+            </Button>
+          </div>
+        </div>
+      </div>
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList>
           <TabsTrigger value="branding">Branding</TabsTrigger>

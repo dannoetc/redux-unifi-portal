@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ColumnDef } from "@tanstack/react-table";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -73,6 +73,7 @@ const formatStatus = (status?: string) => {
 
 const UNIFI_INTEGRATION_PATH = "/proxy/network/integration";
 const DEFAULT_UNIFI_PORT = 443;
+const EXTERNAL_PORTAL_IP = process.env.NEXT_PUBLIC_PORTAL_IP ?? "0.0.0.0";
 
 const parseUnifiHostAndPort = (value?: string | null) => {
   if (!value) {
@@ -135,6 +136,7 @@ export default function TenantsPage() {
   const [tenantToConfigure, setTenantToConfigure] = useState<Tenant | null>(null);
   const [setupOpen, setSetupOpen] = useState(true);
   const [setupInitialized, setSetupInitialized] = useState(false);
+  const portalUrlRef = useRef<HTMLInputElement | null>(null);
 
   const form = useForm<CreateTenant>({
     resolver: zodResolver(schema),
@@ -175,6 +177,43 @@ export default function TenantsPage() {
       setSetupInitialized(true);
     }
   }, [loading, setupInitialized, tenants.length]);
+
+  const copyPortalIp = async () => {
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(EXTERNAL_PORTAL_IP);
+        toast.success("Portal IP copied.");
+        return;
+      }
+    } catch (error) {
+      console.error("Clipboard write failed", error);
+    }
+
+    let copied = false;
+    const input = portalUrlRef.current;
+    if (input) {
+      input.focus();
+      input.select();
+      input.setSelectionRange(0, EXTERNAL_PORTAL_IP.length);
+      copied = document.execCommand("copy");
+    } else {
+      const textarea = document.createElement("textarea");
+      textarea.value = EXTERNAL_PORTAL_IP;
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      copied = document.execCommand("copy");
+      document.body.removeChild(textarea);
+    }
+
+    if (copied) {
+      toast.success("Portal IP copied.");
+    } else {
+      toast.error("Unable to copy portal IP.");
+    }
+  };
 
   const RowActions = ({ tenant }: { tenant: Tenant }) => {
     return (
@@ -462,11 +501,24 @@ export default function TenantsPage() {
           <li>1. Create a tenant and capture the tenant slug.</li>
           <li>2. Add one or more sites with UniFi credentials and default access policy.</li>
           <li>
-            3. In the UniFi console, set the external portal host/IP to{" "}
-            <span className="font-medium text-foreground">wifi.reduxtc.com</span> (hostnames only). The
-            portal resolves the correct site using the UniFi Network API.
+            3. In the UniFi console, set the external portal host/IP to the public IP address. The portal
+            resolves the correct site using the UniFi Network API.
           </li>
         </ul>
+        <div className="mt-4 rounded-md border border-border/60 bg-background/70 p-3">
+          <Label htmlFor="portal-url" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            External portal IP
+          </Label>
+          <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
+            <Input id="portal-url" readOnly value={EXTERNAL_PORTAL_IP} ref={portalUrlRef} />
+            <Button type="button" variant="secondary" onClick={copyPortalIp}>
+              Copy
+            </Button>
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Paste this IP address into UniFi&apos;s external portal setting.
+          </p>
+        </div>
       </details>
       <section className="flex min-h-0 flex-1 flex-col">
         {loading ? (
