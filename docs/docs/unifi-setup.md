@@ -1,4 +1,4 @@
-# UniFi Setup (idiot-proof)
+# UniFi Setup 
 
 This is the UniFi-side configuration so guests get redirected to the ReduxTC portal and can be authorized correctly.
 
