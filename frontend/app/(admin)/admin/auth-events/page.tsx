@@ -25,18 +25,61 @@ type AuthEvent = {
 
 type AuthEventResponse = { events: AuthEvent[] };
 
+type Site = {
+  id: string;
+  display_name: string;
+};
+
+type SiteList = { sites: Site[] };
+
 type Filters = {
   method: string;
   result: string;
   search: string;
+  siteId: string;
 };
 
 export default function AuthEventsPage() {
   const { tenantId, tenants } = useTenantSelection();
   const [events, setEvents] = useState<AuthEvent[]>([]);
+  const [sites, setSites] = useState<Site[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState<Filters>({ method: "", result: "", search: "" });
+  const [filters, setFilters] = useState<Filters>({ method: "", result: "", search: "", siteId: "" });
   const activeTenant = tenants.find((tenant) => tenant.id === tenantId) ?? null;
+
+  const siteLookup = useMemo(
+    () => new Map(sites.map((site) => [site.id, site.display_name])),
+    [sites]
+  );
+
+  const filteredEvents = useMemo(
+    () => (filters.siteId ? events.filter((event) => event.site_id === filters.siteId) : events),
+    [events, filters.siteId]
+  );
+
+  useEffect(() => {
+    if (!tenantId) {
+      setSites([]);
+      setFilters((prev) => ({ ...prev, siteId: "" }));
+      return;
+    }
+
+    let active = true;
+    apiFetch<SiteList>(`/api/admin/tenants/${tenantId}/sites`)
+      .then((data) => {
+        if (!active) {
+          return;
+        }
+        setSites(data.sites);
+      })
+      .catch((error) => {
+        toast.error(error?.message ?? "Unable to load sites.");
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [tenantId]);
 
   useEffect(() => {
     if (!tenantId) {
@@ -50,6 +93,7 @@ export default function AuthEventsPage() {
     if (filters.method) params.set("method", filters.method);
     if (filters.result) params.set("result", filters.result);
     if (filters.search) params.set("search", filters.search);
+    if (filters.siteId) params.set("site_id", filters.siteId);
 
     apiFetch<AuthEventResponse>(`/api/admin/tenants/${tenantId}/auth-events?${params.toString()}`)
       .then((data) => {
@@ -78,6 +122,11 @@ export default function AuthEventsPage() {
         cell: ({ row }) => new Date(row.original.created_at).toLocaleString(),
       },
       {
+        id: "site",
+        header: "Site",
+        cell: ({ row }) => siteLookup.get(row.original.site_id) ?? row.original.site_id,
+      },
+      {
         accessorKey: "method",
         header: "Method",
       },
@@ -91,7 +140,7 @@ export default function AuthEventsPage() {
         cell: ({ row }) => row.original.reason ?? "-",
       },
     ],
-    []
+    [siteLookup]
   );
 
   const exportCsv = async () => {
@@ -122,42 +171,59 @@ export default function AuthEventsPage() {
       </div>
       <Card className="rounded-xl border bg-card p-6 shadow-soft">
         <div className="space-y-4">
-          <div className="grid gap-4 rounded-lg bg-muted/30 p-4 md:grid-cols-4">
+          <div className="grid gap-4 rounded-lg bg-muted/30 p-4 md:grid-cols-5">
             <div className="space-y-2">
               <Label htmlFor="method">Method</Label>
-            <select
-              id="method"
-              className="h-10 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-              value={filters.method}
-              onChange={(event) => setFilters((prev) => ({ ...prev, method: event.target.value }))}
-            >
-              <option value="">All</option>
-              <option value="voucher">Voucher</option>
-              <option value="email_otp">Email OTP</option>
-              <option value="oidc">OIDC</option>
-            </select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="result">Result</Label>
-            <select
-              id="result"
-              className="h-10 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-              value={filters.result}
-              onChange={(event) => setFilters((prev) => ({ ...prev, result: event.target.value }))}
-            >
-              <option value="">All</option>
-              <option value="success">Success</option>
-              <option value="fail">Fail</option>
-            </select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="search">Search</Label>
-            <Input
-              id="search"
-              placeholder="Portal session or guest"
-              value={filters.search}
-              onChange={(event) => setFilters((prev) => ({ ...prev, search: event.target.value }))}
-            />
+              <select
+                id="method"
+                className="h-10 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                value={filters.method}
+                onChange={(event) => setFilters((prev) => ({ ...prev, method: event.target.value }))}
+              >
+                <option value="">All</option>
+                <option value="voucher">Voucher</option>
+                <option value="email_otp">Email OTP</option>
+                <option value="oidc">OIDC</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="result">Result</Label>
+              <select
+                id="result"
+                className="h-10 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                value={filters.result}
+                onChange={(event) => setFilters((prev) => ({ ...prev, result: event.target.value }))}
+              >
+                <option value="">All</option>
+                <option value="success">Success</option>
+                <option value="fail">Fail</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="site">Site</Label>
+              <select
+                id="site"
+                className="h-10 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                value={filters.siteId}
+                onChange={(event) => setFilters((prev) => ({ ...prev, siteId: event.target.value }))}
+              >
+                <option value="">All sites</option>
+                {sites.map((site) => (
+                  <option key={site.id} value={site.id}>
+                    {site.display_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="search">Search</Label>
+              <Input
+                id="search"
+                placeholder="Portal session or guest"
+                value={filters.search}
+                onChange={(event) => setFilters((prev) => ({ ...prev, search: event.target.value }))}
+              />
+            </div>
           </div>
         </div>
         <div className="mt-4">
@@ -175,7 +241,7 @@ export default function AuthEventsPage() {
                 </div>
               ))}
             </div>
-          ) : events.length === 0 ? (
+          ) : filteredEvents.length === 0 ? (
             <div className="flex flex-col items-start gap-2 rounded-lg bg-muted/30 p-4">
               <div className="text-sm font-semibold">No auth events yet.</div>
               <div className="text-sm text-muted-foreground">
@@ -183,9 +249,8 @@ export default function AuthEventsPage() {
               </div>
             </div>
           ) : (
-            <DataTable columns={columns} data={events} />
+            <DataTable columns={columns} data={filteredEvents} />
           )}
-        </div>
         </div>
       </Card>
     </div>
