@@ -1,4 +1,4 @@
-# Auth Events & Reporting (idiot-proof)
+# Auth Events & Reporting (step-by-step)
 
 Auth Events are your audit trail: who authorized, where, when, and how.
 

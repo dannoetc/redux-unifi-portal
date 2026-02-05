@@ -1,4 +1,4 @@
-# Tenant Onboarding (idiot-proof)
+# Tenant Onboarding (step-by-step)
 
 This is the **do-this-in-order** guide for creating a new customer tenant in the Admin UI.
 

@@ -1,4 +1,4 @@
-# Admin Users & Roles (idiot-proof)
+# Admin Users & Roles (step-by-step)
 
 This is how you give staff access to the Admin Console.
 

@@ -1,4 +1,4 @@
-# Vouchers (idiot-proof)
+# Vouchers (step-by-step)
 
 Vouchers are staff-issued codes guests can type into the captive portal.
 

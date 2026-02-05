@@ -1,4 +1,4 @@
-# Site Setup Checklist (idiot-proof)
+# Site Setup Checklist (step-by-step)
 
 This page is the “make the portal work for this location” checklist.
 
