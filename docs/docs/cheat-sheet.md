@@ -1,126 +1,127 @@
 # ReduxTC Portal Cheat Sheet (idiot-proof)
 
-This is the **one-page, do-this-in-order** guide. Follow it exactly.
+This is the **one-page, do-this-in-order** guide to get the portal running **in production** on a Linux server using the repo’s Docker setup (nginx + Certbot included).
+
+If you want the longer “why/how” doc, see: **[Production Deployment (Ubuntu 20.04 / DigitalOcean)](deployment-ubuntu20-digitalocean.md)**.
 
 ---
 
-## 0) Before you start (install these)
+## 0) You need these 3 things first
 
-You need these tools on your computer:
-
-1. **Docker**
-2. **Python 3.11+**
-3. **Node.js 18+**
-
-If you don’t have them, install them first. Then come back here.
+1. A **Ubuntu 20.04** server with public IP (DigitalOcean droplet is fine)
+2. A DNS **A record** pointing your domain to that server (example: `wifi.example.com`)
+3. A real email for Let’s Encrypt (example: `ops@example.com`)
 
 ---
 
-## 1) Get the code
+## 1) SSH in and install Docker + Compose
 
 ```bash
-git clone <this-repo-url>
+sudo apt-get update
+sudo apt-get install -y ca-certificates curl gnupg
+
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+sudo chmod a+r /etc/apt/keyrings/docker.gpg
+
+echo   "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu   $(. /etc/os-release && echo "$VERSION_CODENAME") stable" |   sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+sudo apt-get update
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+sudo usermod -aG docker $USER
+newgrp docker
+docker version
+docker compose version
+```
+
+---
+
+## 2) Get the repo on the server
+
+```bash
+cd ~
+git clone <this-repo-url> redux-unifi-portal
 cd redux-unifi-portal
 ```
 
 ---
 
-## 2) Make your `.env`
-
-Copy the sample file and edit it.
+## 3) Create your `.env`
 
 ```bash
 cp .env-sample .env
+nano .env
 ```
 
-Open `.env` and fill in **at least** these values:
+Fill in **at least**:
 
-- `SECRET_KEY` (make it a long random string)
-- `DATABASE_URL` (leave as-is if you use Docker)
-- `REDIS_URL` (leave as-is if you use Docker)
-- `NEXT_PUBLIC_API_BASE_URL` (for local dev: `http://localhost:8000`)
+- `DOMAIN=wifi.example.com`
+- `LETSENCRYPT_EMAIL=ops@example.com`
+- `BASE_URL=https://wifi.example.com`
+- `NEXT_PUBLIC_API_BASE_URL=https://wifi.example.com`
+- `SECRET_KEY=<long-random-string>`
 
-If you don’t know what to put yet, **leave everything else as-is**.
+If you don’t know what a variable is, leave it as-is for now.
 
 ---
 
-## 3) Start Postgres + Redis
+## 4) Build and start everything (including nginx + Certbot)
+
+Use the repo’s compose + the nginx/certbot override:
 
 ```bash
-docker compose up -d postgres redis
+docker compose -f docker-compose.yml -f docker-compose.nginx-certbot.yml up -d --build
 ```
 
-Wait ~10 seconds.
+Watch Certbot until it says the cert was obtained:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.nginx-certbot.yml logs -f certbot
+```
 
 ---
 
-## 4) Start the backend API
+## 5) Run database migrations
 
 ```bash
-cd backend
-python -m venv .venv
-source .venv/bin/activate
-pip install -e .
-
-alembic upgrade head
-uvicorn app.main:app --reload --port 8000
+docker compose exec api alembic upgrade head
 ```
-
-Leave this terminal open.
 
 ---
 
-## 5) Start the frontend web app
-
-Open a **new** terminal tab:
+## 6) Seed a first tenant + sites (recommended)
 
 ```bash
-cd redux-unifi-portal/frontend
-npm install
-npm run dev
-```
-
-Frontend: http://localhost:3000
-
----
-
-## 6) Seed a demo tenant (optional, but recommended)
-
-Open **another** terminal tab:
-
-```bash
-cd redux-unifi-portal/backend
-SUPERADMIN_PASSWORD=change-me \
-TENANT_SLUG=acme \
-TENANT_NAME="Acme MSP" \
-SITE_SLUGS=lab,office \
-SITE_DISPLAY_NAMES="Lab,Office" \
-SITE_UNIFI_SITE_IDS=default,default \
-UNIFI_BASE_URL=https://unifi.local \
-UNIFI_API_KEY_REF=dev-unifi-key \
-python -m app.scripts.seed
+docker compose exec -e SUPERADMIN_PASSWORD='change-me'   -e TENANT_SLUG='acme'   -e TENANT_NAME='Acme MSP'   -e SITE_SLUGS='lab,office'   -e SITE_DISPLAY_NAMES='Lab,Office'   -e SITE_UNIFI_SITE_IDS='default,default'   -e UNIFI_BASE_URL='https://unifi.example.com'   -e UNIFI_API_KEY_REF='dev-unifi-key'   api python -m app.scripts.seed
 ```
 
 Notes:
 - `SUPERADMIN_EMAIL` defaults to **jhalon@reduxtc.com**.
-- If you want a different email, add `SUPERADMIN_EMAIL=you@example.com`.
+- If you want a different email, add `-e SUPERADMIN_EMAIL='you@example.com'`.
 
 ---
 
 ## 7) Log in
 
-1. Go to http://localhost:3000/admin
-2. Use the email + password you seeded.
+- Admin: `https://wifi.example.com/admin`
+- Docs: `https://wifi.example.com/docs/`
+- Guest portal entrypoint (UniFi external portal URL): `https://wifi.example.com/guest/`
 
 ---
 
 ## 8) If something doesn’t work
 
-- **Backend errors?** Check the backend terminal logs.
-- **Frontend errors?** Check the frontend terminal logs.
-- **DB connection errors?** Make sure Postgres is running (`docker compose ps`).
-- **OTP emails not sending?** Check your SMTP settings in `.env`.
+```bash
+docker compose ps
+docker compose logs -f nginx
+docker compose logs -f api
+docker compose logs -f frontend
+```
+
+Common issues:
+- **Certbot can’t issue** → DNS not pointing to the server, ports 80/443 blocked, wrong `DOMAIN`.
+- **502 from nginx** → API/frontend not healthy yet; check logs.
+- **DB errors** → Postgres not up; run `docker compose logs -f postgres`.
 
 ---
-
-That’s it. If you followed every step, the portal should be running.

@@ -13,9 +13,27 @@ theme:
 
 nav:
   - Home: index.md
-  - Cheat Sheet: cheat-sheet.md
+
+  - Getting Started:
+      - Cheat Sheet (Production): cheat-sheet.md
+      - Production Deployment (Ubuntu 20.04 / DigitalOcean): deployment-ubuntu20-digitalocean.md
+      - Local Development Setup: local-development.md
+
+  - Admin Tasks:
+      - Admin Console Overview: admin-console.md
+      - Tenant Onboarding: tenant-onboarding.md
+      - Site Setup Checklist: site-setup.md
+      - Admin Users & Roles: admin-users.md
+      - Vouchers: vouchers.md
+      - Auth Events & Reporting: auth-events.md
+
+  - Integrations:
+      - Overview: integrations.md
+      - UniFi Setup: unifi-setup.md
+      - OIDC SSO (Microsoft Entra ID): oidc-m365.md
+      - Email OTP (SMTP): email-otp-smtp.md
+      - UniFi Quick Reference: unifi-quickref.md
+
   - Guest Experience: guest-experience.md
-  - Admin Console: admin-console.md
-  - Integrations: integrations.md
   - Operations & Security: operations-security.md
-  - UniFi Quick Reference: unifi-quickref.md
+  - Troubleshooting: troubleshooting.md

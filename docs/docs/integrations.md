@@ -2,7 +2,12 @@
 
 This page is the “how it connects” guide — UniFi first, then optional identity providers and email.
 
-If you want the exact API calls (with copy/paste snippets), jump to:
+If you want the step-by-step operational setup pages:
+- UniFi: **[UniFi Setup](unifi-setup.md)**
+- OIDC (M365): **[OIDC SSO (Microsoft Entra ID)](oidc-m365.md)**
+- Email OTP: **[Email OTP (SMTP)](email-otp-smtp.md)**
+
+If you want the exact UniFi API calls (with copy/paste snippets), jump to:
 **[UniFi Quick Reference](unifi-quickref.md)**.
 
 ---
@@ -19,7 +24,7 @@ ReduxTC uses the official UniFi Network API to:
 
 UniFi should point to a single external portal URL, like:
 
-```
+```text
 https://wifi.reduxtc.com/guest/
 ```
 
@@ -51,17 +56,15 @@ Some UniFi deployments are “tenant-mode” (hosted / multi-tenant UniFi). Thos
 - normal controller: `/v1/sites/{siteId}/...`
 - tenant-mode: `/v1/tenants/{tenantId}/sites/{siteId}/...`
 
-You don’t have to memorize this — the rule is simple:
+Rule:
 
 > If the controller config includes a `tenant_id`, we call the tenant-mode endpoints.
-
-If you see “client not found” errors on a hosted controller, this is the first thing to double-check.
 
 ---
 
 ## Identity providers (OIDC)
 
-OIDC providers enable single sign-on (SSO) for guests (and potentially staff depending on how you deploy).
+OIDC providers enable single sign-on (SSO) for guests.
 
 What to expect:
 
@@ -69,8 +72,11 @@ What to expect:
 - PKCE + state validation
 - Optional domain allowlists per site (so only the right users can sign in)
 
-Practical tip: captive portal browsers are limited. If SSO is flaky inside the captive window, we provide an
+Captive portal browsers are limited. If SSO is flaky inside the captive window, the portal provides an
 “Open in browser” fallback so guests can complete sign-in in a normal browser.
+
+Setup guide:
+- **[OIDC SSO (Microsoft Entra ID)](oidc-m365.md)**
 
 ---
 
@@ -78,13 +84,14 @@ Practical tip: captive portal browsers are limited. If SSO is flaky inside the c
 
 Email OTP depends on your SMTP provider.
 
-A few real-world tips:
+Tips:
 
 - Use a sender domain you control and set up SPF/DKIM/DMARC so codes don’t land in spam.
 - Rate limits apply (by design) to prevent abuse.
 - If users report “no code received,” check deliverability first (spam folder, blocks, bounced messages).
 
-SMTP settings live in `.env` (start from `.env-sample` at the repo root).
+Setup guide:
+- **[Email OTP (SMTP)](email-otp-smtp.md)**
 
 ---
 

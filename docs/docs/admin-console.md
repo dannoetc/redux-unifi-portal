@@ -1,57 +1,56 @@
 # Admin Console
 
-The admin console is where MSP operators and tenant admins configure guest access, sites, and
-reporting. Access is scoped to the tenant(s) you belong to.
+The admin console is where MSP operators and tenant admins configure guest access, sites, and reporting.
 
-## Tenants and sites
+Admin URL:
+- `https://<your-domain>/admin`
 
-- **Tenants** represent customer organizations.
-- **Sites** are the physical or logical locations under a tenant.
-- Each site stores branding and UniFi policy defaults for guest sessions.
+---
 
-## Admin roles
+## Admin UI map (what’s where)
 
-- **Superadmins** can manage all tenants and platform settings.
-- **Tenant admins** can configure sites, authentication methods, and reporting for their tenant.
+Left sidebar:
 
-## Site configuration
+- **Dashboard** — quick links and status
+- **Tenants** — create/edit tenants + default UniFi controller config
+- **Sites** — create/edit sites + branding/policies + UniFi site mapping
+- **Admins** — create/edit admin users and roles
+- **OIDC** — create/edit OIDC providers (tenant-scoped)
+- **Vouchers** — generate voucher batches and export to CSV
+- **Auth Events** — audit trail + export CSV
 
-Administrators can configure per-site settings including:
+---
 
-- **Portal branding** (logo and colors).
-- **Guest policy defaults** such as time limits and bandwidth caps.
-- **Custom portal HTML** (optional), with the built-in portal injected at `{{portal}}`.
+## Common workflows (with the right docs)
 
-## Authentication methods
+### Create a new customer
+1. Create tenant + default UniFi controller config  
+   → **[Tenant Onboarding](tenant-onboarding.md)**
 
-Each site can enable one or more methods:
+2. Create site(s) + UniFi site id mapping + branding/policies  
+   → **[Site Setup Checklist](site-setup.md)**
 
-- **Voucher codes** for staff-issued guest access.
-- **Email OTP** for verified email-based access.
-- **OIDC SSO** for enterprise or school identity providers.
-- **TOS-only access** for frictionless onboarding.
+3. Configure UniFi captive portal external URL  
+   → **[UniFi Setup](unifi-setup.md)**
 
-## Voucher management
+### Enable guest authentication
+- Vouchers → **[Vouchers](vouchers.md)**
+- Email OTP → **[Email OTP (SMTP)](email-otp-smtp.md)**
+- Microsoft SSO (OIDC) → **[OIDC SSO (Microsoft Entra ID)](oidc-m365.md)**
 
-- Create **voucher batches** with optional expiration and usage limits.
-- Export voucher codes to CSV for printing or distribution.
-- Track voucher redemption history.
+### Audit and reporting
+- Auth Events table + export CSV  
+  → **[Auth Events & Reporting](auth-events.md)**
 
-## OIDC provider management
+### Staff access control
+- Create admins, set roles, grant superadmin when needed  
+  → **[Admin Users & Roles](admin-users.md)**
 
-- Configure identity providers (issuer, client ID, scopes).
-- Enable providers per site with optional domain restrictions.
+---
 
-## Auth events and auditing
+## Notes on tenant isolation
 
-- View guest authorization events per tenant/site.
-- Filter events by site, method, and time range.
-- Export audit logs to CSV for reporting.
+- Data is scoped by **tenant** and **site**
+- Admin access is limited to assigned tenant(s) unless you’re a superadmin
 
-## Common admin workflows
-
-1. **Create a tenant and site** for each customer location.
-2. **Configure UniFi settings** and a default access policy for the site.
-3. **Enable authentication methods** and set branding/terms for the guest portal.
-4. **Issue vouchers or configure SSO** depending on guest access needs.
-5. **Monitor auth events** to validate usage and detect issues.
+See: **[Operations & Security](operations-security.md)**
