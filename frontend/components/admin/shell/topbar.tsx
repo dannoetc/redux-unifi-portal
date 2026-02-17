@@ -11,6 +11,7 @@ const TITLE_MAP = [
   { path: "/admin/admin-users", label: "Admins" },
   { path: "/admin/oidc-providers", label: "OIDC" },
   { path: "/admin/vouchers", label: "Vouchers" },
+  { path: "/admin/reports", label: "Reports" },
   { path: "/admin/auth-events", label: "Auth Events" },
   { path: "/admin", label: "Dashboard" },
 ];

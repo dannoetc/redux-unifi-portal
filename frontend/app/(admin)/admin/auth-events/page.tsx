@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { ColumnDef } from "@tanstack/react-table";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 
 import { apiDownloadCsv, apiFetch } from "@/lib/api";
@@ -39,12 +40,42 @@ type Filters = {
   siteId: string;
 };
 
-export default function AuthEventsPage() {
+const METHOD_OPTIONS = ["voucher", "email_otp", "oidc", "tos_only"] as const;
+const RESULT_OPTIONS = ["success", "fail"] as const;
+
+function parseInitialFilters(searchParams: URLSearchParams): Filters {
+  const method = searchParams.get("method") ?? "";
+  const result = searchParams.get("result") ?? "";
+  return {
+    method: METHOD_OPTIONS.includes(method as (typeof METHOD_OPTIONS)[number]) ? method : "",
+    result: RESULT_OPTIONS.includes(result as (typeof RESULT_OPTIONS)[number]) ? result : "",
+    search: searchParams.get("search") ?? "",
+    siteId: searchParams.get("site_id") ?? "",
+  };
+}
+
+function filtersEqual(a: Filters, b: Filters) {
+  return (
+    a.method === b.method &&
+    a.result === b.result &&
+    a.search === b.search &&
+    a.siteId === b.siteId
+  );
+}
+
+function AuthEventsPageContent() {
+  const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { tenantId, tenants } = useTenantSelection();
+  const initialFilters = useMemo(
+    () => parseInitialFilters(new URLSearchParams(searchParams.toString())),
+    [searchParams]
+  );
   const [events, setEvents] = useState<AuthEvent[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState<Filters>({ method: "", result: "", search: "", siteId: "" });
+  const [filters, setFilters] = useState<Filters>(initialFilters);
   const activeTenant = tenants.find((tenant) => tenant.id === tenantId) ?? null;
 
   const siteLookup = useMemo(
@@ -56,6 +87,29 @@ export default function AuthEventsPage() {
     () => (filters.siteId ? events.filter((event) => event.site_id === filters.siteId) : events),
     [events, filters.siteId]
   );
+
+  useEffect(() => {
+    setFilters((current) => (filtersEqual(current, initialFilters) ? current : initialFilters));
+  }, [initialFilters]);
+
+  useEffect(() => {
+    if (filters.siteId && sites.length > 0 && !sites.some((site) => site.id === filters.siteId)) {
+      setFilters((prev) => ({ ...prev, siteId: "" }));
+    }
+  }, [filters.siteId, sites]);
+
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (filters.method) params.set("method", filters.method);
+    if (filters.result) params.set("result", filters.result);
+    if (filters.search) params.set("search", filters.search);
+    if (filters.siteId) params.set("site_id", filters.siteId);
+    const nextQuery = params.toString();
+    const currentQuery = searchParams.toString();
+    if (nextQuery !== currentQuery) {
+      router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
+    }
+  }, [filters, pathname, router, searchParams]);
 
   useEffect(() => {
     if (!tenantId) {
@@ -147,8 +201,18 @@ export default function AuthEventsPage() {
     if (!tenantId) {
       return;
     }
+    const params = new URLSearchParams();
+    if (filters.method) params.set("method", filters.method);
+    if (filters.result) params.set("result", filters.result);
+    if (filters.search) params.set("search", filters.search);
+    if (filters.siteId) params.set("site_id", filters.siteId);
+
     try {
-      await apiDownloadCsv(`/api/admin/tenants/${tenantId}/auth-events/export.csv`, "auth-events.csv");
+      const suffix = params.toString();
+      await apiDownloadCsv(
+        `/api/admin/tenants/${tenantId}/auth-events/export.csv${suffix ? `?${suffix}` : ""}`,
+        "auth-events.csv"
+      );
       toast.success("CSV exported.");
     } catch (error: any) {
       toast.error(error?.message ?? "Unable to export events.");
@@ -184,6 +248,7 @@ export default function AuthEventsPage() {
                 <option value="voucher">Voucher</option>
                 <option value="email_otp">Email OTP</option>
                 <option value="oidc">OIDC</option>
+                <option value="tos_only">TOS only</option>
               </select>
             </div>
             <div className="space-y-2">
@@ -254,5 +319,13 @@ export default function AuthEventsPage() {
         </div>
       </Card>
     </div>
+  );
+}
+
+export default function AuthEventsPage() {
+  return (
+    <Suspense fallback={<div className="space-y-6 text-sm text-muted-foreground">Loading auth events...</div>}>
+      <AuthEventsPageContent />
+    </Suspense>
   );
 }

@@ -120,6 +120,9 @@ export function AdminShellControls() {
               <a className="rounded-md px-2 py-1 hover:bg-muted" href="/admin/vouchers">
                 Vouchers
               </a>
+              <a className="rounded-md px-2 py-1 hover:bg-muted" href="/admin/reports">
+                Reports
+              </a>
               <a className="rounded-md px-2 py-1 hover:bg-muted" href="/admin/auth-events">
                 Auth events
               </a>

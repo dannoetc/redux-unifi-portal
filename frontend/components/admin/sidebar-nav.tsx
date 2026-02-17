@@ -13,6 +13,7 @@ const NAV_ITEMS = [
   { href: "/admin/admin-users", label: "Admins" },
   { href: "/admin/oidc-providers", label: "OIDC" },
   { href: "/admin/vouchers", label: "Vouchers" },
+  { href: "/admin/reports", label: "Reports" },
   { href: "/admin/auth-events", label: "Auth Events" },
 ];
 

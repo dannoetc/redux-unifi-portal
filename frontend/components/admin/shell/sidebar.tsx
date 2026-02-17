@@ -11,6 +11,7 @@ import {
   Ticket,
   Activity,
   Building2,
+  LineChart,
 } from "lucide-react";
 
 import { SidebarNav } from "@/components/admin/sidebar-nav";
@@ -62,6 +63,7 @@ export function Sidebar({ collapsed, onCollapsedChange }: SidebarProps) {
             Admins: Shield,
             OIDC: KeyRound,
             Vouchers: Ticket,
+            Reports: LineChart,
             "Auth Events": Activity,
             default: Users,
           }}

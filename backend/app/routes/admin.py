@@ -8,7 +8,7 @@ import secrets
 import string
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -26,12 +26,29 @@ from app.models import (
     AuthResult,
     GuestIdentity,
     OidcProvider,
+    PortalSession,
+    PortalSessionStatus,
     Site,
     SiteOidcSetting,
     Tenant,
     TenantStatus,
     Voucher,
     VoucherBatch,
+    VoucherRedemption,
+)
+from app.schemas.admin_dashboard import (
+    DashboardDailyPoint,
+    DashboardMethodBreakdown,
+    DashboardOverview,
+    DashboardSiteOption,
+    DashboardSiteRollup,
+    DashboardSummaryResponse,
+)
+from app.schemas.admin_report import (
+    MethodDailyTrendResponse,
+    MethodDailyTrendRow,
+    SiteComparisonResponse,
+    SiteComparisonRow,
 )
 from app.schemas.admin import AdminLoginRequest
 from app.schemas.admin_oidc import (
@@ -1307,10 +1324,13 @@ def list_auth_events(
     method: str | None = None,
     result: str | None = None,
     search: str | None = None,
+    site_id: uuid.UUID | None = None,
     db: Session = Depends(get_db),
     _admin: AdminUser = Depends(require_tenant_role([AdminRole.TENANT_VIEWER, AdminRole.TENANT_ADMIN])),
 ) -> dict:
-    query = _auth_events_query(tenant_id, method, result, search)
+    if site_id is not None:
+        _require_site_in_tenant(db, tenant_id=tenant_id, site_id=site_id)
+    query = _auth_events_query(tenant_id, method, result, search, site_id)
     events = db.execute(query).scalars().all()
     payload = [
         {
@@ -1328,16 +1348,372 @@ def list_auth_events(
     return {"ok": True, "data": {"events": payload}}
 
 
+@router.get("/tenants/{tenant_id}/dashboard/summary")
+def dashboard_summary(
+    tenant_id: uuid.UUID,
+    days: int = 30,
+    site_id: uuid.UUID | None = None,
+    db: Session = Depends(get_db),
+    _admin: AdminUser = Depends(require_tenant_role([AdminRole.TENANT_VIEWER, AdminRole.TENANT_ADMIN])),
+) -> dict:
+    period_days = _validate_dashboard_days(days)
+    now = datetime.now(timezone.utc)
+    window_start_date = (now - timedelta(days=period_days - 1)).date()
+    window_start = datetime.combine(window_start_date, datetime.min.time(), tzinfo=timezone.utc)
+
+    site_rows = db.execute(
+        select(Site.id, Site.display_name).where(Site.tenant_id == tenant_id)
+    ).all()
+    site_names = {row.id: row.display_name for row in site_rows}
+    if site_id is not None and site_id not in site_names:
+        raise HTTPException(
+            status_code=404,
+            detail={"ok": False, "error": {"code": "NOT_FOUND", "message": "Site not found."}},
+        )
+
+    portal_sessions_query = select(PortalSession).where(
+        PortalSession.tenant_id == tenant_id,
+        PortalSession.created_at >= window_start,
+    )
+    auth_events_query = select(AuthEvent).where(
+        AuthEvent.tenant_id == tenant_id,
+        AuthEvent.created_at >= window_start,
+    )
+    voucher_redemptions_query = select(VoucherRedemption).where(
+        VoucherRedemption.tenant_id == tenant_id,
+        VoucherRedemption.redeemed_at >= window_start,
+    )
+    if site_id is not None:
+        portal_sessions_query = portal_sessions_query.where(PortalSession.site_id == site_id)
+        auth_events_query = auth_events_query.where(AuthEvent.site_id == site_id)
+        voucher_redemptions_query = voucher_redemptions_query.where(VoucherRedemption.site_id == site_id)
+
+    portal_sessions = db.execute(portal_sessions_query).scalars().all()
+    auth_events = db.execute(auth_events_query).scalars().all()
+    voucher_redemptions = db.execute(voucher_redemptions_query).scalars().all()
+
+    method_order = [
+        AuthMethod.VOUCHER.value.lower(),
+        AuthMethod.EMAIL_OTP.value.lower(),
+        AuthMethod.OIDC.value.lower(),
+        AuthMethod.TOS_ONLY.value.lower(),
+    ]
+    method_totals = {
+        method: {"attempts": 0, "success": 0, "fail": 0}
+        for method in method_order
+    }
+    day_points = {}
+    for offset in range(period_days):
+        day = (window_start_date + timedelta(days=offset)).isoformat()
+        day_points[day] = {
+            "day": day,
+            "sessions_started": 0,
+            "sessions_authorized": 0,
+            "sessions_failed": 0,
+            "auth_attempts": 0,
+            "auth_success": 0,
+            "auth_fail": 0,
+            "voucher_redemptions": 0,
+            "tos_clicks": 0,
+            "otp_success": 0,
+            "oidc_success": 0,
+        }
+
+    site_rollups: dict[uuid.UUID, dict[str, int | str]] = {}
+
+    def get_site_rollup(site_uuid: uuid.UUID) -> dict[str, int | str]:
+        rollup = site_rollups.get(site_uuid)
+        if rollup is not None:
+            return rollup
+        rollup = {
+            "site_id": str(site_uuid),
+            "site_name": site_names.get(site_uuid, str(site_uuid)),
+            "sessions_started": 0,
+            "auth_attempts": 0,
+            "auth_success": 0,
+            "voucher_redemptions": 0,
+            "tos_clicks": 0,
+        }
+        site_rollups[site_uuid] = rollup
+        return rollup
+
+    auth_success = 0
+    auth_fail = 0
+    sessions_authorized = 0
+    sessions_failed = 0
+
+    for session in portal_sessions:
+        day = session.created_at.date().isoformat()
+        if day not in day_points:
+            continue
+        day_points[day]["sessions_started"] += 1
+        rollup = get_site_rollup(session.site_id)
+        rollup["sessions_started"] = int(rollup["sessions_started"]) + 1
+
+        if session.status in {PortalSessionStatus.AUTHORIZED, PortalSessionStatus.AUTHED}:
+            day_points[day]["sessions_authorized"] += 1
+            sessions_authorized += 1
+        elif session.status == PortalSessionStatus.FAILED:
+            day_points[day]["sessions_failed"] += 1
+            sessions_failed += 1
+
+    for event in auth_events:
+        day = event.created_at.date().isoformat()
+        if day not in day_points:
+            continue
+        day_points[day]["auth_attempts"] += 1
+        method = event.method.value.lower()
+        result = event.result.value.lower()
+        method_stats = method_totals.setdefault(method, {"attempts": 0, "success": 0, "fail": 0})
+        method_stats["attempts"] += 1
+
+        rollup = get_site_rollup(event.site_id)
+        rollup["auth_attempts"] = int(rollup["auth_attempts"]) + 1
+
+        if result == AuthResult.SUCCESS.value.lower():
+            day_points[day]["auth_success"] += 1
+            method_stats["success"] += 1
+            rollup["auth_success"] = int(rollup["auth_success"]) + 1
+            auth_success += 1
+            if method == AuthMethod.TOS_ONLY.value.lower():
+                day_points[day]["tos_clicks"] += 1
+                rollup["tos_clicks"] = int(rollup["tos_clicks"]) + 1
+            elif method == AuthMethod.EMAIL_OTP.value.lower():
+                day_points[day]["otp_success"] += 1
+            elif method == AuthMethod.OIDC.value.lower():
+                day_points[day]["oidc_success"] += 1
+        else:
+            day_points[day]["auth_fail"] += 1
+            method_stats["fail"] += 1
+            auth_fail += 1
+
+    for redemption in voucher_redemptions:
+        day = redemption.redeemed_at.date().isoformat()
+        if day not in day_points:
+            continue
+        day_points[day]["voucher_redemptions"] += 1
+        rollup = get_site_rollup(redemption.site_id)
+        rollup["voucher_redemptions"] = int(rollup["voucher_redemptions"]) + 1
+
+    auth_attempts = len(auth_events)
+    success_rate = round((auth_success / auth_attempts) * 100, 2) if auth_attempts else 0.0
+
+    method_payload: list[DashboardMethodBreakdown] = []
+    for method in method_order + [key for key in method_totals.keys() if key not in method_order]:
+        stats = method_totals[method]
+        attempts = stats["attempts"]
+        method_payload.append(
+            DashboardMethodBreakdown(
+                method=method,
+                attempts=attempts,
+                success=stats["success"],
+                fail=stats["fail"],
+                success_rate=round((stats["success"] / attempts) * 100, 2) if attempts else 0.0,
+            )
+        )
+
+    daily_payload = [
+        DashboardDailyPoint(**day_points[(window_start_date + timedelta(days=offset)).isoformat()])
+        for offset in range(period_days)
+    ]
+
+    site_payload = []
+    for rollup in site_rollups.values():
+        attempts = int(rollup["auth_attempts"])
+        success = int(rollup["auth_success"])
+        site_payload.append(
+            DashboardSiteRollup(
+                site_id=str(rollup["site_id"]),
+                site_name=str(rollup["site_name"]),
+                sessions_started=int(rollup["sessions_started"]),
+                auth_attempts=attempts,
+                auth_success=success,
+                voucher_redemptions=int(rollup["voucher_redemptions"]),
+                tos_clicks=int(rollup["tos_clicks"]),
+                success_rate=round((success / attempts) * 100, 2) if attempts else 0.0,
+            )
+        )
+    site_payload.sort(
+        key=lambda row: (row.auth_success, row.auth_attempts, row.sessions_started),
+        reverse=True,
+    )
+
+    summary = DashboardSummaryResponse(
+        period_days=period_days,
+        site_id=str(site_id) if site_id else None,
+        window_start=window_start.isoformat(),
+        window_end=now.isoformat(),
+        generated_at=now.isoformat(),
+        overview=DashboardOverview(
+            sessions_started=len(portal_sessions),
+            sessions_authorized=sessions_authorized,
+            sessions_failed=sessions_failed,
+            auth_attempts=auth_attempts,
+            auth_success=auth_success,
+            auth_fail=auth_fail,
+            success_rate=success_rate,
+            voucher_redemptions=len(voucher_redemptions),
+            tos_clicks=method_totals[AuthMethod.TOS_ONLY.value.lower()]["success"],
+        ),
+        methods=method_payload,
+        daily=daily_payload,
+        sites=site_payload,
+        site_options=[
+            DashboardSiteOption(id=str(site_uuid), display_name=display_name)
+            for site_uuid, display_name in sorted(
+                site_names.items(),
+                key=lambda item: item[1].lower(),
+            )
+        ],
+    )
+    return {"ok": True, "data": summary.model_dump(mode="json")}
+
+
+@router.get("/tenants/{tenant_id}/reports/method-daily")
+def method_daily_report(
+    tenant_id: uuid.UUID,
+    days: int = 30,
+    site_id: uuid.UUID | None = None,
+    method: str | None = None,
+    db: Session = Depends(get_db),
+    _admin: AdminUser = Depends(require_tenant_role([AdminRole.TENANT_VIEWER, AdminRole.TENANT_ADMIN])),
+) -> dict:
+    period_days = _validate_dashboard_days(days)
+    if site_id is not None:
+        _require_site_in_tenant(db, tenant_id=tenant_id, site_id=site_id)
+    parsed_method = _parse_auth_method(method)
+    report = _build_method_daily_report(
+        db,
+        tenant_id=tenant_id,
+        period_days=period_days,
+        site_id=site_id,
+        method=parsed_method,
+    )
+    return {"ok": True, "data": report.model_dump(mode="json")}
+
+
+@router.get("/tenants/{tenant_id}/reports/method-daily/export.csv")
+def export_method_daily_report(
+    tenant_id: uuid.UUID,
+    days: int = 30,
+    site_id: uuid.UUID | None = None,
+    method: str | None = None,
+    db: Session = Depends(get_db),
+    _admin: AdminUser = Depends(require_tenant_role([AdminRole.TENANT_VIEWER, AdminRole.TENANT_ADMIN])),
+) -> StreamingResponse:
+    period_days = _validate_dashboard_days(days)
+    if site_id is not None:
+        _require_site_in_tenant(db, tenant_id=tenant_id, site_id=site_id)
+    parsed_method = _parse_auth_method(method)
+    report = _build_method_daily_report(
+        db,
+        tenant_id=tenant_id,
+        period_days=period_days,
+        site_id=site_id,
+        method=parsed_method,
+    )
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["day", "method", "attempts", "success", "fail", "success_rate"])
+    for row in report.rows:
+        writer.writerow([row.day, row.method, row.attempts, row.success, row.fail, row.success_rate])
+    output.seek(0)
+
+    headers = {"Content-Disposition": "attachment; filename=method-daily-report.csv"}
+    return StreamingResponse(output, media_type="text/csv", headers=headers)
+
+
+@router.get("/tenants/{tenant_id}/reports/site-comparison")
+def site_comparison_report(
+    tenant_id: uuid.UUID,
+    days: int = 30,
+    site_id: uuid.UUID | None = None,
+    method: str | None = None,
+    db: Session = Depends(get_db),
+    _admin: AdminUser = Depends(require_tenant_role([AdminRole.TENANT_VIEWER, AdminRole.TENANT_ADMIN])),
+) -> dict:
+    period_days = _validate_dashboard_days(days)
+    if site_id is not None:
+        _require_site_in_tenant(db, tenant_id=tenant_id, site_id=site_id)
+    parsed_method = _parse_auth_method(method)
+    report = _build_site_comparison_report(
+        db,
+        tenant_id=tenant_id,
+        period_days=period_days,
+        site_id=site_id,
+        method=parsed_method,
+    )
+    return {"ok": True, "data": report.model_dump(mode="json")}
+
+
+@router.get("/tenants/{tenant_id}/reports/site-comparison/export.csv")
+def export_site_comparison_report(
+    tenant_id: uuid.UUID,
+    days: int = 30,
+    site_id: uuid.UUID | None = None,
+    method: str | None = None,
+    db: Session = Depends(get_db),
+    _admin: AdminUser = Depends(require_tenant_role([AdminRole.TENANT_VIEWER, AdminRole.TENANT_ADMIN])),
+) -> StreamingResponse:
+    period_days = _validate_dashboard_days(days)
+    if site_id is not None:
+        _require_site_in_tenant(db, tenant_id=tenant_id, site_id=site_id)
+    parsed_method = _parse_auth_method(method)
+    report = _build_site_comparison_report(
+        db,
+        tenant_id=tenant_id,
+        period_days=period_days,
+        site_id=site_id,
+        method=parsed_method,
+    )
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(
+        [
+            "site_id",
+            "site_name",
+            "auth_attempts",
+            "auth_success",
+            "auth_fail",
+            "success_rate",
+            "voucher_redemptions",
+            "tos_clicks",
+        ]
+    )
+    for row in report.rows:
+        writer.writerow(
+            [
+                row.site_id,
+                row.site_name,
+                row.auth_attempts,
+                row.auth_success,
+                row.auth_fail,
+                row.success_rate,
+                row.voucher_redemptions,
+                row.tos_clicks,
+            ]
+        )
+    output.seek(0)
+
+    headers = {"Content-Disposition": "attachment; filename=site-comparison-report.csv"}
+    return StreamingResponse(output, media_type="text/csv", headers=headers)
+
+
 @router.get("/tenants/{tenant_id}/auth-events/export.csv")
 def export_auth_events(
     tenant_id: uuid.UUID,
     method: str | None = None,
     result: str | None = None,
     search: str | None = None,
+    site_id: uuid.UUID | None = None,
     db: Session = Depends(get_db),
     _admin: AdminUser = Depends(require_tenant_role([AdminRole.TENANT_VIEWER, AdminRole.TENANT_ADMIN])),
 ) -> StreamingResponse:
-    query = _auth_events_query(tenant_id, method, result, search)
+    if site_id is not None:
+        _require_site_in_tenant(db, tenant_id=tenant_id, site_id=site_id)
+    query = _auth_events_query(tenant_id, method, result, search, site_id)
     events = db.execute(query).scalars().all()
     output = io.StringIO()
     writer = csv.writer(output)
@@ -1514,11 +1890,225 @@ def _parse_auth_result(value: str | None) -> AuthResult | None:
         ) from exc
 
 
+def _validate_dashboard_days(days: int) -> int:
+    if days < 1 or days > 90:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "ok": False,
+                "error": {"code": "INVALID_RANGE", "message": "days must be between 1 and 90."},
+            },
+        )
+    return days
+
+
+def _require_site_in_tenant(db: Session, *, tenant_id: uuid.UUID, site_id: uuid.UUID) -> None:
+    site_exists = db.execute(
+        select(Site.id).where(Site.id == site_id, Site.tenant_id == tenant_id)
+    ).scalar_one_or_none()
+    if site_exists is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"ok": False, "error": {"code": "NOT_FOUND", "message": "Site not found."}},
+        )
+
+
+def _build_method_daily_report(
+    db: Session,
+    *,
+    tenant_id: uuid.UUID,
+    period_days: int,
+    site_id: uuid.UUID | None,
+    method: AuthMethod | None,
+) -> MethodDailyTrendResponse:
+    now = datetime.now(timezone.utc)
+    window_start_date = (now - timedelta(days=period_days - 1)).date()
+    window_start = datetime.combine(window_start_date, datetime.min.time(), tzinfo=timezone.utc)
+
+    events_query = select(AuthEvent).where(
+        AuthEvent.tenant_id == tenant_id,
+        AuthEvent.created_at >= window_start,
+    )
+    if site_id is not None:
+        events_query = events_query.where(AuthEvent.site_id == site_id)
+    if method is not None:
+        events_query = events_query.where(AuthEvent.method == method)
+    events = db.execute(events_query).scalars().all()
+
+    method_keys = (
+        [method.value.lower()]
+        if method is not None
+        else [member.value.lower() for member in AuthMethod]
+    )
+    rows_by_key: dict[tuple[str, str], dict[str, int]] = {}
+    for offset in range(period_days):
+        day = (window_start_date + timedelta(days=offset)).isoformat()
+        for method_key in method_keys:
+            rows_by_key[(day, method_key)] = {"attempts": 0, "success": 0, "fail": 0}
+
+    for event in events:
+        day = event.created_at.date().isoformat()
+        method_key = event.method.value.lower()
+        key = (day, method_key)
+        if key not in rows_by_key:
+            continue
+        rows_by_key[key]["attempts"] += 1
+        if event.result == AuthResult.SUCCESS:
+            rows_by_key[key]["success"] += 1
+        else:
+            rows_by_key[key]["fail"] += 1
+
+    rows: list[MethodDailyTrendRow] = []
+    for offset in range(period_days):
+        day = (window_start_date + timedelta(days=offset)).isoformat()
+        for method_key in method_keys:
+            values = rows_by_key[(day, method_key)]
+            attempts = values["attempts"]
+            rows.append(
+                MethodDailyTrendRow(
+                    day=day,
+                    method=method_key,
+                    attempts=attempts,
+                    success=values["success"],
+                    fail=values["fail"],
+                    success_rate=round((values["success"] / attempts) * 100, 2) if attempts else 0.0,
+                )
+            )
+
+    return MethodDailyTrendResponse(
+        period_days=period_days,
+        site_id=str(site_id) if site_id else None,
+        method=method.value.lower() if method else None,
+        window_start=window_start.isoformat(),
+        window_end=now.isoformat(),
+        generated_at=now.isoformat(),
+        rows=rows,
+    )
+
+
+def _build_site_comparison_report(
+    db: Session,
+    *,
+    tenant_id: uuid.UUID,
+    period_days: int,
+    site_id: uuid.UUID | None,
+    method: AuthMethod | None,
+) -> SiteComparisonResponse:
+    now = datetime.now(timezone.utc)
+    window_start_date = (now - timedelta(days=period_days - 1)).date()
+    window_start = datetime.combine(window_start_date, datetime.min.time(), tzinfo=timezone.utc)
+
+    site_rows = db.execute(
+        select(Site.id, Site.display_name).where(Site.tenant_id == tenant_id)
+    ).all()
+    site_names = {row.id: row.display_name for row in site_rows}
+
+    events_query = select(AuthEvent).where(
+        AuthEvent.tenant_id == tenant_id,
+        AuthEvent.created_at >= window_start,
+    )
+    redemptions_query = select(VoucherRedemption).where(
+        VoucherRedemption.tenant_id == tenant_id,
+        VoucherRedemption.redeemed_at >= window_start,
+    )
+    if site_id is not None:
+        events_query = events_query.where(AuthEvent.site_id == site_id)
+        redemptions_query = redemptions_query.where(VoucherRedemption.site_id == site_id)
+    if method is not None:
+        events_query = events_query.where(AuthEvent.method == method)
+
+    events = db.execute(events_query).scalars().all()
+    redemptions = db.execute(redemptions_query).scalars().all()
+
+    if site_id is not None:
+        target_ids = [site_id]
+    else:
+        target_ids = sorted(site_names.keys(), key=lambda candidate: site_names[candidate].lower())
+
+    rows_by_site: dict[uuid.UUID, dict[str, int | str]] = {
+        candidate: {
+            "site_name": site_names.get(candidate, str(candidate)),
+            "auth_attempts": 0,
+            "auth_success": 0,
+            "auth_fail": 0,
+            "voucher_redemptions": 0,
+            "tos_clicks": 0,
+        }
+        for candidate in target_ids
+    }
+
+    for event in events:
+        bucket = rows_by_site.setdefault(
+            event.site_id,
+            {
+                "site_name": site_names.get(event.site_id, str(event.site_id)),
+                "auth_attempts": 0,
+                "auth_success": 0,
+                "auth_fail": 0,
+                "voucher_redemptions": 0,
+                "tos_clicks": 0,
+            },
+        )
+        bucket["auth_attempts"] = int(bucket["auth_attempts"]) + 1
+        if event.result == AuthResult.SUCCESS:
+            bucket["auth_success"] = int(bucket["auth_success"]) + 1
+            if event.method == AuthMethod.TOS_ONLY:
+                bucket["tos_clicks"] = int(bucket["tos_clicks"]) + 1
+        else:
+            bucket["auth_fail"] = int(bucket["auth_fail"]) + 1
+
+    for redemption in redemptions:
+        bucket = rows_by_site.setdefault(
+            redemption.site_id,
+            {
+                "site_name": site_names.get(redemption.site_id, str(redemption.site_id)),
+                "auth_attempts": 0,
+                "auth_success": 0,
+                "auth_fail": 0,
+                "voucher_redemptions": 0,
+                "tos_clicks": 0,
+            },
+        )
+        bucket["voucher_redemptions"] = int(bucket["voucher_redemptions"]) + 1
+
+    rows = []
+    for candidate, bucket in rows_by_site.items():
+        attempts = int(bucket["auth_attempts"])
+        success = int(bucket["auth_success"])
+        rows.append(
+            SiteComparisonRow(
+                site_id=str(candidate),
+                site_name=str(bucket["site_name"]),
+                auth_attempts=attempts,
+                auth_success=success,
+                auth_fail=int(bucket["auth_fail"]),
+                success_rate=round((success / attempts) * 100, 2) if attempts else 0.0,
+                voucher_redemptions=int(bucket["voucher_redemptions"]),
+                tos_clicks=int(bucket["tos_clicks"]),
+            )
+        )
+    rows.sort(
+        key=lambda row: (row.auth_success, row.auth_attempts, row.voucher_redemptions, row.site_name.lower()),
+        reverse=True,
+    )
+
+    return SiteComparisonResponse(
+        period_days=period_days,
+        site_id=str(site_id) if site_id else None,
+        method=method.value.lower() if method else None,
+        window_start=window_start.isoformat(),
+        window_end=now.isoformat(),
+        generated_at=now.isoformat(),
+        rows=rows,
+    )
+
+
 def _auth_events_query(
     tenant_id: uuid.UUID,
     method: str | None,
     result: str | None,
     search: str | None,
+    site_id: uuid.UUID | None,
 ):
     query = select(AuthEvent).where(AuthEvent.tenant_id == tenant_id)
     parsed_method = _parse_auth_method(method)
@@ -1527,6 +2117,8 @@ def _auth_events_query(
         query = query.where(AuthEvent.method == parsed_method)
     if parsed_result is not None:
         query = query.where(AuthEvent.result == parsed_result)
+    if site_id is not None:
+        query = query.where(AuthEvent.site_id == site_id)
     if search:
         trimmed = search.strip()
         if trimmed:

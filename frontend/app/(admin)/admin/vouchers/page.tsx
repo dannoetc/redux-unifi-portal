@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
@@ -31,7 +32,9 @@ type SiteList = { sites: Site[] };
 
 type BatchResponse = { batch_id: string; count: number };
 
-export default function VouchersPage() {
+function VouchersPageContent() {
+  const searchParams = useSearchParams();
+  const querySiteId = searchParams.get("site_id") ?? "";
   const { tenantId, tenants } = useTenantSelection();
   const [sites, setSites] = useState<Site[]>([]);
   const [siteId, setSiteId] = useState<string>("");
@@ -61,7 +64,15 @@ export default function VouchersPage() {
           return;
         }
         setSites(data.sites);
-        setSiteId((current) => current || data.sites[0]?.id || "");
+        setSiteId((current) => {
+          if (querySiteId && data.sites.some((site) => site.id === querySiteId)) {
+            return querySiteId;
+          }
+          if (current && data.sites.some((site) => site.id === current)) {
+            return current;
+          }
+          return data.sites[0]?.id || "";
+        });
       })
       .catch((error) => {
         toast.error(error?.message ?? "Unable to load sites.");
@@ -69,7 +80,7 @@ export default function VouchersPage() {
     return () => {
       active = false;
     };
-  }, [tenantId]);
+  }, [querySiteId, tenantId]);
 
   const onSubmit = async (values: VoucherForm) => {
     if (!tenantId || !siteId) {
@@ -189,5 +200,13 @@ export default function VouchersPage() {
         </div>
       </section>
     </div>
+  );
+}
+
+export default function VouchersPage() {
+  return (
+    <Suspense fallback={<div className="space-y-6 text-sm text-muted-foreground">Loading vouchers...</div>}>
+      <VouchersPageContent />
+    </Suspense>
   );
 }
