@@ -16,15 +16,21 @@ export class ApiError extends Error {
 
 const resolveApiBaseUrl = () => {
   if (typeof window !== "undefined") {
-    if (window.location.origin.startsWith("http://")) {
-      return window.location.origin;
-    }
     const runtimeEnv = (window as Window & {
       __ENV__?: { NEXT_PUBLIC_API_BASE_URL?: string };
     }).__ENV__;
     const runtimeValue = runtimeEnv?.NEXT_PUBLIC_API_BASE_URL;
     if (runtimeValue && runtimeValue.length > 0) {
       return runtimeValue;
+    }
+    if (process.env.NEXT_PUBLIC_API_BASE_URL && process.env.NEXT_PUBLIC_API_BASE_URL.length > 0) {
+      return process.env.NEXT_PUBLIC_API_BASE_URL;
+    }
+    if (window.location.hostname === "localhost") {
+      return "http://localhost:8000";
+    }
+    if (window.location.hostname === "127.0.0.1") {
+      return "http://127.0.0.1:8000";
     }
     return window.location.origin;
   }
