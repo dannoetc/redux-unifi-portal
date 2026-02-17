@@ -243,3 +243,116 @@ def test_tenant_admin_can_update_portal_template(client, db_session):
     site_data = update_response.json()["data"]["site"]
     assert site_data["portal_template_enabled"] is True
     assert site_data["portal_template_html"] == "<div>{{portal}}</div>"
+    assert site_data["portal_template_mode"] == "embed"
+
+
+def test_tenant_admin_rejects_embed_mode_without_portal_token(client, db_session):
+    tenant = Tenant(id=uuid.uuid4(), slug="acme", name="Acme", status=TenantStatus.ACTIVE)
+    admin = AdminUser(
+        id=uuid.uuid4(),
+        email="admin@example.com",
+        password_hash=hash_password("secret"),
+        is_superadmin=False,
+    )
+    membership = AdminMembership(
+        id=uuid.uuid4(),
+        admin_user_id=admin.id,
+        tenant_id=tenant.id,
+        role=AdminRole.TENANT_ADMIN,
+    )
+    db_session.add_all([tenant, admin, membership])
+    db_session.commit()
+
+    _login_as(client, admin)
+    create_payload = {
+        "display_name": "Lobby",
+        "slug": "lobby",
+        "enabled": True,
+        "unifi_base_url": "https://unifi.local",
+        "unifi_site_id": "default",
+        "unifi_api_key_ref": "unifi-key",
+        "default_time_limit_minutes": 30,
+    }
+    response = client.post(f"/api/admin/tenants/{tenant.id}/sites", json=create_payload)
+    assert response.status_code == 200
+    site_id = response.json()["data"]["site"]["id"]
+
+    update_payload = {
+        "portal_template_mode": "embed",
+        "portal_template_html": "<div>custom</div>",
+    }
+    update_response = client.put(f"/api/admin/tenants/{tenant.id}/sites/{site_id}", json=update_payload)
+    assert update_response.status_code == 400
+    assert update_response.json()["error"]["code"] == "TEMPLATE_TOKEN_REQUIRED"
+
+
+def test_site_portal_template_version_history_and_restore(client, db_session):
+    tenant = Tenant(id=uuid.uuid4(), slug="acme", name="Acme", status=TenantStatus.ACTIVE)
+    admin = AdminUser(
+        id=uuid.uuid4(),
+        email="admin@example.com",
+        password_hash=hash_password("secret"),
+        is_superadmin=False,
+    )
+    membership = AdminMembership(
+        id=uuid.uuid4(),
+        admin_user_id=admin.id,
+        tenant_id=tenant.id,
+        role=AdminRole.TENANT_ADMIN,
+    )
+    db_session.add_all([tenant, admin, membership])
+    db_session.commit()
+
+    _login_as(client, admin)
+    create_payload = {
+        "display_name": "Lobby",
+        "slug": "lobby",
+        "enabled": True,
+        "unifi_base_url": "https://unifi.local",
+        "unifi_site_id": "default",
+        "unifi_api_key_ref": "unifi-key",
+        "default_time_limit_minutes": 30,
+    }
+    create_response = client.post(f"/api/admin/tenants/{tenant.id}/sites", json=create_payload)
+    assert create_response.status_code == 200
+    site_id = create_response.json()["data"]["site"]["id"]
+
+    embed_update = client.put(
+        f"/api/admin/tenants/{tenant.id}/sites/{site_id}",
+        json={
+            "portal_template_mode": "embed",
+            "portal_template_html": "<section>{{portal}}</section>",
+            "portal_template_theme": {"logo_size_px": 64},
+        },
+    )
+    assert embed_update.status_code == 200
+
+    replace_update = client.put(
+        f"/api/admin/tenants/{tenant.id}/sites/{site_id}",
+        json={
+            "portal_template_mode": "replace",
+            "portal_template_html": "<div id='custom'>Connect now</div>",
+            "portal_template_theme": {"logo_size_px": 48},
+        },
+    )
+    assert replace_update.status_code == 200
+
+    versions_response = client.get(
+        f"/api/admin/tenants/{tenant.id}/sites/{site_id}/portal-template-versions?limit=10&offset=0"
+    )
+    assert versions_response.status_code == 200
+    versions_payload = versions_response.json()["data"]
+    assert versions_payload["pagination"]["total"] >= 2
+    assert len(versions_payload["versions"]) >= 2
+    latest = versions_payload["versions"][0]
+    previous = versions_payload["versions"][1]
+    assert latest["portal_template_mode"] == "replace"
+    assert previous["portal_template_mode"] == "embed"
+
+    restore_response = client.post(
+        f"/api/admin/tenants/{tenant.id}/sites/{site_id}/portal-template-versions/{previous['id']}/restore"
+    )
+    assert restore_response.status_code == 200
+    restored_site = restore_response.json()["data"]["site"]
+    assert restored_site["portal_template_mode"] == "embed"
+    assert restored_site["portal_template_html"] == "<section>{{portal}}</section>"

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from sqlalchemy import Boolean, ForeignKey, Index, Integer, LargeBinary, String, Text, Uuid
+from sqlalchemy import JSON, Boolean, ForeignKey, Index, Integer, LargeBinary, String, Text, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
@@ -35,6 +35,8 @@ class Site(Base, TimestampMixin):
     terms_html: Mapped[str | None] = mapped_column(Text, nullable=True)
     portal_template_html: Mapped[str | None] = mapped_column(Text, nullable=True)
     portal_template_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    portal_template_mode: Mapped[str] = mapped_column(String(16), nullable=False, server_default="off")
+    portal_template_theme: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     enable_tos_only: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     support_contact: Mapped[str | None] = mapped_column(String(255), nullable=True)
     success_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
@@ -44,6 +46,11 @@ class Site(Base, TimestampMixin):
     auth_events = relationship("AuthEvent", back_populates="site", passive_deletes=True)
     voucher_batches = relationship("VoucherBatch", back_populates="site", passive_deletes=True)
     oidc_settings = relationship("SiteOidcSetting", back_populates="site", passive_deletes=True)
+    portal_template_versions = relationship(
+        "SitePortalTemplateVersion",
+        back_populates="site",
+        passive_deletes=True,
+    )
 
     __table_args__ = (
         Index("uq_sites_tenant_slug", "tenant_id", "slug", unique=True),

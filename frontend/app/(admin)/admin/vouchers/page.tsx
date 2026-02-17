@@ -9,6 +9,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 
 import { apiDownloadCsv, apiFetch } from "@/lib/api";
 import { useTenantSelection } from "@/lib/use-tenant";
+import { TenantOnboardingState, TenantSelectionState } from "@/components/admin/page-states";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -35,7 +36,7 @@ type BatchResponse = { batch_id: string; count: number };
 function VouchersPageContent() {
   const searchParams = useSearchParams();
   const querySiteId = searchParams.get("site_id") ?? "";
-  const { tenantId, tenants } = useTenantSelection();
+  const { tenantId, tenants, loading: tenantLoading } = useTenantSelection();
   const [sites, setSites] = useState<Site[]>([]);
   const [siteId, setSiteId] = useState<string>("");
   const [batchId, setBatchId] = useState<string>("");
@@ -50,6 +51,7 @@ function VouchersPageContent() {
   });
 
   const activeTenant = tenants.find((tenant) => tenant.id === tenantId) ?? null;
+  const noTenants = !tenantLoading && tenants.length === 0;
 
   useEffect(() => {
     if (!tenantId) {
@@ -118,6 +120,30 @@ function VouchersPageContent() {
     }
   };
 
+  if (noTenants) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-xl font-semibold">Voucher batches</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Generate access codes and export CSVs.</p>
+        </div>
+        <TenantOnboardingState description="Create a tenant before generating voucher batches." />
+      </div>
+    );
+  }
+
+  if (!tenantId) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-xl font-semibold">Voucher batches</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Generate access codes and export CSVs.</p>
+        </div>
+        <TenantSelectionState message="Select a tenant before generating voucher batches." />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -173,7 +199,7 @@ function VouchersPageContent() {
             <Input id="expires_at" placeholder="2026-01-15T12:00:00" {...form.register("expires_at")} />
           </div>
           <div className="flex items-end">
-            <Button type="submit" variant="primary">
+            <Button type="submit" variant="primary" disabled={!tenantId || !siteId}>
               Generate vouchers
             </Button>
           </div>
@@ -194,7 +220,7 @@ function VouchersPageContent() {
               placeholder="UUID"
             />
           </div>
-          <Button variant="secondary" onClick={() => exportCsv(batchId)}>
+          <Button variant="secondary" onClick={() => exportCsv(batchId)} disabled={!tenantId || !siteId || !batchId}>
             Export CSV
           </Button>
         </div>

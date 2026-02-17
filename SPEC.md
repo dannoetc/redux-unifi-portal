@@ -89,7 +89,12 @@ Feel like an “extension” of the UniFi console by matching interaction patter
 - Tenant branding overlays:
   - logo + brand color used for highlights and login/guest pages
   - avoid tenant overrides that break component geometry
-- Sites can optionally define a custom HTML portal template; the built-in portal UI renders at `{{portal}}`.
+- Sites can define a per-site portal template mode:
+  - `off` (default built-in portal only)
+  - `embed` (custom HTML with built-in portal inserted at `{{portal}}`)
+  - `replace` (custom HTML fully replaces built-in layout)
+- Sites can optionally define portal theme controls (logo size/alignment, card alignment/width, heading/body sizes, and surface/text/background colors) applied at render time.
+- Site portal templates maintain version history with rollback/restore per site.
 - Typography: Inter (or system fallback)
 - Radius: 10-12px for cards/dialogs, 8px for inputs
 - Density: "comfortable" (not condensed)
@@ -169,7 +174,7 @@ Server actions:
 - `admin_memberships` (admin_user_id, tenant_id, role)
 
 ### Sites
-- `sites` (tenant_id, slug, display_name, enabled, unifi_site_id, branding, portal_template_html, portal_template_enabled, default policy)
+- `sites` (tenant_id, slug, display_name, enabled, unifi_site_id, branding, portal_template_html, portal_template_enabled, portal_template_mode, portal_template_theme, default policy)
 
 ### UniFi controller (tenant-level)
 - `tenants` includes `unifi_base_url`, `unifi_api_key_ref` for the shared controller per tenant.
@@ -263,3 +268,4 @@ Server actions:
   - create voucher batches + export codes
   - configure OIDC provider and enable it per site
   - view/export auth events
+  - navigate long lists with pagination (auth events, reports, dashboard daily tables)

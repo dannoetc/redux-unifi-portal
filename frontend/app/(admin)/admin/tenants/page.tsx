@@ -137,6 +137,7 @@ export default function TenantsPage() {
   const [setupOpen, setSetupOpen] = useState(true);
   const [setupInitialized, setSetupInitialized] = useState(false);
   const portalUrlRef = useRef<HTMLInputElement | null>(null);
+  const [onboardingMode, setOnboardingMode] = useState(false);
 
   const form = useForm<CreateTenant>({
     resolver: zodResolver(schema),
@@ -177,6 +178,20 @@ export default function TenantsPage() {
       setSetupInitialized(true);
     }
   }, [loading, setupInitialized, tenants.length]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const params = new URLSearchParams(window.location.search);
+    setOnboardingMode(params.get("onboarding") === "1");
+  }, []);
+
+  useEffect(() => {
+    if (!loading && onboardingMode && tenants.length === 0) {
+      setDialogOpen(true);
+    }
+  }, [loading, onboardingMode, tenants.length]);
 
   const copyPortalIp = async () => {
     try {
@@ -485,6 +500,19 @@ export default function TenantsPage() {
           </DialogContent>
         </Dialog>
       </div>
+      {onboardingMode && tenants.length === 0 ? (
+        <div className="rounded-lg border border-primary/30 bg-primary/5 p-4">
+          <p className="text-sm font-semibold text-foreground">Get started</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Create your first tenant, then add sites and controller settings.
+          </p>
+          <div className="mt-3">
+            <Button variant="primary" onClick={() => setDialogOpen(true)}>
+              Create first tenant
+            </Button>
+          </div>
+        </div>
+      ) : null}
       <details
         className="group rounded-lg bg-muted/30 p-4"
         open={setupOpen}

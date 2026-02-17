@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 import { ApiError, apiDownloadCsv, apiFetch } from "@/lib/api";
 import { useTenantSelection } from "@/lib/use-tenant";
+import { DataErrorState, TenantOnboardingState, TenantSelectionState } from "@/components/admin/page-states";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -52,6 +53,8 @@ type ReportFilters = {
   siteId: string;
   method: string;
 };
+
+type TenantScope = "selected" | "all";
 
 type FilterPreset = {
   id: string;
@@ -177,34 +180,56 @@ function parseStoredPresets(raw: string | null, sites: Site[]): FilterPreset[] {
 
 export default function ReportsPage() {
   const router = useRouter();
-  const { tenantId, tenants } = useTenantSelection();
+  const { tenantId, tenants, adminUser, loading: tenantLoading } = useTenantSelection();
   const [sites, setSites] = useState<Site[]>([]);
   const [filters, setFilters] = useState<ReportFilters>(DEFAULT_FILTERS);
+  const [tenantScope, setTenantScope] = useState<TenantScope>("selected");
   const [presets, setPresets] = useState<FilterPreset[]>([]);
   const [activePresetId, setActivePresetId] = useState("");
   const [presetName, setPresetName] = useState("");
   const [hydrated, setHydrated] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [scopeError, setScopeError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [scopeReloadToken, setScopeReloadToken] = useState(0);
   const [methodDailyRows, setMethodDailyRows] = useState<MethodDailyRow[]>([]);
   const [siteRows, setSiteRows] = useState<SiteComparisonRow[]>([]);
+  const [methodPage, setMethodPage] = useState(1);
+  const [methodPageSize, setMethodPageSize] = useState(25);
+  const [sitePage, setSitePage] = useState(1);
+  const [sitePageSize, setSitePageSize] = useState(10);
 
   const activeTenant = tenants.find((tenant) => tenant.id === tenantId) ?? null;
+  const canUseAllTenants = Boolean(adminUser?.is_superadmin && tenants.length > 1);
+  const noTenants = !tenantLoading && tenants.length === 0;
+  const viewingAllTenants = canUseAllTenants && tenantScope === "all";
+  const scopeStorageId = viewingAllTenants ? "__all__" : tenantId;
+  const hasScope = Boolean(scopeStorageId);
 
   useEffect(() => {
-    if (!tenantId) {
+    if (!canUseAllTenants && tenantScope !== "selected") {
+      setTenantScope("selected");
+    }
+  }, [canUseAllTenants, tenantScope]);
+
+  useEffect(() => {
+    if (!scopeStorageId) {
       setSites([]);
       setFilters(DEFAULT_FILTERS);
       setPresets([]);
       setActivePresetId("");
       setPresetName("");
       setHydrated(false);
+      setScopeError(null);
       setLoading(false);
       return;
     }
 
     let active = true;
     setHydrated(false);
-    apiFetch<SiteList>(`/api/admin/tenants/${tenantId}/sites`)
+    setScopeError(null);
+    const siteOptionsEndpoint = viewingAllTenants ? "/api/admin/sites/options" : `/api/admin/tenants/${tenantId}/sites`;
+    apiFetch<SiteList>(siteOptionsEndpoint)
       .then((data) => {
         if (!active) {
           return;
@@ -212,13 +237,13 @@ export default function ReportsPage() {
         setSites(data.sites);
         const stored =
           typeof window !== "undefined"
-            ? parseStoredFilters(window.localStorage.getItem(storageKey(tenantId)))
+            ? parseStoredFilters(window.localStorage.getItem(storageKey(scopeStorageId)))
             : DEFAULT_FILTERS;
         const sanitizedFilters = sanitizeFilters(stored, data.sites);
         setFilters(sanitizedFilters);
         const storedPresets =
           typeof window !== "undefined"
-            ? parseStoredPresets(window.localStorage.getItem(presetsStorageKey(tenantId)), data.sites)
+            ? parseStoredPresets(window.localStorage.getItem(presetsStorageKey(scopeStorageId)), data.sites)
             : [];
         setPresets(storedPresets);
         const matchingPreset = storedPresets.find((preset) => filtersEqual(preset.filters, sanitizedFilters));
@@ -231,7 +256,9 @@ export default function ReportsPage() {
           router.replace("/admin/login");
           return;
         }
-        toast.error(error?.message ?? "Unable to load report site options.");
+        const message = error?.message ?? "Unable to load report site options.";
+        setScopeError(message);
+        toast.error(message);
         setPresets([]);
         setActivePresetId("");
         setPresetName("");
@@ -241,17 +268,17 @@ export default function ReportsPage() {
     return () => {
       active = false;
     };
-  }, [router, tenantId]);
+  }, [router, scopeReloadToken, scopeStorageId, tenantId, viewingAllTenants]);
 
   useEffect(() => {
-    if (!tenantId || !hydrated) {
+    if (!scopeStorageId || !hydrated) {
       return;
     }
     if (typeof window !== "undefined") {
-      window.localStorage.setItem(storageKey(tenantId), JSON.stringify(filters));
-      window.localStorage.setItem(presetsStorageKey(tenantId), JSON.stringify(presets));
+      window.localStorage.setItem(storageKey(scopeStorageId), JSON.stringify(filters));
+      window.localStorage.setItem(presetsStorageKey(scopeStorageId), JSON.stringify(presets));
     }
-  }, [filters, hydrated, presets, tenantId]);
+  }, [filters, hydrated, presets, scopeStorageId]);
 
   const applyPreset = (presetId: string) => {
     if (!presetId) {
@@ -303,24 +330,34 @@ export default function ReportsPage() {
   };
 
   const loadReports = async () => {
-    if (!tenantId || !hydrated) {
+    if (!scopeStorageId || !hydrated) {
       return;
     }
     setLoading(true);
+    setLoadError(null);
     const params = reportParams(filters).toString();
     try {
+      const methodEndpoint = viewingAllTenants
+        ? `/api/admin/reports/method-daily?${params}`
+        : `/api/admin/tenants/${tenantId}/reports/method-daily?${params}`;
+      const siteEndpoint = viewingAllTenants
+        ? `/api/admin/reports/site-comparison?${params}`
+        : `/api/admin/tenants/${tenantId}/reports/site-comparison?${params}`;
       const [methodDaily, siteComparison] = await Promise.all([
-        apiFetch<MethodDailyReport>(`/api/admin/tenants/${tenantId}/reports/method-daily?${params}`),
-        apiFetch<SiteComparisonReport>(`/api/admin/tenants/${tenantId}/reports/site-comparison?${params}`),
+        apiFetch<MethodDailyReport>(methodEndpoint),
+        apiFetch<SiteComparisonReport>(siteEndpoint),
       ]);
       setMethodDailyRows(methodDaily.rows);
       setSiteRows(siteComparison.rows);
+      setLoadError(null);
     } catch (error: any) {
       if (error instanceof ApiError && error.status === 401) {
         router.replace("/admin/login");
         return;
       }
-      toast.error(error?.message ?? "Unable to load reporting data.");
+      const message = error?.message ?? "Unable to load reporting data.";
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -328,16 +365,24 @@ export default function ReportsPage() {
 
   useEffect(() => {
     loadReports();
-  }, [filters, hydrated, tenantId]);
+  }, [filters, hydrated, scopeStorageId, tenantId, viewingAllTenants]);
+
+  useEffect(() => {
+    setMethodPage(1);
+    setSitePage(1);
+  }, [filters, tenantScope, scopeStorageId]);
 
   const exportMethodDaily = async () => {
-    if (!tenantId) {
+    if (!scopeStorageId) {
       return;
     }
     const params = reportParams(filters).toString();
     try {
+      const endpoint = viewingAllTenants
+        ? `/api/admin/reports/method-daily/export.csv?${params}`
+        : `/api/admin/tenants/${tenantId}/reports/method-daily/export.csv?${params}`;
       await apiDownloadCsv(
-        `/api/admin/tenants/${tenantId}/reports/method-daily/export.csv?${params}`,
+        endpoint,
         "method-daily-report.csv"
       );
       toast.success("Method daily CSV exported.");
@@ -347,13 +392,16 @@ export default function ReportsPage() {
   };
 
   const exportSiteComparison = async () => {
-    if (!tenantId) {
+    if (!scopeStorageId) {
       return;
     }
     const params = reportParams(filters).toString();
     try {
+      const endpoint = viewingAllTenants
+        ? `/api/admin/reports/site-comparison/export.csv?${params}`
+        : `/api/admin/tenants/${tenantId}/reports/site-comparison/export.csv?${params}`;
       await apiDownloadCsv(
-        `/api/admin/tenants/${tenantId}/reports/site-comparison/export.csv?${params}`,
+        endpoint,
         "site-comparison-report.csv"
       );
       toast.success("Site comparison CSV exported.");
@@ -370,6 +418,32 @@ export default function ReportsPage() {
     () => siteRows.reduce((sum, row) => sum + row.auth_success, 0),
     [siteRows]
   );
+  const visibleMethodDailyRows = useMemo(
+    () => methodDailyRows.filter((row) => row.attempts > 0 || row.success > 0 || row.fail > 0),
+    [methodDailyRows]
+  );
+  const methodPageCount = Math.max(1, Math.ceil(visibleMethodDailyRows.length / methodPageSize));
+  const sitePageCount = Math.max(1, Math.ceil(siteRows.length / sitePageSize));
+  const pagedMethodDailyRows = useMemo(() => {
+    const start = (methodPage - 1) * methodPageSize;
+    return visibleMethodDailyRows.slice(start, start + methodPageSize);
+  }, [methodPage, methodPageSize, visibleMethodDailyRows]);
+  const pagedSiteRows = useMemo(() => {
+    const start = (sitePage - 1) * sitePageSize;
+    return siteRows.slice(start, start + sitePageSize);
+  }, [sitePage, sitePageSize, siteRows]);
+
+  useEffect(() => {
+    if (methodPage > methodPageCount) {
+      setMethodPage(methodPageCount);
+    }
+  }, [methodPage, methodPageCount]);
+
+  useEffect(() => {
+    if (sitePage > sitePageCount) {
+      setSitePage(sitePageCount);
+    }
+  }, [sitePage, sitePageCount]);
 
   return (
     <div className="space-y-6">
@@ -380,18 +454,67 @@ export default function ReportsPage() {
             Compare site performance and authentication trends with exportable views.
           </p>
           <p className="mt-2 text-xs text-muted-foreground">
-            {activeTenant ? `Active tenant: ${activeTenant.name}` : "Select a tenant from the sidebar to continue."}
+            {viewingAllTenants
+              ? "Scope: all tenants"
+              : activeTenant
+                ? `Active tenant: ${activeTenant.name}`
+                : "Select a tenant from the sidebar to continue."}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Filters are saved per tenant on this browser.
+            Filters are saved per scope on this browser.
           </p>
         </div>
-        <Button variant="secondary" onClick={loadReports} disabled={loading || !tenantId || !hydrated}>
+        <Button variant="secondary" onClick={loadReports} disabled={loading || !scopeStorageId || !hydrated}>
           <RefreshCw className="h-4 w-4" aria-hidden="true" />
           Refresh
         </Button>
       </div>
 
+      {canUseAllTenants ? (
+        <div className="inline-flex rounded-lg border border-border/80 bg-background/80 p-1">
+          <button
+            type="button"
+            className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+              !viewingAllTenants ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
+            }`}
+            onClick={() => setTenantScope("selected")}
+          >
+            Selected tenant
+          </button>
+          <button
+            type="button"
+            className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+              viewingAllTenants ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
+            }`}
+            onClick={() => setTenantScope("all")}
+          >
+            All tenants
+          </button>
+        </div>
+      ) : null}
+
+      {noTenants ? (
+        <TenantOnboardingState />
+      ) : !scopeStorageId ? (
+        <TenantSelectionState message="Select a tenant to load reports." />
+      ) : null}
+      {scopeError && hasScope ? (
+        <DataErrorState
+          title="Unable to load report options."
+          message={scopeError}
+          onRetry={() => setScopeReloadToken((current) => current + 1)}
+        />
+      ) : null}
+      {loadError && hasScope ? (
+        <DataErrorState
+          title="Unable to refresh report data."
+          message={loadError}
+          onRetry={loadReports}
+        />
+      ) : null}
+
+      {hasScope ? (
+      <>
       <Card className="rounded-xl border border-border/80 bg-card p-5 shadow-soft">
         <div className="grid gap-4 border-b border-border/70 pb-4 md:grid-cols-[1fr_1fr_auto_auto]">
           <div className="space-y-2">
@@ -420,7 +543,7 @@ export default function ReportsPage() {
             />
           </div>
           <div className="flex items-end">
-            <Button onClick={savePreset} disabled={!tenantId || !hydrated}>
+            <Button onClick={savePreset} disabled={!scopeStorageId || !hydrated}>
               Save preset
             </Button>
           </div>
@@ -503,16 +626,19 @@ export default function ReportsPage() {
             <h2 className="text-base font-semibold">Method Daily Trend</h2>
             <p className="text-xs text-muted-foreground">
               Attempts and conversion by day for selected method scope.
+              {methodDailyRows.length > visibleMethodDailyRows.length
+                ? ` Showing ${visibleMethodDailyRows.length} active rows.`
+                : ""}
             </p>
           </div>
-          <Button variant="secondary" onClick={exportMethodDaily} disabled={!tenantId}>
+          <Button variant="secondary" onClick={exportMethodDaily} disabled={!scopeStorageId}>
             <Download className="h-4 w-4" aria-hidden="true" />
             Export CSV
           </Button>
         </div>
         <div className="mt-4 overflow-x-auto">
           <table className="min-w-full text-sm">
-            <thead>
+            <thead className="sticky top-0 z-10 bg-card/95">
               <tr className="border-b border-border/80 text-xs uppercase tracking-wide text-muted-foreground">
                 <th className="px-2 py-2 text-left font-semibold">Day</th>
                 <th className="px-2 py-2 text-left font-semibold">Method</th>
@@ -529,14 +655,14 @@ export default function ReportsPage() {
                     Loading report...
                   </td>
                 </tr>
-              ) : methodDailyRows.length === 0 ? (
+              ) : visibleMethodDailyRows.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-2 py-3 text-sm text-muted-foreground">
                     No data for current filters.
                   </td>
                 </tr>
               ) : (
-                methodDailyRows.map((row) => (
+                pagedMethodDailyRows.map((row) => (
                   <tr key={`${row.day}-${row.method}`} className="border-b border-border/50">
                     <td className="whitespace-nowrap px-2 py-2 text-xs text-foreground">
                       {new Date(row.day).toLocaleDateString()}
@@ -554,6 +680,47 @@ export default function ReportsPage() {
             </tbody>
           </table>
         </div>
+        {!loading && visibleMethodDailyRows.length > 0 ? (
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/70 bg-muted/20 px-3 py-2">
+            <div className="text-xs text-muted-foreground">
+              Showing {Math.min((methodPage - 1) * methodPageSize + 1, visibleMethodDailyRows.length)}-
+              {Math.min(methodPage * methodPageSize, visibleMethodDailyRows.length)} of {visibleMethodDailyRows.length}
+            </div>
+            <div className="flex items-center gap-2">
+              <select
+                className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                value={methodPageSize}
+                onChange={(event) => {
+                  setMethodPageSize(Number(event.target.value));
+                  setMethodPage(1);
+                }}
+              >
+                <option value={25}>25 / page</option>
+                <option value={50}>50 / page</option>
+                <option value={100}>100 / page</option>
+              </select>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setMethodPage((current) => Math.max(1, current - 1))}
+                disabled={methodPage <= 1}
+              >
+                Previous
+              </Button>
+              <div className="text-xs text-muted-foreground">
+                Page {methodPage} of {methodPageCount}
+              </div>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setMethodPage((current) => Math.min(methodPageCount, current + 1))}
+                disabled={methodPage >= methodPageCount}
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+        ) : null}
       </Card>
 
       <Card className="rounded-xl border border-border/80 bg-card p-5 shadow-soft">
@@ -564,14 +731,14 @@ export default function ReportsPage() {
               Side-by-side site performance including voucher and TOS click-through traffic.
             </p>
           </div>
-          <Button variant="secondary" onClick={exportSiteComparison} disabled={!tenantId}>
+          <Button variant="secondary" onClick={exportSiteComparison} disabled={!scopeStorageId}>
             <Download className="h-4 w-4" aria-hidden="true" />
             Export CSV
           </Button>
         </div>
         <div className="mt-4 overflow-x-auto">
           <table className="min-w-full text-sm">
-            <thead>
+            <thead className="sticky top-0 z-10 bg-card/95">
               <tr className="border-b border-border/80 text-xs uppercase tracking-wide text-muted-foreground">
                 <th className="px-2 py-2 text-left font-semibold">Site</th>
                 <th className="px-2 py-2 text-right font-semibold">Attempts</th>
@@ -596,7 +763,7 @@ export default function ReportsPage() {
                   </td>
                 </tr>
               ) : (
-                siteRows.map((row) => (
+                pagedSiteRows.map((row) => (
                   <tr key={row.site_id} className="border-b border-border/50">
                     <td className="px-2 py-2 text-xs font-semibold text-foreground">{row.site_name}</td>
                     <td className="px-2 py-2 text-right text-xs text-muted-foreground">{row.auth_attempts}</td>
@@ -613,7 +780,50 @@ export default function ReportsPage() {
             </tbody>
           </table>
         </div>
+        {!loading && siteRows.length > 0 ? (
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/70 bg-muted/20 px-3 py-2">
+            <div className="text-xs text-muted-foreground">
+              Showing {Math.min((sitePage - 1) * sitePageSize + 1, siteRows.length)}-
+              {Math.min(sitePage * sitePageSize, siteRows.length)} of {siteRows.length}
+            </div>
+            <div className="flex items-center gap-2">
+              <select
+                className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                value={sitePageSize}
+                onChange={(event) => {
+                  setSitePageSize(Number(event.target.value));
+                  setSitePage(1);
+                }}
+              >
+                <option value={10}>10 / page</option>
+                <option value={25}>25 / page</option>
+                <option value={50}>50 / page</option>
+              </select>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setSitePage((current) => Math.max(1, current - 1))}
+                disabled={sitePage <= 1}
+              >
+                Previous
+              </Button>
+              <div className="text-xs text-muted-foreground">
+                Page {sitePage} of {sitePageCount}
+              </div>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setSitePage((current) => Math.min(sitePageCount, current + 1))}
+                disabled={sitePage >= sitePageCount}
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+        ) : null}
       </Card>
+      </>
+      ) : null}
     </div>
   );
 }

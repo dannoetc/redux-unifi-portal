@@ -12,11 +12,15 @@ export default function TenantSwitcher({
   options,
   onChange,
   className,
+  emptyLabel = "No tenants",
+  disabled = false,
 }: {
   value?: string;
   options: TenantOption[];
   onChange?: (value: string) => void;
   className?: string;
+  emptyLabel?: string;
+  disabled?: boolean;
 }) {
   return (
     <div className={cn("space-y-2", className)}>
@@ -31,9 +35,10 @@ export default function TenantSwitcher({
         aria-label="Tenant"
         value={value ?? ""}
         onChange={(event) => onChange?.(event.target.value)}
+        disabled={disabled}
         className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
       >
-        {options.length === 0 ? <option value="">No tenants</option> : null}
+        {options.length === 0 ? <option value="">{emptyLabel}</option> : null}
         {options.map((option) => (
           <option key={option.value} value={option.value}>
             {option.label}

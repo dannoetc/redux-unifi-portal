@@ -85,10 +85,21 @@ def test_tenant_admin_can_list_auth_events(client, db_session):
     _login_as(client, admin)
     response = client.get(f"/api/admin/tenants/{tenant.id}/auth-events")
     assert response.status_code == 200
-    data = response.json()["data"]["events"]
+    response_payload = response.json()["data"]
+    data = response_payload["events"]
     assert len(data) == 2
+    assert response_payload["pagination"]["limit"] == 50
+    assert response_payload["pagination"]["offset"] == 0
+    assert response_payload["pagination"]["total"] == 2
     assert any(item["method"] == "voucher" and item["result"] == "success" for item in data)
     assert any(item["method"] == "email_otp" and item["result"] == "fail" for item in data)
+
+    paged = client.get(f"/api/admin/tenants/{tenant.id}/auth-events?limit=1&offset=1")
+    assert paged.status_code == 200
+    paged_payload = paged.json()["data"]
+    assert len(paged_payload["events"]) == 1
+    assert paged_payload["pagination"]["total"] == 2
+    assert paged_payload["pagination"]["has_more"] is False
 
     filtered = client.get(f"/api/admin/tenants/{tenant.id}/auth-events?method=oidc")
     assert filtered.status_code == 200
@@ -103,3 +114,7 @@ def test_tenant_admin_can_list_auth_events(client, db_session):
     wrong_site = client.get(f"/api/admin/tenants/{tenant.id}/auth-events?site_id={other_site.id}")
     assert wrong_site.status_code == 404
     assert wrong_site.json()["error"]["code"] == "NOT_FOUND"
+
+    invalid_limit = client.get(f"/api/admin/tenants/{tenant.id}/auth-events?limit=0")
+    assert invalid_limit.status_code == 400
+    assert invalid_limit.json()["error"]["code"] == "INVALID_PAGINATION"

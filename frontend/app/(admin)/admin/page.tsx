@@ -17,6 +17,7 @@ import { toast } from "sonner";
 
 import { ApiError, apiFetch } from "@/lib/api";
 import { useTenantSelection } from "@/lib/use-tenant";
+import { DataErrorState, TenantOnboardingState, TenantSelectionState } from "@/components/admin/page-states";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PopoverMenu, PopoverMenuItem } from "@/components/ui/PopoverMenu";
@@ -105,6 +106,7 @@ function buildAuthEventsHref(filters: {
   result?: string;
   siteId?: string;
   search?: string;
+  scope?: "all";
 }) {
   const params = new URLSearchParams();
   if (filters.method) {
@@ -118,6 +120,9 @@ function buildAuthEventsHref(filters: {
   }
   if (filters.search) {
     params.set("search", filters.search);
+  }
+  if (filters.scope === "all") {
+    params.set("scope", "all");
   }
   const query = params.toString();
   return query ? `/admin/auth-events?${query}` : "/admin/auth-events";
@@ -170,31 +175,55 @@ function StatCard({
 
 export default function AdminHomePage() {
   const router = useRouter();
-  const { tenantId, tenants } = useTenantSelection();
+  const { tenantId, tenants, loading: tenantLoading, adminUser } = useTenantSelection();
   const [periodDays, setPeriodDays] = useState<number>(30);
   const [siteFilter, setSiteFilter] = useState<string>("all");
+  const [tenantScope, setTenantScope] = useState<"selected" | "all">("selected");
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
+  const [dailyPage, setDailyPage] = useState(1);
+  const [dailyPageSize, setDailyPageSize] = useState(15);
 
   const activeTenant = useMemo(
     () => tenants.find((tenant) => tenant.id === tenantId) ?? null,
     [tenantId, tenants]
   );
+  const canUseAllTenants = Boolean(adminUser?.is_superadmin && tenants.length > 1);
+  const noTenants = !tenantLoading && tenants.length === 0;
+  const viewingAllTenants = canUseAllTenants && tenantScope === "all";
 
   useEffect(() => {
-    if (!tenantId) {
+    if (!canUseAllTenants && tenantScope !== "selected") {
+      setTenantScope("selected");
+    }
+  }, [canUseAllTenants, tenantScope]);
+
+  useEffect(() => {
+    setSiteFilter("all");
+  }, [tenantId, tenantScope]);
+
+  useEffect(() => {
+    if (!viewingAllTenants && !tenantId) {
       setSummary(null);
+      setLoadError(null);
       setLoading(false);
       return;
     }
     let active = true;
     setLoading(true);
+    setLoadError(null);
     const params = new URLSearchParams({ days: String(periodDays) });
     if (siteFilter !== "all") {
       params.set("site_id", siteFilter);
     }
 
-    apiFetch<DashboardSummary>(`/api/admin/tenants/${tenantId}/dashboard/summary?${params.toString()}`)
+    const endpoint = viewingAllTenants
+      ? `/api/admin/dashboard/summary?${params.toString()}`
+      : `/api/admin/tenants/${tenantId}/dashboard/summary?${params.toString()}`;
+
+    apiFetch<DashboardSummary>(endpoint)
       .then((data) => {
         if (!active) {
           return;
@@ -206,7 +235,9 @@ export default function AdminHomePage() {
           router.replace("/admin/login");
           return;
         }
-        toast.error(error?.message ?? "Unable to load dashboard metrics.");
+        const message = error?.message ?? "Unable to load dashboard metrics.";
+        setLoadError(message);
+        toast.error(message);
       })
       .finally(() => {
         if (active) {
@@ -216,7 +247,7 @@ export default function AdminHomePage() {
     return () => {
       active = false;
     };
-  }, [periodDays, router, siteFilter, tenantId]);
+  }, [periodDays, reloadToken, router, siteFilter, tenantId, viewingAllTenants]);
 
   useEffect(() => {
     if (!summary) {
@@ -226,6 +257,10 @@ export default function AdminHomePage() {
       setSiteFilter("all");
     }
   }, [siteFilter, summary]);
+
+  useEffect(() => {
+    setDailyPage(1);
+  }, [periodDays, siteFilter, tenantId, tenantScope]);
 
   const selectedSiteLabel = useMemo(() => {
     if (!summary || siteFilter === "all") {
@@ -239,17 +274,47 @@ export default function AdminHomePage() {
     () => (summary?.methods ?? []).filter((item) => item.attempts > 0),
     [summary]
   );
+  const visibleDailyRows = useMemo(() => {
+    if (!summary) {
+      return [];
+    }
+    const activeRows = summary.daily.filter(
+      (item) =>
+        item.sessions_started > 0 ||
+        item.auth_attempts > 0 ||
+        item.auth_success > 0 ||
+        item.voucher_redemptions > 0 ||
+        item.tos_clicks > 0
+    );
+    if (activeRows.length > 0) {
+      return activeRows;
+    }
+    return summary.daily.slice(-7);
+  }, [summary]);
   const dailyMax = useMemo(() => {
-    if (!summary || summary.daily.length === 0) {
+    if (visibleDailyRows.length === 0) {
       return 1;
     }
-    return Math.max(...summary.daily.map((item) => item.auth_attempts), 1);
-  }, [summary]);
+    return Math.max(...visibleDailyRows.map((item) => item.auth_attempts), 1);
+  }, [visibleDailyRows]);
+  const dailyPageCount = Math.max(1, Math.ceil(visibleDailyRows.length / dailyPageSize));
+  const pagedDailyRows = useMemo(() => {
+    const start = (dailyPage - 1) * dailyPageSize;
+    return visibleDailyRows.slice(start, start + dailyPageSize);
+  }, [dailyPage, dailyPageSize, visibleDailyRows]);
+
+  useEffect(() => {
+    if (dailyPage > dailyPageCount) {
+      setDailyPage(dailyPageCount);
+    }
+  }, [dailyPage, dailyPageCount]);
   const topSites = useMemo(() => (summary?.sites ?? []).slice(0, 6), [summary]);
   const selectedSiteId = siteFilter !== "all" ? siteFilter : undefined;
+  const showLoading = tenantLoading || ((Boolean(tenantId) || viewingAllTenants) && loading);
+  const authEventsScope = viewingAllTenants ? "all" : undefined;
   const authEventsHref = useMemo(
-    () => buildAuthEventsHref({ siteId: selectedSiteId }),
-    [selectedSiteId]
+    () => buildAuthEventsHref({ siteId: selectedSiteId, scope: authEventsScope }),
+    [authEventsScope, selectedSiteId]
   );
   const vouchersHref = useMemo(
     () => buildVouchersHref({ siteId: selectedSiteId }),
@@ -269,11 +334,20 @@ export default function AdminHomePage() {
             </h1>
             <p className="text-sm text-muted-foreground">
               {activeTenant
-                ? `Tenant: ${activeTenant.name}`
+                ? viewingAllTenants
+                  ? "Scope: all tenants"
+                  : `Tenant: ${activeTenant.name}`
                 : "Select a tenant from the sidebar to view usage and auth flow performance."}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="secondary"
+              onClick={() => setReloadToken((current) => current + 1)}
+              disabled={showLoading || (!tenantId && !viewingAllTenants)}
+            >
+              Refresh
+            </Button>
             <Button asChild variant="secondary">
               <Link href={authEventsHref}>View auth events</Link>
             </Button>
@@ -299,6 +373,32 @@ export default function AdminHomePage() {
               </button>
             ))}
           </div>
+          {canUseAllTenants ? (
+            <div className="inline-flex rounded-lg border border-border/80 bg-background/80 p-1">
+              <button
+                type="button"
+                className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+                  !viewingAllTenants
+                    ? "bg-foreground text-background"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+                onClick={() => setTenantScope("selected")}
+              >
+                Selected tenant
+              </button>
+              <button
+                type="button"
+                className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+                  viewingAllTenants
+                    ? "bg-foreground text-background"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+                onClick={() => setTenantScope("all")}
+              >
+                All tenants
+              </button>
+            </div>
+          ) : null}
           <PopoverMenu
             trigger={
               <Button variant="secondary" className="h-9 text-xs font-semibold">
@@ -324,13 +424,24 @@ export default function AdminHomePage() {
           ) : null}
         </div>
       </Card>
+      {loadError ? (
+        <DataErrorState
+          title="Unable to refresh dashboard metrics."
+          message={loadError}
+          onRetry={() => setReloadToken((current) => current + 1)}
+        />
+      ) : null}
 
-      {loading ? (
+      {showLoading ? (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {Array.from({ length: 6 }).map((_, index) => (
             <Card key={`dashboard-loading-${index}`} className="h-[132px] animate-pulse rounded-xl bg-muted/40" />
           ))}
         </div>
+      ) : noTenants ? (
+        <TenantOnboardingState />
+      ) : !tenantId && !viewingAllTenants ? (
+        <TenantSelectionState message="Select a tenant to load dashboard analytics." />
       ) : !summary ? (
         <Card className="rounded-xl border border-border/80 bg-card/95 p-6 shadow-soft">
           <p className="text-sm text-muted-foreground">No dashboard data is available yet.</p>
@@ -344,7 +455,7 @@ export default function AdminHomePage() {
               value={summary.overview.sessions_started.toLocaleString()}
               hint={`${summary.overview.auth_attempts.toLocaleString()} auth attempts`}
               actionLabel="Open auth events"
-              actionHref={buildAuthEventsHref({ siteId: selectedSiteId })}
+              actionHref={buildAuthEventsHref({ siteId: selectedSiteId, scope: authEventsScope })}
             />
             <StatCard
               icon={<CheckCircle2 className="h-4 w-4" aria-hidden="true" />}
@@ -352,7 +463,7 @@ export default function AdminHomePage() {
               value={summary.overview.auth_success.toLocaleString()}
               hint={`${summary.overview.sessions_authorized.toLocaleString()} sessions marked authorized`}
               actionLabel="View successful auth"
-              actionHref={buildAuthEventsHref({ siteId: selectedSiteId, result: "success" })}
+              actionHref={buildAuthEventsHref({ siteId: selectedSiteId, result: "success", scope: authEventsScope })}
             />
             <StatCard
               icon={<Activity className="h-4 w-4" aria-hidden="true" />}
@@ -370,6 +481,7 @@ export default function AdminHomePage() {
                 siteId: selectedSiteId,
                 method: "voucher",
                 result: "success",
+                scope: authEventsScope,
               })}
             />
             <StatCard
@@ -382,6 +494,7 @@ export default function AdminHomePage() {
                 siteId: selectedSiteId,
                 method: "tos_only",
                 result: "success",
+                scope: authEventsScope,
               })}
             />
             <StatCard
@@ -390,7 +503,7 @@ export default function AdminHomePage() {
               value={summary.overview.sessions_failed.toLocaleString()}
               hint={`${summary.overview.auth_fail.toLocaleString()} auth failures`}
               actionLabel="Investigate failures"
-              actionHref={buildAuthEventsHref({ siteId: selectedSiteId, result: "fail" })}
+              actionHref={buildAuthEventsHref({ siteId: selectedSiteId, result: "fail", scope: authEventsScope })}
             />
           </div>
 
@@ -430,6 +543,7 @@ export default function AdminHomePage() {
                             href={buildAuthEventsHref({
                               siteId: selectedSiteId,
                               method: method.method,
+                              scope: authEventsScope,
                             })}
                             className="font-semibold text-foreground/80 underline-offset-2 hover:text-foreground hover:underline"
                           >
@@ -465,7 +579,7 @@ export default function AdminHomePage() {
                       </div>
                       <div className="mt-2 flex items-center justify-end">
                         <Link
-                          href={buildAuthEventsHref({ siteId: site.site_id })}
+                          href={buildAuthEventsHref({ siteId: site.site_id, scope: authEventsScope })}
                           className="text-xs font-semibold text-foreground/80 underline-offset-2 hover:text-foreground hover:underline"
                         >
                           View site events
@@ -482,10 +596,13 @@ export default function AdminHomePage() {
             <h2 className="text-base font-semibold">Daily traffic and click-through</h2>
             <p className="text-xs text-muted-foreground">
               Sessions, auth outcomes, voucher usage, and TOS clicks by day.
+              {summary.daily.length > visibleDailyRows.length
+                ? ` Showing ${visibleDailyRows.length} active days in this window.`
+                : ""}
             </p>
             <div className="mt-4 overflow-x-auto">
               <table className="min-w-full text-sm">
-                <thead>
+                <thead className="sticky top-0 z-10 bg-card/95">
                   <tr className="border-b border-border/80 text-xs uppercase tracking-wide text-muted-foreground">
                     <th className="px-2 py-2 text-left font-semibold">Day</th>
                     <th className="px-2 py-2 text-right font-semibold">Sessions</th>
@@ -497,7 +614,7 @@ export default function AdminHomePage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {summary.daily.map((item) => (
+                  {pagedDailyRows.map((item) => (
                     <tr key={item.day} className="border-b border-border/50">
                       <td className="whitespace-nowrap px-2 py-2 text-xs font-semibold text-foreground">
                         {new Date(item.day).toLocaleDateString()}
@@ -524,6 +641,47 @@ export default function AdminHomePage() {
                 </tbody>
               </table>
             </div>
+            {visibleDailyRows.length > 0 ? (
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/70 bg-muted/20 px-3 py-2">
+                <div className="text-xs text-muted-foreground">
+                  Showing {Math.min((dailyPage - 1) * dailyPageSize + 1, visibleDailyRows.length)}-
+                  {Math.min(dailyPage * dailyPageSize, visibleDailyRows.length)} of {visibleDailyRows.length}
+                </div>
+                <div className="flex items-center gap-2">
+                  <select
+                    className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                    value={dailyPageSize}
+                    onChange={(event) => {
+                      setDailyPageSize(Number(event.target.value));
+                      setDailyPage(1);
+                    }}
+                  >
+                    <option value={15}>15 / page</option>
+                    <option value={30}>30 / page</option>
+                    <option value={60}>60 / page</option>
+                  </select>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setDailyPage((current) => Math.max(1, current - 1))}
+                    disabled={dailyPage <= 1}
+                  >
+                    Previous
+                  </Button>
+                  <div className="text-xs text-muted-foreground">
+                    Page {dailyPage} of {dailyPageCount}
+                  </div>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setDailyPage((current) => Math.min(dailyPageCount, current + 1))}
+                    disabled={dailyPage >= dailyPageCount}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            ) : null}
           </Card>
         </>
       )}

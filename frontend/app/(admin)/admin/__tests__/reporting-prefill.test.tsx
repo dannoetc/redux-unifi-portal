@@ -5,20 +5,24 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import AuthEventsPage from "@/app/(admin)/admin/auth-events/page";
 import VouchersPage from "@/app/(admin)/admin/vouchers/page";
 
-const replaceMock = vi.fn();
+const replaceMock = vi.fn((href: string) => {
+  const nextQuery = href.split("?")[1] ?? "";
+  mockQueryString = nextQuery;
+});
 const apiFetchMock = vi.fn();
 const toastErrorMock = vi.fn();
 let mockQueryString = "";
+const searchParamsMock = {
+  get: (key: string) => new URLSearchParams(mockQueryString).get(key),
+  toString: () => mockQueryString,
+};
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/admin/auth-events",
   useRouter: () => ({
     replace: replaceMock,
   }),
-  useSearchParams: () => ({
-    get: (key: string) => new URLSearchParams(mockQueryString).get(key),
-    toString: () => mockQueryString,
-  }),
+  useSearchParams: () => searchParamsMock,
 }));
 
 vi.mock("sonner", () => ({
@@ -68,7 +72,7 @@ describe("Reporting query prefill", () => {
 
     await waitFor(() => {
       expect(apiFetchMock).toHaveBeenCalledWith(
-        "/api/admin/tenants/tenant-1/auth-events?method=voucher&result=fail&search=abc&site_id=site-1"
+        "/api/admin/tenants/tenant-1/auth-events?method=voucher&result=fail&search=abc&site_id=site-1&limit=50&offset=0"
       );
     });
 
@@ -79,9 +83,8 @@ describe("Reporting query prefill", () => {
 
     await user.selectOptions(screen.getByLabelText("Method"), "oidc");
     await waitFor(() => {
-      expect(replaceMock).toHaveBeenCalledWith(
-        "/admin/auth-events?method=oidc&result=fail&search=abc&site_id=site-1",
-        { scroll: false }
+      expect(apiFetchMock).toHaveBeenCalledWith(
+        "/api/admin/tenants/tenant-1/auth-events?method=oidc&result=fail&search=abc&site_id=site-1&limit=50&offset=0"
       );
     });
   });

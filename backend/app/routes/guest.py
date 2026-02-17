@@ -231,6 +231,14 @@ def get_site_config(
             detail={"ok": False, "error": {"code": "NOT_FOUND", "message": "Site not found."}},
         )
 
+    template_mode = site.portal_template_mode or (
+        "embed"
+        if site.portal_template_enabled and site.portal_template_html and "{{portal}}" in site.portal_template_html
+        else "replace"
+        if site.portal_template_enabled
+        else "off"
+    )
+
     methods = ["voucher", "email_otp"]
     if site.enable_tos_only:
         methods.append("tos_only")
@@ -260,8 +268,10 @@ def get_site_config(
                 "display_name": site.display_name,
             },
             "portal_template": {
-                "enabled": site.portal_template_enabled,
+                "enabled": template_mode != "off",
+                "mode": template_mode,
                 "html": site.portal_template_html,
+                "theme": site.portal_template_theme,
             },
             "methods": methods,
             "policy": policy,

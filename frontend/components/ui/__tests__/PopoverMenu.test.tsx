@@ -1,4 +1,4 @@
-import { render, screen, waitForElementToBeRemoved } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -36,7 +36,9 @@ describe("PopoverMenu", () => {
     expect(menu).toBeInTheDocument();
 
     await user.click(trigger);
-    await waitForElementToBeRemoved(() => screen.queryByRole("menu"));
+    await waitFor(() => {
+      expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    });
   });
 
   it("supports arrow key navigation", async () => {
@@ -83,7 +85,9 @@ describe("PopoverMenu", () => {
     expect(menu).toBeInTheDocument();
 
     await user.keyboard("{Escape}");
-    await waitForElementToBeRemoved(() => screen.queryByRole("menu"));
+    await waitFor(() => {
+      expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    });
   });
 
   it("closes when menu item is clicked", async () => {
@@ -99,19 +103,21 @@ describe("PopoverMenu", () => {
     const trigger = screen.getAllByRole("button", { name: "Actions" })[0];
     await user.click(trigger);
 
-    const menu = await screen.findByRole("menu");
+    await screen.findByRole("menu");
     const item = screen.getByRole("menuitem", { name: "First" });
 
     await user.click(item);
     expect(onClick).toHaveBeenCalled();
-    await waitForElementToBeRemoved(() => screen.queryByRole("menu"));
+    await waitFor(() => {
+      expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    });
   });
 
   it("renders PopoverMenuLink with correct role and closes on click", async () => {
     const user = userEvent.setup({ pointerEventsCheck: 0 });
     render(
       <PopoverMenu trigger={<button type="button">Actions</button>}>
-        <PopoverMenuLink href="/test">Go to test</PopoverMenuLink>
+        <PopoverMenuLink href="#test">Go to test</PopoverMenuLink>
       </PopoverMenu>
     );
 
@@ -119,11 +125,13 @@ describe("PopoverMenu", () => {
     await user.click(trigger);
 
     const link = screen.getByRole("menuitem", { name: "Go to test" });
-    expect(link).toHaveAttribute("href", "/test");
+    expect(link).toHaveAttribute("href", "#test");
 
-    const menu = await screen.findByRole("menu");
+    await screen.findByRole("menu");
     await user.click(link);
-    await waitForElementToBeRemoved(() => screen.queryByRole("menu"));
+    await waitFor(() => {
+      expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    });
   });
 
   it("supports disabled menu items", async () => {
@@ -181,6 +189,8 @@ describe("PopoverMenu", () => {
     expect(menu).toBeInTheDocument();
 
     await user.keyboard("{Tab}");
-    await waitForElementToBeRemoved(() => screen.queryByRole("menu"));
+    await waitFor(() => {
+      expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    });
   });
 });

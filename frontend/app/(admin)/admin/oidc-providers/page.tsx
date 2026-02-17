@@ -9,6 +9,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 
 import { apiFetch } from "@/lib/api";
 import { useTenantSelection } from "@/lib/use-tenant";
+import { TenantOnboardingState } from "@/components/admin/page-states";
 import { DataTable } from "@/components/data-table";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -37,13 +38,14 @@ type ProviderList = { providers: Provider[] };
 type ProviderCreate = z.infer<typeof schema>;
 
 export default function OidcProvidersPage() {
-  const { tenantId, tenants } = useTenantSelection();
+  const { tenantId, tenants, loading: tenantLoading } = useTenantSelection();
   const [providers, setProviders] = useState<Provider[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
 
   const form = useForm<ProviderCreate>({ resolver: zodResolver(schema) });
   const activeTenant = tenants.find((tenant) => tenant.id === tenantId) ?? null;
+  const noTenants = !tenantLoading && tenants.length === 0;
 
   useEffect(() => {
     if (!tenantId) {
@@ -131,7 +133,7 @@ export default function OidcProvidersPage() {
         <div className="flex flex-wrap items-end gap-3">
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
-              <Button variant="primary">New provider</Button>
+              <Button variant="primary" disabled={!tenantId}>New provider</Button>
             </DialogTrigger>
             <DialogContent className="max-w-2xl">
               <DialogHeader>
@@ -172,7 +174,9 @@ export default function OidcProvidersPage() {
         </div>
       </div>
       <div className="space-y-4">
-        {loading ? (
+        {noTenants ? (
+          <TenantOnboardingState compact description="Create a tenant before configuring OIDC providers." />
+        ) : loading ? (
           <div className="space-y-3">
             {Array.from({ length: 6 }).map((_, index) => (
               <div

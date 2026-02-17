@@ -8,6 +8,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { apiFetch } from "@/lib/api";
 import { useTenantSelection } from "@/lib/use-tenant";
+import { TenantOnboardingState } from "@/components/admin/page-states";
 import { DataTable } from "@/components/data-table";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -53,7 +54,7 @@ const formatDate = (value: string) => {
 };
 
 export default function AdminUsersPage() {
-  const { tenantId, tenants, adminUser } = useTenantSelection();
+  const { tenantId, tenants, adminUser, loading: tenantLoading } = useTenantSelection();
   const [admins, setAdmins] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -79,6 +80,7 @@ export default function AdminUsersPage() {
   );
   const canManageUsers = adminUser?.is_superadmin ?? false;
   const adminLoaded = adminUser !== null;
+  const noTenants = !tenantLoading && tenants.length === 0;
 
   useEffect(() => {
     if (!tenantId || !adminUser) {
@@ -300,7 +302,9 @@ export default function AdminUsersPage() {
         </div>
       </div>
       <Card className="rounded-xl border bg-card p-6 shadow-soft">
-        {!canManageUsers && adminLoaded ? (
+        {noTenants ? (
+          <TenantOnboardingState compact description="Create a tenant before managing admin users." />
+        ) : !canManageUsers && adminLoaded ? (
           <div className="text-sm text-muted-foreground">
             Only superadmins can manage admin users.
           </div>

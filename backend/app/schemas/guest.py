@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel
 
 
@@ -13,7 +15,9 @@ class GuestBranding(BaseModel):
 
 class GuestPortalTemplate(BaseModel):
     enabled: bool = False
+    mode: Literal["off", "replace", "embed"] = "off"
     html: str | None = None
+    theme: dict | None = None
 
 
 class GuestConfigResponse(BaseModel):

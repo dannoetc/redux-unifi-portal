@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ColumnDef } from "@tanstack/react-table";
 import { toast } from "sonner";
@@ -10,6 +11,7 @@ import { MoreHorizontal, Pencil } from "lucide-react";
 
 import { apiFetch } from "@/lib/api";
 import { useTenantSelection } from "@/lib/use-tenant";
+import { TenantOnboardingState } from "@/components/admin/page-states";
 import { DataTable } from "@/components/data-table";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -118,7 +120,7 @@ const normalizeUnifiBaseUrl = (value: string | undefined | null) => {
 };
 
 export default function SitesPage() {
-  const { tenantId, tenants } = useTenantSelection();
+  const { tenantId, tenants, loading: tenantLoading } = useTenantSelection();
   const [sites, setSites] = useState<Site[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -143,6 +145,7 @@ export default function SitesPage() {
     () => tenants.find((tenant) => tenant.id === tenantId) ?? null,
     [tenantId, tenants]
   );
+  const noTenants = !tenantLoading && tenants.length === 0;
   const tenantSlug = useMemo(
     () => tenants.find((tenant) => tenant.id === tenantId)?.slug ?? null,
     [tenantId, tenants]
@@ -578,7 +581,9 @@ export default function SitesPage() {
         </div>
       </div>
       <section className="flex min-h-0 flex-1 flex-col">
-        {loading ? (
+        {noTenants ? (
+          <TenantOnboardingState description="Create your first tenant before adding sites." />
+        ) : loading ? (
           <div className="space-y-3 rounded-lg border border-border/60 bg-muted/20 p-4">
             {Array.from({ length: 6 }).map((_, index) => (
               <div

@@ -16,15 +16,16 @@ export class ApiError extends Error {
 
 const resolveApiBaseUrl = () => {
   if (typeof window !== "undefined") {
-    if (window.location.origin.startsWith("http://")) {
-      return window.location.origin;
-    }
     const runtimeEnv = (window as Window & {
       __ENV__?: { NEXT_PUBLIC_API_BASE_URL?: string };
     }).__ENV__;
     const runtimeValue = runtimeEnv?.NEXT_PUBLIC_API_BASE_URL;
     if (runtimeValue && runtimeValue.length > 0) {
       return runtimeValue;
+    }
+    const buildValue = process.env.NEXT_PUBLIC_API_BASE_URL;
+    if (buildValue && buildValue.length > 0) {
+      return buildValue;
     }
     return window.location.origin;
   }

@@ -14,6 +14,19 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const PORTAL_TEMPLATE_TOKEN = "{{portal}}";
 
+type PortalTemplateMode = "off" | "replace" | "embed";
+type PortalTheme = {
+  card_alignment?: "left" | "center" | "right" | null;
+  card_max_width_px?: number | null;
+  logo_size_px?: number | null;
+  logo_alignment?: "left" | "center" | "right" | null;
+  heading_size_px?: number | null;
+  body_size_px?: number | null;
+  background_color?: string | null;
+  card_background_color?: string | null;
+  text_color?: string | null;
+};
+
 const applyTemplateTokens = (
   template: string,
   tokens: Record<string, string | null | undefined>
@@ -36,6 +49,30 @@ const applyTemplateTokens = (
   return output;
 };
 
+const clampNumber = (value: number | null | undefined, minimum: number, maximum: number) => {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return null;
+  }
+  return Math.max(minimum, Math.min(maximum, value));
+};
+
+const resolveTemplateMode = (
+  mode: string | null | undefined,
+  enabled: boolean | null | undefined,
+  html: string | null | undefined
+): PortalTemplateMode => {
+  if (mode === "off" || mode === "replace" || mode === "embed") {
+    return mode;
+  }
+  if (!enabled) {
+    return "off";
+  }
+  if (html?.includes(PORTAL_TEMPLATE_TOKEN)) {
+    return "embed";
+  }
+  return "replace";
+};
+
 type ConfigResponse = {
   branding: {
     logo_url?: string | null;
@@ -46,7 +83,9 @@ type ConfigResponse = {
   };
   portal_template?: {
     enabled?: boolean;
+    mode?: PortalTemplateMode | null;
     html?: string | null;
+    theme?: PortalTheme | null;
   };
   methods: string[];
   policy: {
@@ -80,13 +119,31 @@ export default function GuestLanding() {
   const portalParam = searchParams.get("portal_session_id");
   const errorParam = searchParams.get("error");
   const previewParam = searchParams.get("preview");
+  const templateMode = resolveTemplateMode(
+    config?.portal_template?.mode,
+    config?.portal_template?.enabled,
+    config?.portal_template?.html
+  );
+  const templateTheme = config?.portal_template?.theme ?? null;
+  const logoSizePx = clampNumber(templateTheme?.logo_size_px, 24, 240) ?? 48;
+  const headingSizePx = clampNumber(templateTheme?.heading_size_px, 18, 56) ?? 24;
+  const bodySizePx = clampNumber(templateTheme?.body_size_px, 12, 24) ?? 14;
+  const cardMaxWidthPx = clampNumber(templateTheme?.card_max_width_px, 320, 1024) ?? 420;
+  const logoAlignment = templateTheme?.logo_alignment ?? "left";
+  const cardAlignment = templateTheme?.card_alignment ?? "center";
 
   const brandStyle = useMemo(() => {
-    if (!config?.branding.primary_color) {
+    if (!config?.branding.primary_color && !templateTheme?.card_background_color) {
       return undefined;
     }
-    return { borderColor: config.branding.primary_color } as CSSProperties;
-  }, [config]);
+    return {
+      borderColor: config?.branding.primary_color ?? undefined,
+      backgroundColor: templateTheme?.card_background_color ?? undefined,
+      color: templateTheme?.text_color ?? undefined,
+      maxWidth: `${cardMaxWidthPx}px`,
+      fontSize: `${bodySizePx}px`,
+    } as CSSProperties;
+  }, [bodySizePx, cardMaxWidthPx, config, templateTheme?.card_background_color, templateTheme?.text_color]);
 
   const primaryButtonStyle = useMemo(() => {
     if (!config?.branding.primary_color) {
@@ -95,18 +152,62 @@ export default function GuestLanding() {
     return { backgroundColor: config.branding.primary_color } as CSSProperties;
   }, [config]);
 
+  const pageStyle = useMemo(() => {
+    if (!templateTheme?.background_color && !templateTheme?.text_color) {
+      return undefined;
+    }
+    return {
+      backgroundColor: templateTheme?.background_color ?? undefined,
+      color: templateTheme?.text_color ?? undefined,
+    } as CSSProperties;
+  }, [templateTheme?.background_color, templateTheme?.text_color]);
+
+  const cardContainerStyle = useMemo(() => {
+    if (cardAlignment === "left") {
+      return { justifyContent: "flex-start" } as CSSProperties;
+    }
+    if (cardAlignment === "right") {
+      return { justifyContent: "flex-end" } as CSSProperties;
+    }
+    return { justifyContent: "center" } as CSSProperties;
+  }, [cardAlignment]);
+
+  const logoContainerClass = useMemo(() => {
+    if (logoAlignment === "center") {
+      return "justify-center";
+    }
+    if (logoAlignment === "right") {
+      return "justify-end";
+    }
+    return "justify-start";
+  }, [logoAlignment]);
+
+  const templateTokens = useMemo(
+    () => ({
+      display_name: config?.branding.display_name,
+      logo_url: config?.branding.logo_url,
+      primary_color: config?.branding.primary_color,
+      terms_html: config?.branding.terms_html,
+      support_contact: config?.branding.support_contact,
+      logo_size_px: String(logoSizePx),
+      heading_size_px: String(headingSizePx),
+      body_size_px: String(bodySizePx),
+      card_max_width_px: String(cardMaxWidthPx),
+      card_alignment: cardAlignment,
+      logo_alignment: logoAlignment,
+      background_color: templateTheme?.background_color,
+      card_background_color: templateTheme?.card_background_color,
+      text_color: templateTheme?.text_color,
+    }),
+    [cardAlignment, cardMaxWidthPx, config, headingSizePx, logoAlignment, logoSizePx, templateTheme]
+  );
+
   const resolvedTemplate = useMemo(() => {
-    if (!config?.portal_template?.enabled || !config.portal_template.html) {
+    if (templateMode === "off" || !config?.portal_template?.html) {
       return null;
     }
-    return applyTemplateTokens(config.portal_template.html, {
-      display_name: config.branding.display_name,
-      logo_url: config.branding.logo_url,
-      primary_color: config.branding.primary_color,
-      terms_html: config.branding.terms_html,
-      support_contact: config.branding.support_contact,
-    });
-  }, [config]);
+    return applyTemplateTokens(config.portal_template.html, templateTokens);
+  }, [config?.portal_template?.html, templateMode, templateTokens]);
 
   useEffect(() => {
     let active = true;
@@ -296,20 +397,26 @@ export default function GuestLanding() {
   const portalCard = (
     <Card style={brandStyle}>
       <CardHeader className="space-y-3">
-        <div className="flex items-center gap-3">
+        <div className={`flex items-center gap-3 ${logoContainerClass}`}>
           {config?.branding.logo_url ? (
             <img
               src={config.branding.logo_url}
               alt={config.branding.display_name ?? "Site logo"}
-              className="h-12 w-12 rounded-lg object-contain"
+              className="rounded-lg object-contain"
+              style={{ height: `${logoSizePx}px`, width: `${logoSizePx}px` }}
             />
           ) : (
-            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary text-sm font-semibold text-primary-foreground">
+            <div
+              className="flex items-center justify-center rounded-lg bg-primary text-sm font-semibold text-primary-foreground"
+              style={{ height: `${logoSizePx}px`, width: `${logoSizePx}px` }}
+            >
               WiFi
             </div>
           )}
           <div>
-            <CardTitle>{config?.branding.display_name ?? "Connect to WiFi"}</CardTitle>
+            <CardTitle style={{ fontSize: `${headingSizePx}px` }}>
+              {config?.branding.display_name ?? "Connect to WiFi"}
+            </CardTitle>
             <CardDescription>Secure access for guests</CardDescription>
           </div>
         </div>
@@ -520,14 +627,27 @@ export default function GuestLanding() {
       </CardContent>
     </Card>
   );
+  const portalCardElement = (
+    <div className="flex w-full" style={cardContainerStyle}>
+      {portalCard}
+    </div>
+  );
 
   const renderedTemplate = useMemo(() => {
-    if (!resolvedTemplate) {
+    if (!resolvedTemplate || templateMode === "off") {
       return null;
     }
+    if (templateMode === "replace") {
+      return (
+        <div className="space-y-6">
+          <div dangerouslySetInnerHTML={{ __html: resolvedTemplate }} />
+        </div>
+      );
+    }
+
     const segments = resolvedTemplate.split(PORTAL_TEMPLATE_TOKEN);
     if (segments.length === 1) {
-      // If {{portal}} token is omitted, render only the template without the built-in card.
+      // Compatibility fallback if an old template enabled embed mode without the token.
       return (
         <div className="space-y-6">
           <div dangerouslySetInnerHTML={{ __html: segments[0] }} />
@@ -539,12 +659,12 @@ export default function GuestLanding() {
         {segments.map((segment, index) => (
           <div key={`segment-${index}`} className="space-y-6">
             {segment ? <div dangerouslySetInnerHTML={{ __html: segment }} /> : null}
-            {index < segments.length - 1 ? portalCard : null}
+            {index < segments.length - 1 ? portalCardElement : null}
           </div>
         ))}
       </div>
     );
-  }, [resolvedTemplate, portalCard]);
+  }, [portalCardElement, resolvedTemplate, templateMode]);
 
   useEffect(() => {
     if (!resolvedTemplate) {
@@ -574,10 +694,20 @@ export default function GuestLanding() {
     };
   }, [acceptTos, authPending, portalSessionId, previewParam, resolvedTemplate]);
 
+  if (loading && !config) {
+    return (
+      <main className="surface-grid min-h-screen px-4 py-8" style={pageStyle}>
+        <div className="mx-auto max-w-md rounded-xl border border-border/70 bg-card/90 p-6 text-sm text-muted-foreground">
+          Loading portal...
+        </div>
+      </main>
+    );
+  }
+
   return (
-    <main className="surface-grid min-h-screen px-4 py-8">
-      <div className={resolvedTemplate ? "mx-auto w-full max-w-4xl" : "mx-auto max-w-md"}>
-        {renderedTemplate ?? portalCard}
+    <main className="surface-grid min-h-screen px-4 py-8" style={pageStyle}>
+      <div className="mx-auto w-full max-w-4xl">
+        {renderedTemplate ?? portalCardElement}
       </div>
     </main>
   );

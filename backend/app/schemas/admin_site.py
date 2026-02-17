@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel
 
 class UnifiSiteDiscoveryResponse(BaseModel):
@@ -21,6 +23,21 @@ class SiteProvisionRequest(BaseModel):
     sites: list[SiteProvisionItem]
 
 
+PortalTemplateMode = Literal["off", "replace", "embed"]
+
+
+class PortalTemplateTheme(BaseModel):
+    card_alignment: Literal["left", "center", "right"] | None = None
+    card_max_width_px: int | None = None
+    logo_size_px: int | None = None
+    logo_alignment: Literal["left", "center", "right"] | None = None
+    heading_size_px: int | None = None
+    body_size_px: int | None = None
+    background_color: str | None = None
+    card_background_color: str | None = None
+    text_color: str | None = None
+
+
 class SiteCreateRequest(BaseModel):
     display_name: str
     slug: str
@@ -30,6 +47,8 @@ class SiteCreateRequest(BaseModel):
     terms_html: str | None = None
     portal_template_html: str | None = None
     portal_template_enabled: bool = False
+    portal_template_mode: PortalTemplateMode = "off"
+    portal_template_theme: PortalTemplateTheme | None = None
     support_contact: str | None = None
     success_url: str | None = None
     enable_tos_only: bool = False
@@ -52,6 +71,8 @@ class SiteUpdateRequest(BaseModel):
     terms_html: str | None = None
     portal_template_html: str | None = None
     portal_template_enabled: bool | None = None
+    portal_template_mode: PortalTemplateMode | None = None
+    portal_template_theme: PortalTemplateTheme | None = None
     support_contact: str | None = None
     success_url: str | None = None
     enable_tos_only: bool | None = None
@@ -75,6 +96,8 @@ class SiteResponse(BaseModel):
     terms_html: str | None
     portal_template_html: str | None
     portal_template_enabled: bool
+    portal_template_mode: PortalTemplateMode
+    portal_template_theme: PortalTemplateTheme | None
     support_contact: str | None
     success_url: str | None
     enable_tos_only: bool
@@ -86,3 +109,14 @@ class SiteResponse(BaseModel):
     default_data_limit_mb: int | None
     default_rx_kbps: int | None
     default_tx_kbps: int | None
+
+
+class PortalTemplateVersionResponse(BaseModel):
+    id: str
+    site_id: str
+    tenant_id: str
+    portal_template_mode: PortalTemplateMode
+    portal_template_html: str | None
+    portal_template_theme: PortalTemplateTheme | None
+    created_by_admin_user_id: str | None
+    created_at: str

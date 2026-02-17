@@ -9,3 +9,4 @@ from .guest_identity import GuestIdentity  # noqa: F401
 from .auth_event import AuthEvent  # noqa: F401
 from .voucher import VoucherBatch, Voucher, VoucherRedemption  # noqa: F401
 from .oidc import OidcProvider, SiteOidcSetting  # noqa: F401
+from .portal_template_version import SitePortalTemplateVersion  # noqa: F401

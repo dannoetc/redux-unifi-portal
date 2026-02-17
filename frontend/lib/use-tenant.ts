@@ -102,6 +102,21 @@ export function useTenantSelection() {
   }, [tenantId]);
 
   useEffect(() => {
+    if (loading) {
+      return;
+    }
+    if (tenantIds.length === 0) {
+      if (tenantId !== null) {
+        setTenantId(null);
+      }
+      return;
+    }
+    if (!tenantId || !tenantIds.includes(tenantId)) {
+      setTenantId(tenantIds[0]);
+    }
+  }, [loading, tenantId, tenantIds]);
+
+  useEffect(() => {
     if (typeof window === "undefined") {
       return;
     }
@@ -120,5 +135,8 @@ export function useTenantSelection() {
     };
   }, [tenantId, tenantIds]);
 
-  return { tenantId, setTenantId, tenants, loading, adminUser };
+  const isTenantLocked = tenants.length === 1;
+  const hasTenants = tenants.length > 0;
+
+  return { tenantId, setTenantId, tenants, loading, adminUser, isTenantLocked, hasTenants };
 }
