@@ -1261,7 +1261,7 @@ def create_voucher_batch(
     db.flush()
 
     codes = _generate_codes(payload.count, payload.code_length)
-    vouchers = [Voucher(batch_id=batch.id, code=code) for code in codes]
+    vouchers = [Voucher(batch_id=batch.id, code=code, uses=0, disabled=False) for code in codes]
     db.add_all(vouchers)
     db.commit()
 
