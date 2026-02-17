@@ -142,7 +142,7 @@ done
 update_repo() {
   local stash_ref=""
   local dirty
-  dirty="$(git -C "${ROOT_DIR}" status --porcelain)"
+  dirty="$(git -C "${ROOT_DIR}" status --porcelain --untracked-files=no)"
   if [[ -n "${dirty}" ]]; then
     if [[ "${FORCE_PULL}" -eq 1 ]]; then
       echo "[WARN] Working tree is dirty; stashing changes for --force."
@@ -296,8 +296,8 @@ if [[ "${REBUILD}" -eq 1 ]]; then
   rebuild_images
 fi
 
-echo "[STEP] Starting services."
-compose up -d --remove-orphans
+echo "[STEP] Starting services (with build for upgraded images)."
+compose up -d --build --remove-orphans
 
 run_migrations
 wait_for_readiness
