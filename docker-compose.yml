@@ -37,6 +37,8 @@ services:
       CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
     ports:
       - "8000:8000"
+    volumes:
+      - certbot-etc:/etc/letsencrypt
     depends_on:
       - postgres
       - redis

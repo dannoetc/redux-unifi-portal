@@ -12,6 +12,7 @@ import {
   Activity,
   Building2,
   LineChart,
+  ShieldCheck,
 } from "lucide-react";
 
 import { SidebarNav } from "@/components/admin/sidebar-nav";
@@ -65,6 +66,7 @@ export function Sidebar({ collapsed, onCollapsedChange }: SidebarProps) {
             Vouchers: Ticket,
             Reports: LineChart,
             "Auth Events": Activity,
+            Certificates: ShieldCheck,
             default: Users,
           }}
         />

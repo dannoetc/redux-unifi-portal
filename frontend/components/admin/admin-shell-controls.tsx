@@ -126,6 +126,11 @@ export function AdminShellControls() {
               <a className="rounded-md px-2 py-1 hover:bg-muted" href="/admin/auth-events">
                 Auth events
               </a>
+              {adminUser?.is_superadmin ? (
+                <a className="rounded-md px-2 py-1 hover:bg-muted" href="/admin/certificates">
+                  Certificates
+                </a>
+              ) : null}
             </div>
           </div>
           <div className="mt-3 border-t border-border/60 pt-3">

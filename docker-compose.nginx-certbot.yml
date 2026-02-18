@@ -26,7 +26,13 @@ services:
       - |
         set -eu
 
-        if [ -z "$${DOMAIN:-}" ]; then
+        PRIMARY_DOMAIN="$$(printf '%s' "$${DOMAIN:-}" | cut -d',' -f1 | tr -d ' ')"
+        CERT_SOURCE_FILE="/etc/letsencrypt/.cert-source"
+        RENEWAL_CONF="/etc/letsencrypt/renewal/$${PRIMARY_DOMAIN}.conf"
+        LIVE_DIR="/etc/letsencrypt/live/$${PRIMARY_DOMAIN}"
+        ARCHIVE_DIR="/etc/letsencrypt/archive/$${PRIMARY_DOMAIN}"
+
+        if [ -z "$${PRIMARY_DOMAIN:-}" ]; then
           echo "[ERROR] Missing DOMAIN" >&2
           exit 1
         fi
@@ -37,25 +43,46 @@ services:
 
         mkdir -p /var/www/certbot/.well-known/acme-challenge || true
 
-        if [ ! -f "/etc/letsencrypt/live/$${DOMAIN}/fullchain.pem" ]; then
-          echo "[INFO] Initial cert missing; requesting Let's Encrypt cert for: $${DOMAIN}"
-          certbot certonly --webroot -w /var/www/certbot -d "$${DOMAIN}" \
-            --email "$${CERTBOT_EMAIL}" --agree-tos --non-interactive --no-eff-email \
-            --preferred-challenges http \
-            --keep-until-expiring \
-            --verbose
-          echo "[OK] Initial certificate obtained."
-        else
-          echo "[OK] Existing certificate present for $${DOMAIN}; skipping initial issuance."
-        fi
-
-        echo "[INFO] Starting renewal loop (every 12h)."
         while true; do
-          if certbot renew --webroot -w /var/www/certbot --verbose; then
-            echo "[OK] Certbot renew completed."
-          else
-            echo "[WARN] Certbot renew failed; retrying in 12h."
+          CERT_SOURCE="letsencrypt"
+          if [ -f "$${CERT_SOURCE_FILE}" ]; then
+            CERT_SOURCE="$$(cat "$${CERT_SOURCE_FILE}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
           fi
+          if [ "$${CERT_SOURCE}" = "custom" ]; then
+            echo "[INFO] TLS mode is custom; skipping Certbot issuance/renewal."
+            sleep 5m
+            continue
+          fi
+
+          if [ ! -f "$${RENEWAL_CONF}" ]; then
+            if [ -d "$${LIVE_DIR}" ]; then
+              echo "[WARN] Removing non-Certbot live cert directory before initial issuance: $${LIVE_DIR}"
+              rm -rf "$${LIVE_DIR}" "$${ARCHIVE_DIR}" || true
+            fi
+            echo "[INFO] Requesting initial Let's Encrypt cert for: $${PRIMARY_DOMAIN}"
+            if certbot certonly --webroot -w /var/www/certbot -d "$${PRIMARY_DOMAIN}" \
+              --email "$${CERTBOT_EMAIL}" --agree-tos --non-interactive --no-eff-email \
+              --preferred-challenges http \
+              --keep-until-expiring \
+              --verbose; then
+              echo "letsencrypt" > "$${CERT_SOURCE_FILE}"
+              echo "[OK] Initial certificate obtained."
+            else
+              echo "[WARN] Initial issuance failed; retrying in 5m."
+              sleep 5m
+              continue
+            fi
+          else
+            if certbot renew --webroot -w /var/www/certbot --verbose; then
+              echo "[OK] Certbot renew completed."
+            else
+              echo "[WARN] Certbot renew failed; retrying in 1h."
+              sleep 1h
+              continue
+            fi
+          fi
+
+          echo "[INFO] Next renewal check in 12h."
           sleep 12h
         done
     command: []

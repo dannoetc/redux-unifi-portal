@@ -4,12 +4,16 @@ import csv
 import io
 import json
 import logging
+import os
 import re
 import secrets
 import string
+import subprocess
+import tempfile
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -62,6 +66,7 @@ from app.schemas.admin_oidc import (
     SiteOidcUpdateRequest,
 )
 from app.schemas.admin_user import AdminUserCreateRequest, AdminUserResponse, AdminUserUpdateRequest
+from app.schemas.admin_tls import TlsCustomCertificateRequest, TlsModeUpdateRequest, TlsStatusResponse
 from app.schemas.admin_site import (
     PortalTemplateVersionResponse,
     SiteCreateRequest,
@@ -158,6 +163,50 @@ def me(current_admin: AdminUser = Depends(get_current_admin)) -> dict:
             }
         },
     }
+
+
+@router.get("/system/tls")
+def get_tls_status(_admin: AdminUser = Depends(require_superadmin)) -> dict:
+    return {"ok": True, "data": _tls_status().model_dump(mode="json")}
+
+
+@router.put("/system/tls/custom")
+def upload_custom_tls_certificate(
+    payload: TlsCustomCertificateRequest,
+    _admin: AdminUser = Depends(require_superadmin),
+) -> dict:
+    domain = _get_primary_domain()
+    certs_dir = Path(settings.TLS_CERTS_DIR)
+    live_dir = certs_dir / "live" / domain
+    cert_path = live_dir / "fullchain.pem"
+    key_path = live_dir / "privkey.pem"
+
+    cert_pem = payload.certificate_pem.strip()
+    key_pem = payload.private_key_pem.strip()
+    if not cert_pem or not key_pem:
+        raise HTTPException(
+            status_code=400,
+            detail={"ok": False, "error": {"code": "INVALID_CERTIFICATE", "message": "Certificate and key are required."}},
+        )
+
+    _validate_certificate_pair(cert_pem, key_pem)
+
+    live_dir.mkdir(parents=True, exist_ok=True)
+    _atomic_write(cert_path, cert_pem + "\n", 0o644)
+    _atomic_write(key_path, key_pem + "\n", 0o600)
+    _set_tls_mode("custom")
+
+    return {"ok": True, "data": _tls_status().model_dump(mode="json")}
+
+
+@router.put("/system/tls/mode")
+def update_tls_mode(
+    payload: TlsModeUpdateRequest,
+    _admin: AdminUser = Depends(require_superadmin),
+) -> dict:
+    _get_primary_domain()
+    _set_tls_mode(payload.mode)
+    return {"ok": True, "data": _tls_status().model_dump(mode="json")}
 
 
 @router.get("/tenants")
@@ -2937,3 +2986,175 @@ def _auth_events_query(
                     )
                 )
     return query.order_by(AuthEvent.created_at.desc())
+
+
+def _get_primary_domain() -> str:
+    raw_domain = (settings.DOMAIN or "").strip()
+    primary = raw_domain.split(",")[0].strip()
+    if not primary:
+        raise HTTPException(
+            status_code=400,
+            detail={"ok": False, "error": {"code": "DOMAIN_NOT_CONFIGURED", "message": "DOMAIN is not configured."}},
+        )
+    if "/" in primary or ".." in primary:
+        raise HTTPException(
+            status_code=400,
+            detail={"ok": False, "error": {"code": "INVALID_DOMAIN", "message": "DOMAIN is invalid."}},
+        )
+    return primary
+
+
+def _tls_mode_path() -> Path:
+    return Path(settings.TLS_CERTS_DIR) / settings.TLS_CERT_SOURCE_FILE
+
+
+def _get_tls_mode() -> str:
+    mode_path = _tls_mode_path()
+    if not mode_path.exists():
+        return "letsencrypt"
+    mode = mode_path.read_text(encoding="utf-8").strip().lower()
+    return mode if mode in {"letsencrypt", "custom"} else "letsencrypt"
+
+
+def _set_tls_mode(mode: str) -> None:
+    if mode not in {"letsencrypt", "custom"}:
+        raise HTTPException(
+            status_code=400,
+            detail={"ok": False, "error": {"code": "INVALID_TLS_MODE", "message": "Unsupported TLS mode."}},
+        )
+    mode_path = _tls_mode_path()
+    mode_path.parent.mkdir(parents=True, exist_ok=True)
+    _atomic_write(mode_path, f"{mode}\n", 0o644)
+
+
+def _tls_status() -> TlsStatusResponse:
+    domain = _get_primary_domain()
+    certs_dir = Path(settings.TLS_CERTS_DIR)
+    cert_path = certs_dir / "live" / domain / "fullchain.pem"
+    renewal_path = certs_dir / "renewal" / f"{domain}.conf"
+    metadata = _read_certificate_metadata(cert_path)
+    return TlsStatusResponse(
+        mode=_get_tls_mode(),
+        domain=domain,
+        certificate_present=cert_path.exists(),
+        managed_by_certbot=renewal_path.exists(),
+        issuer=metadata.get("issuer"),
+        subject=metadata.get("subject"),
+        not_before=metadata.get("not_before"),
+        not_after=metadata.get("not_after"),
+        self_signed=metadata.get("self_signed"),
+    )
+
+
+def _read_certificate_metadata(cert_path: Path) -> dict[str, str | bool | None]:
+    if not cert_path.exists():
+        return {
+            "issuer": None,
+            "subject": None,
+            "not_before": None,
+            "not_after": None,
+            "self_signed": None,
+        }
+    output = _run_openssl(["x509", "-in", str(cert_path), "-noout", "-issuer", "-subject", "-dates"])
+    values: dict[str, str | bool | None] = {
+        "issuer": None,
+        "subject": None,
+        "not_before": None,
+        "not_after": None,
+        "self_signed": None,
+    }
+    for line in output.splitlines():
+        if line.startswith("issuer="):
+            values["issuer"] = line.split("=", 1)[1].strip()
+        elif line.startswith("subject="):
+            values["subject"] = line.split("=", 1)[1].strip()
+        elif line.startswith("notBefore="):
+            values["not_before"] = line.split("=", 1)[1].strip()
+        elif line.startswith("notAfter="):
+            values["not_after"] = line.split("=", 1)[1].strip()
+
+    issuer = str(values.get("issuer") or "")
+    subject = str(values.get("subject") or "")
+    values["self_signed"] = bool(issuer and subject and issuer == subject)
+    return values
+
+
+def _validate_certificate_pair(certificate_pem: str, private_key_pem: str) -> None:
+    with tempfile.TemporaryDirectory(prefix="tls-upload-") as tmp_dir:
+        cert_path = Path(tmp_dir) / "cert.pem"
+        key_path = Path(tmp_dir) / "key.pem"
+        cert_path.write_text(certificate_pem + "\n", encoding="utf-8")
+        key_path.write_text(private_key_pem + "\n", encoding="utf-8")
+
+        _run_openssl(["x509", "-in", str(cert_path), "-noout"])
+        _run_openssl(["pkey", "-in", str(key_path), "-noout"])
+
+        cert_pub_der = _run_openssl_binary(
+            ["x509", "-in", str(cert_path), "-pubkey", "-noout"],
+            pipe_to=["pkey", "-pubin", "-outform", "DER"],
+        )
+        key_pub_der = _run_openssl_binary(["pkey", "-in", str(key_path), "-pubout", "-outform", "DER"])
+        if cert_pub_der != key_pub_der:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "ok": False,
+                    "error": {"code": "CERT_KEY_MISMATCH", "message": "Certificate and private key do not match."},
+                },
+            )
+
+
+def _run_openssl(args: list[str]) -> str:
+    try:
+        result = subprocess.run(
+            ["openssl", *args],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return result.stdout.strip()
+    except subprocess.CalledProcessError as exc:
+        message = (exc.stderr or exc.stdout or "OpenSSL validation failed.").strip()
+        raise HTTPException(
+            status_code=400,
+            detail={"ok": False, "error": {"code": "INVALID_CERTIFICATE", "message": message}},
+        ) from exc
+
+
+def _run_openssl_binary(args: list[str], pipe_to: list[str] | None = None) -> bytes:
+    try:
+        first = subprocess.run(
+            ["openssl", *args],
+            check=True,
+            capture_output=True,
+        )
+        if not pipe_to:
+            return first.stdout
+        second = subprocess.run(
+            ["openssl", *pipe_to],
+            check=True,
+            input=first.stdout,
+            capture_output=True,
+        )
+        return second.stdout
+    except subprocess.CalledProcessError as exc:
+        message = (exc.stderr or exc.stdout or b"OpenSSL validation failed.").decode("utf-8", errors="ignore").strip()
+        raise HTTPException(
+            status_code=400,
+            detail={"ok": False, "error": {"code": "INVALID_CERTIFICATE", "message": message}},
+        ) from exc
+
+
+def _atomic_write(path: Path, content: str, mode: int) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_path = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(tmp_path, mode)
+        os.replace(tmp_path, path)
+    finally:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)

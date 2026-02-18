@@ -13,6 +13,7 @@ const TITLE_MAP = [
   { path: "/admin/vouchers", label: "Vouchers" },
   { path: "/admin/reports", label: "Reports" },
   { path: "/admin/auth-events", label: "Auth Events" },
+  { path: "/admin/certificates", label: "Certificates" },
   { path: "/admin", label: "Dashboard" },
 ];
 

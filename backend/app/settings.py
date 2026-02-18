@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     BASE_URL: str = "http://localhost:3000"
+    DOMAIN: str = ""
 
     DATABASE_URL: str = "postgresql+psycopg://postgres:postgres@localhost:5432/redux_portal"
     REDIS_URL: str = "redis://localhost:6379/0"
@@ -47,6 +48,8 @@ class Settings(BaseSettings):
 
     # CORS
     CORS_ALLOW_ORIGINS: str = "http://localhost:3000"
+    TLS_CERTS_DIR: str = "/etc/letsencrypt"
+    TLS_CERT_SOURCE_FILE: str = ".cert-source"
 
     def cors_allow_origins_list(self) -> list[str]:
         return [item.strip() for item in self.CORS_ALLOW_ORIGINS.split(",") if item.strip()]
