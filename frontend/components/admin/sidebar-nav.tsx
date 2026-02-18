@@ -1,6 +1,7 @@
 "use client";
 
 import { ElementType } from "react";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { cn } from "@/lib/utils";
@@ -23,6 +24,16 @@ type SidebarNavProps = {
   icons?: Record<string, ElementType>;
 };
 
+const isNavItemActive = (pathname: string | null, href: string) => {
+  if (!pathname) {
+    return false;
+  }
+  if (href === "/admin") {
+    return pathname === "/admin";
+  }
+  return pathname === href || pathname.startsWith(`${href}/`);
+};
+
 export function SidebarNav({ collapsed = false, icons = {} }: SidebarNavProps) {
   const pathname = usePathname();
   const { adminUser } = useTenantSelection();
@@ -37,11 +48,11 @@ export function SidebarNav({ collapsed = false, icons = {} }: SidebarNavProps) {
         return true;
       }).map(
         (item) => {
-        const isActive = pathname === item.href || pathname?.startsWith(`${item.href}/`);
+        const isActive = isNavItemActive(pathname, item.href);
         const Icon = icons[item.label] ?? icons.default;
         return (
           <li key={item.href}>
-            <a
+            <Link
               className={cn(
                 "relative flex min-h-10 items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
@@ -60,7 +71,7 @@ export function SidebarNav({ collapsed = false, icons = {} }: SidebarNavProps) {
               ) : (
                 <span className="sr-only">{item.label}</span>
               )}
-            </a>
+            </Link>
           </li>
         );
       })}

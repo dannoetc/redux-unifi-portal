@@ -140,6 +140,31 @@ def test_guest_config_includes_portal_template(client, db_session):
     assert template["theme"]["logo_size_px"] == 64
 
 
+def test_guest_config_tos_only_mode_uses_only_tos_method(client, db_session):
+    tenant, site = _seed_site(db_session, enable_tos_only=True)
+    provider = OidcProvider(
+        id=uuid.uuid4(),
+        tenant_id=tenant.id,
+        issuer="https://issuer.example.com",
+        client_id="client-id",
+        client_secret_ref="secret-ref",
+        scopes="openid email profile",
+    )
+    setting = SiteOidcSetting(
+        id=uuid.uuid4(),
+        site_id=site.id,
+        provider_id=provider.id,
+        enabled=True,
+    )
+    db_session.add_all([provider, setting])
+    db_session.commit()
+
+    response = client.get(f"/api/guest/{tenant.slug}/{site.slug}/config")
+    assert response.status_code == 200
+    methods = response.json()["data"]["methods"]
+    assert methods == ["tos_only"]
+
+
 def test_guest_config_sanitizes_terms_and_template_html(client, db_session):
     tenant, site = _seed_site(db_session)
     site.terms_html = "<p>Terms</p><script>alert(1)</script><a href='javascript:alert(1)'>Bad</a>"

@@ -15,7 +15,7 @@ You’ll do two things:
 - UniFi controller details (at least one of these must be set somewhere):
   - UniFi **base URL** (example: `https://unifi.example.com`)
   - UniFi **port** (usually `443`)
-  - UniFi **API key** (or an API key reference)
+  - UniFi **API key** (stored encrypted in the database)
 
 ---
 
@@ -39,7 +39,7 @@ You’ll do two things:
 4. (Recommended) Set UniFi defaults at the tenant level:
    - **UniFi base URL**
    - **UniFi port**
-   - **UniFi API key** (paste) OR **UniFi API key ref** (reference to a secret)
+   - **UniFi API key** (paste; stored encrypted in the database)
 
 > Tenant-level UniFi settings are used as defaults. You can override them per site later.
 

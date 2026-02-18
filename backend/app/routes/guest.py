@@ -126,6 +126,21 @@ def parse_malformed_guest_params(request: Request) -> Dict[str, str]:
     return merged
 
 
+def _resolve_site_methods(db: Session, site: Site) -> list[str]:
+    if site.enable_tos_only:
+        return ["tos_only"]
+
+    methods = ["voucher", "email_otp"]
+    oidc_enabled = db.execute(
+        select(SiteOidcSetting.id).where(
+            SiteOidcSetting.site_id == site.id, SiteOidcSetting.enabled.is_(True)
+        )
+    ).scalar_one_or_none()
+    if oidc_enabled:
+        methods.append("oidc")
+    return methods
+
+
 @router.post("/resolve")
 def resolve_site(
     payload: GuestSessionInitRequest,
@@ -198,16 +213,7 @@ def resolve_site(
         user_agent=user_agent,
     )
 
-    methods = ["voucher", "email_otp"]
-    if site.enable_tos_only:
-        methods.append("tos_only")
-    oidc_enabled = db.execute(
-        select(SiteOidcSetting.id).where(
-            SiteOidcSetting.site_id == site.id, SiteOidcSetting.enabled.is_(True)
-        )
-    ).scalar_one_or_none()
-    if oidc_enabled:
-        methods.append("oidc")
+    methods = _resolve_site_methods(db, site)
 
     return {
         "ok": True,
@@ -243,16 +249,7 @@ def get_site_config(
         else "off"
     )
 
-    methods = ["voucher", "email_otp"]
-    if site.enable_tos_only:
-        methods.append("tos_only")
-    oidc_enabled = db.execute(
-        select(SiteOidcSetting.id).where(
-            SiteOidcSetting.site_id == site.id, SiteOidcSetting.enabled.is_(True)
-        )
-    ).scalar_one_or_none()
-    if oidc_enabled:
-        methods.append("oidc")
+    methods = _resolve_site_methods(db, site)
 
     policy = {
         "time_limit_minutes": site.default_time_limit_minutes,
@@ -354,16 +351,7 @@ def init_session(
         user_agent=user_agent,
     )
 
-    methods = ["voucher", "email_otp"]
-    if site.enable_tos_only:
-        methods.append("tos_only")
-    oidc_enabled = db.execute(
-        select(SiteOidcSetting.id).where(
-            SiteOidcSetting.site_id == site.id, SiteOidcSetting.enabled.is_(True)
-        )
-    ).scalar_one_or_none()
-    if oidc_enabled:
-        methods.append("oidc")
+    methods = _resolve_site_methods(db, site)
 
     return {
         "ok": True,

@@ -8,6 +8,7 @@ from sqlalchemy import select
 from app.db import SessionLocal
 from app.models import AdminMembership, AdminRole, AdminUser, Site, Tenant, TenantStatus
 from app.security import hash_password
+from app.services.secrets import SecretError, encrypt_secret
 
 
 def _split_env(name: str) -> list[str]:
@@ -33,7 +34,8 @@ def main() -> None:
     site_unifi_ids = _split_env("SITE_UNIFI_SITE_IDS")
 
     unifi_base_url = os.environ.get("UNIFI_BASE_URL", "https://unifi.local")
-    unifi_api_key_ref = os.environ.get("UNIFI_API_KEY_REF", "dev-unifi-key")
+    unifi_api_key = (os.environ.get("UNIFI_API_KEY") or "").strip()
+    unifi_api_key_ref = (os.environ.get("UNIFI_API_KEY_REF") or "").strip()
 
     default_time_limit = int(os.environ.get("DEFAULT_TIME_LIMIT_MINUTES", "60"))
     default_data_limit = os.environ.get("DEFAULT_DATA_LIMIT_MB")
@@ -62,13 +64,26 @@ def main() -> None:
                 name=tenant_name,
                 status=TenantStatus.ACTIVE,
                 unifi_base_url=unifi_base_url,
-                unifi_api_key_ref=unifi_api_key_ref,
+                unifi_api_key_ref=unifi_api_key_ref or None,
             )
+            if unifi_api_key:
+                try:
+                    tenant.unifi_api_key_encrypted = encrypt_secret(unifi_api_key)
+                    tenant.unifi_api_key_ref = None
+                except SecretError as exc:
+                    raise SystemExit(f"Unable to encrypt UNIFI_API_KEY: {exc}") from exc
             session.add(tenant)
             session.flush()
         else:
             tenant.unifi_base_url = tenant.unifi_base_url or unifi_base_url
-            tenant.unifi_api_key_ref = tenant.unifi_api_key_ref or unifi_api_key_ref
+            if unifi_api_key and not tenant.unifi_api_key_encrypted:
+                try:
+                    tenant.unifi_api_key_encrypted = encrypt_secret(unifi_api_key)
+                    tenant.unifi_api_key_ref = None
+                except SecretError as exc:
+                    raise SystemExit(f"Unable to encrypt UNIFI_API_KEY: {exc}") from exc
+            elif unifi_api_key_ref and not tenant.unifi_api_key_encrypted:
+                tenant.unifi_api_key_ref = tenant.unifi_api_key_ref or unifi_api_key_ref
 
         membership = session.execute(
             select(AdminMembership).where(

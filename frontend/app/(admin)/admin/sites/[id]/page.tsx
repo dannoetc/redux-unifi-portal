@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ChangeEvent } from "react";
+import type { ChangeEvent, DragEvent } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -139,9 +139,7 @@ const TEMPLATE_PRESETS = {
   customOnly: `<section style="max-width:720px;margin:0 auto;padding:28px;border:1px solid #dbe5ef;border-radius:16px;background:#ffffff;">
   <h2 style="margin-top:0;color:{{primary_color}};">Welcome to {{display_name}}</h2>
   <p style="font-size:15px;color:#334155;">Connect instantly with sponsored access.</p>
-  <button id="sponsored-connect" style="margin-top:12px;padding:12px 18px;border:none;border-radius:10px;background:{{connect_button_color}};color:#fff;font-weight:600;cursor:pointer;">
-    Accept terms and connect
-  </button>
+  <div style="margin-top:12px;">{{connect_action}}</div>
   <p style="margin-top:12px;font-size:12px;color:#64748b;">Support: {{support_contact}}</p>
 </section>`,
 } as const;
@@ -154,6 +152,36 @@ const DEFAULT_TEMPLATE_THEME: PortalTemplateTheme = {
   heading_size_px: 24,
   body_size_px: 14,
 };
+
+const TEMPLATE_TOKEN_GROUPS = [
+  {
+    label: "Core tokens",
+    tokens: [
+      "{{display_name}}",
+      "{{logo_url}}",
+      "{{primary_color}}",
+      "{{connect_action}}",
+      "{{terms_html}}",
+      "{{support_contact}}",
+      "{{portal}}",
+    ],
+  },
+  {
+    label: "Theme tokens",
+    tokens: [
+      "{{logo_size_px}}",
+      "{{heading_size_px}}",
+      "{{body_size_px}}",
+      "{{card_max_width_px}}",
+      "{{card_alignment}}",
+      "{{logo_alignment}}",
+      "{{background_color}}",
+      "{{card_background_color}}",
+      "{{text_color}}",
+      "{{connect_button_color}}",
+    ],
+  },
+] as const;
 
 const DEFAULT_BUILDER_BLOCKS_EMBED: PortalBuilderBlock[] = [
   {
@@ -385,7 +413,7 @@ const renderBuilderBlock = (block: PortalBuilderBlock) => {
 </section>`;
     case "button":
       return `<section style="padding:8px 0;">
-  <button id="sponsored-connect" style="padding:12px 18px;border:none;border-radius:10px;background:${block.buttonColor || "{{connect_button_color}}"};color:#fff;font-weight:600;cursor:pointer;">
+  <button type="button" data-connect-action="tos-accept" style="padding:12px 18px;border:none;border-radius:10px;background:${block.buttonColor || "{{connect_button_color}}"};color:#fff;font-weight:600;cursor:pointer;">
     ${escapeHtml(block.buttonLabel || "Accept terms and connect")}
   </button>
 </section>`;
@@ -494,6 +522,7 @@ export default function SiteDetailPage() {
   const [tenantSlug, setTenantSlug] = useState<string | null>(null);
   const logoInputRef = useRef<HTMLInputElement | null>(null);
   const portalUrlRef = useRef<HTMLInputElement | null>(null);
+  const portalTemplateEditorRef = useRef<HTMLTextAreaElement | null>(null);
   const originalUnifiPortRef = useRef<number | undefined>(undefined);
   const [activeTab, setActiveTab] = useState<SectionId>("overview");
   const [externalPortalIp, setExternalPortalIp] = useState<string>("");
@@ -507,6 +536,7 @@ export default function SiteDetailPage() {
   const [portalVersionsOffset, setPortalVersionsOffset] = useState(0);
   const [portalVersionsTotal, setPortalVersionsTotal] = useState(0);
   const [restoringVersionId, setRestoringVersionId] = useState<string | null>(null);
+  const [tokenDropActive, setTokenDropActive] = useState(false);
 
   const siteForm = useForm<SiteFormValues>({
     resolver: zodResolver(siteSchema),
@@ -521,6 +551,7 @@ export default function SiteDetailPage() {
   const logoValue = siteForm.watch("logo_url");
   const portalTemplateMode = siteForm.watch("portal_template_mode");
   const portalTemplateEnabled = portalTemplateMode !== "off";
+  const accessMode = siteForm.watch("enable_tos_only") ? "unauthenticated" : "authenticated";
   const formIsDirty = siteForm.formState.isDirty;
   const canSave = formIsDirty || portalDesignDirty;
 
@@ -795,7 +826,7 @@ export default function SiteDetailPage() {
     portal_template_mode: "Portal template mode",
     support_contact: "Support contact",
     success_url: "Success URL",
-    enable_tos_only: "TOS-only access",
+    enable_tos_only: "Access mode",
     unifi_base_url: "UniFi controller IP",
     unifi_port: "UniFi controller port",
     unifi_site_id: "UniFi site ID",
@@ -814,7 +845,7 @@ export default function SiteDetailPage() {
     terms_html: "branding",
     support_contact: "branding",
     success_url: "branding",
-    enable_tos_only: "branding",
+    enable_tos_only: "portal",
     portal_template_enabled: "portal",
     portal_template_mode: "portal",
     portal_template_html: "portal",
@@ -912,6 +943,44 @@ export default function SiteDetailPage() {
   const updateTheme = (patch: Partial<PortalTemplateTheme>) => {
     setPortalTheme((prev) => ({ ...prev, ...patch }));
     markPortalDirty();
+  };
+
+  const insertPortalToken = useCallback((token: string) => {
+    const currentValue = siteForm.getValues("portal_template_html") ?? "";
+    const editor = portalTemplateEditorRef.current;
+    if (!editor) {
+      siteForm.setValue("portal_template_html", `${currentValue}${token}`, { shouldDirty: true });
+      markPortalDirty();
+      return;
+    }
+
+    const selectionStart = editor.selectionStart ?? currentValue.length;
+    const selectionEnd = editor.selectionEnd ?? selectionStart;
+    const nextValue =
+      `${currentValue.slice(0, selectionStart)}${token}${currentValue.slice(selectionEnd)}`;
+    siteForm.setValue("portal_template_html", nextValue, { shouldDirty: true });
+    markPortalDirty();
+
+    requestAnimationFrame(() => {
+      editor.focus();
+      const nextCursor = selectionStart + token.length;
+      editor.setSelectionRange(nextCursor, nextCursor);
+    });
+  }, [siteForm]);
+
+  const handleTemplateTokenDragStart = (event: DragEvent<HTMLButtonElement>, token: string) => {
+    event.dataTransfer.setData("text/plain", token);
+    event.dataTransfer.effectAllowed = "copy";
+  };
+
+  const handleTemplateTokenDrop = (event: DragEvent<HTMLTextAreaElement>) => {
+    event.preventDefault();
+    setTokenDropActive(false);
+    const token = event.dataTransfer.getData("text/plain");
+    if (!token.startsWith("{{")) {
+      return;
+    }
+    insertPortalToken(token);
   };
 
   const addBuilderBlock = (type: PortalBuilderBlockType) => {
@@ -1028,11 +1097,13 @@ export default function SiteDetailPage() {
     if (!previewSource.trim()) {
       return "";
     }
+    const connectActionPreview = `<button type="button" style="padding:12px 18px;border:none;border-radius:10px;background:${brandingConnectButtonColor};color:#fff;font-weight:600;cursor:pointer;">Accept terms and connect</button>`;
     return previewSource
       .replaceAll("{{display_name}}", brandingDisplayName)
       .replaceAll("{{logo_url}}", brandingLogoUrl)
       .replaceAll("{{primary_color}}", brandingPrimaryColor)
       .replaceAll("{{connect_button_color}}", brandingConnectButtonColor)
+      .replaceAll("{{connect_action}}", connectActionPreview)
       .replaceAll("{{support_contact}}", brandingSupportContact)
       .replaceAll("{{portal}}", `<div style="padding:16px;border:1px dashed #94a3b8;border-radius:12px;">Built-in portal card preview</div>`)
       .replaceAll("{{logo_size_px}}", String(portalTheme.logo_size_px ?? 48))
@@ -1047,6 +1118,7 @@ export default function SiteDetailPage() {
   }, [activeTemplateHtml, brandingConnectButtonColor, brandingDisplayName, brandingLogoUrl, brandingPrimaryColor, brandingSupportContact, portalTheme]);
   const portalVersionsHasPrevious = portalVersionsOffset > 0;
   const portalVersionsHasNext = portalVersionsOffset + PORTAL_VERSION_PAGE_SIZE < portalVersionsTotal;
+  const portalTemplateField = siteForm.register("portal_template_html");
   const sectionMeta: Array<{ id: SectionId; label: string }> = [
     { id: "overview", label: "Overview" },
     { id: "branding", label: "Branding" },
@@ -1119,16 +1191,16 @@ export default function SiteDetailPage() {
       <div className="grid gap-6 lg:grid-cols-[1fr_280px]">
         <aside className="lg:order-2 lg:sticky lg:top-20 lg:h-fit">
           <Card className="border border-border/60">
-            <CardContent className="space-y-1">
+            <CardContent className="space-y-1 p-3">
               {sectionMeta.map((section) => (
                 <button
                   key={section.id}
                   type="button"
                   onClick={() => setActiveTab(section.id)}
-                  className={`w-full rounded-md px-3 py-2 text-left transition ${
+                  className={`w-full rounded-md border px-3 py-2.5 text-left transition ${
                     activeTab === section.id
-                      ? "bg-primary/10 text-foreground"
-                      : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
+                      ? "border-primary/30 bg-primary/10 text-foreground shadow-sm"
+                      : "border-transparent text-muted-foreground hover:border-border/60 hover:bg-muted/40 hover:text-foreground"
                   }`}
                 >
                   <div className="text-sm font-semibold">{section.label}</div>
@@ -1322,15 +1394,6 @@ export default function SiteDetailPage() {
                 <span className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition peer-checked:translate-x-4" />
               </label>
             </div>
-                <div className="flex items-center gap-2 md:col-span-2">
-                  <input
-                    id="enable_tos_only"
-                    type="checkbox"
-                    className="h-4 w-4 rounded border border-input"
-                    {...siteForm.register("enable_tos_only")}
-                  />
-                  <Label htmlFor="enable_tos_only">Enable TOS-only guest access</Label>
-                </div>
               </form>
             </CardContent>
           </Card>
@@ -1341,32 +1404,60 @@ export default function SiteDetailPage() {
             <CardHeader>
               <CardTitle>Portal templating</CardTitle>
               <CardDescription>
-                Choose how this site renders its captive portal. Replace mode fully controls markup.
-                Embed mode inserts the built-in auth card at {`{{portal}}`}.
+                Choose the access model first, then choose how the portal renders. Embed mode inserts the built-in auth
+                card at {`{{portal}}`}. Replace mode fully controls markup and supports {`{{connect_action}}`} for
+                TOS-only connect.
               </CardDescription>
             </CardHeader>
             <CardContent>
               <form className="grid gap-6">
+                <div className="grid gap-4 rounded-lg border border-border/70 bg-muted/20 p-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="portal_access_mode">Access mode</Label>
+                    <select
+                      id="portal_access_mode"
+                      className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2 focus:ring-offset-white"
+                      value={accessMode}
+                      onChange={(event) => {
+                        const mode = event.target.value as "authenticated" | "unauthenticated";
+                        siteForm.setValue("enable_tos_only", mode === "unauthenticated", { shouldDirty: true });
+                      }}
+                    >
+                      <option value="authenticated">Authenticated (voucher/email/SSO)</option>
+                      <option value="unauthenticated">Unauthenticated (TOS-only tracked access)</option>
+                    </select>
+                    <p className="text-xs text-muted-foreground">
+                      Unauthenticated mode exposes only Terms-of-Service acceptance for guest access tracking.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="portal_template_mode">Template mode</Label>
+                    <select
+                      id="portal_template_mode"
+                      className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2 focus:ring-offset-white"
+                      {...siteForm.register("portal_template_mode")}
+                      onChange={(event) => {
+                        const mode = event.target.value as "off" | "replace" | "embed";
+                        siteForm.setValue("portal_template_mode", mode, { shouldDirty: true });
+                        siteForm.setValue("portal_template_enabled", mode !== "off", { shouldDirty: true });
+                        if (templateEditorMode === "visual" && builderBlocks.length === 0 && mode !== "off") {
+                          setBuilderBlocks(defaultBuilderBlocksForMode(mode));
+                        }
+                        markPortalDirty();
+                      }}
+                    >
+                      <option value="off">Default portal only</option>
+                      <option value="embed">Embed built-in portal in custom layout</option>
+                      <option value="replace">Replace portal with custom template</option>
+                    </select>
+                  </div>
+                </div>
+
                 <div className="space-y-2">
-                  <Label htmlFor="portal_template_mode">Template mode</Label>
-                  <select
-                    id="portal_template_mode"
-                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2 focus:ring-offset-white"
-                    {...siteForm.register("portal_template_mode")}
-                    onChange={(event) => {
-                      const mode = event.target.value as "off" | "replace" | "embed";
-                      siteForm.setValue("portal_template_mode", mode, { shouldDirty: true });
-                      siteForm.setValue("portal_template_enabled", mode !== "off", { shouldDirty: true });
-                      if (templateEditorMode === "visual" && builderBlocks.length === 0 && mode !== "off") {
-                        setBuilderBlocks(defaultBuilderBlocksForMode(mode));
-                      }
-                      markPortalDirty();
-                    }}
-                  >
-                    <option value="off">Default portal only</option>
-                    <option value="embed">Embed built-in portal in custom layout</option>
-                    <option value="replace">Replace portal with custom template</option>
-                  </select>
+                  <p className="text-xs text-muted-foreground">
+                    Use {`{{portal}}`} for full auth flows. Use {`{{connect_action}}`} only for unauthenticated
+                    TOS-only templates.
+                  </p>
                 </div>
 
                 <div className="inline-flex rounded-lg border border-border/70 bg-muted/20 p-1">
@@ -1404,16 +1495,50 @@ export default function SiteDetailPage() {
                       Centered branded frame
                     </Button>
                     <Button type="button" variant="secondary" size="sm" onClick={() => applyTemplatePreset("customOnly", "replace")}>
-                      Full custom sponsored
+                      Full custom TOS-only
                     </Button>
                   </div>
                 </div>
 
-                <div className="text-xs text-muted-foreground">
-                  Core tokens: {`{{display_name}}`}, {`{{logo_url}}`}, {`{{primary_color}}`}, {`{{terms_html}}`}, {`{{support_contact}}`}.
-                  Theme tokens: {`{{logo_size_px}}`}, {`{{heading_size_px}}`}, {`{{body_size_px}}`}, {`{{card_max_width_px}}`},
-                  {` {{card_alignment}}`}, {`{{logo_alignment}}`}, {`{{background_color}}`}, {`{{card_background_color}}`},
-                  {` {{text_color}}`}, {`{{connect_button_color}}`}.
+                <div className="space-y-3 rounded-lg border border-border/70 bg-muted/20 p-4">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">Template tokens</p>
+                    <p className="text-xs text-muted-foreground">
+                      {templateEditorMode === "code"
+                        ? "Drag a token into the HTML editor or click to insert at cursor."
+                        : "Switch to Code Editor to drag or click-insert tokens into HTML."}{" "}
+                      {`{{connect_action}}`} renders only in unauthenticated access mode.
+                    </p>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {TEMPLATE_TOKEN_GROUPS.map((group) => (
+                      <div key={group.label} className="rounded-md border border-border/60 bg-background p-3">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          {group.label}
+                        </p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {group.tokens.map((token) => (
+                            <button
+                              key={token}
+                              type="button"
+                              draggable={templateEditorMode === "code"}
+                              onDragStart={(event) => handleTemplateTokenDragStart(event, token)}
+                              onClick={() => {
+                                if (templateEditorMode !== "code") {
+                                  toast.message("Switch to Code Editor to insert tokens.");
+                                  return;
+                                }
+                                insertPortalToken(token);
+                              }}
+                              className="rounded-md border border-border/60 bg-muted/20 px-2 py-1 text-[11px] font-semibold text-foreground transition hover:border-primary/40 hover:bg-primary/10"
+                            >
+                              {token}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
 
                 {templateEditorMode === "visual" ? (
@@ -1614,10 +1739,26 @@ export default function SiteDetailPage() {
                     <Label htmlFor="portal_template_html">HTML template</Label>
                     <textarea
                       id="portal_template_html"
-                      className="min-h-[220px] w-full rounded-md border border-input bg-background p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2 focus:ring-offset-white"
+                      className={`min-h-[220px] w-full rounded-md border border-input bg-background p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2 focus:ring-offset-white ${
+                        tokenDropActive ? "border-primary ring-2 ring-primary/30" : ""
+                      }`}
                       placeholder="<section>{{portal}}</section>"
                       disabled={!portalTemplateEnabled}
-                      {...siteForm.register("portal_template_html")}
+                      {...portalTemplateField}
+                      ref={(element) => {
+                        portalTemplateField.ref(element);
+                        portalTemplateEditorRef.current = element;
+                      }}
+                      onDragOver={(event) => {
+                        if (templateEditorMode !== "code") {
+                          return;
+                        }
+                        event.preventDefault();
+                        event.dataTransfer.dropEffect = "copy";
+                        setTokenDropActive(true);
+                      }}
+                      onDragLeave={() => setTokenDropActive(false)}
+                      onDrop={handleTemplateTokenDrop}
                       onChange={(event) => {
                         siteForm.setValue("portal_template_html", event.target.value, { shouldDirty: true });
                         markPortalDirty();

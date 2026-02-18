@@ -40,11 +40,13 @@ Start from the sample:
 
 ```bash
 cp .env-sample .env
+# (equivalent templates also exist as .env-example and .env.example)
 ```
 
 Minimum recommended values to set for **any** environment:
 
 - `SECRET_KEY` — long random string
+- `SECRETS_ENCRYPTION_KEY` — Fernet key used to encrypt UniFi/OIDC secrets in DB
 - `NEXT_PUBLIC_API_BASE_URL` — API base URL the frontend should use (see below)
 - `BASE_URL` — public base URL used by the backend (links, redirects)
 - `DOMAIN` — the domain nginx should serve (also used for cert paths)
@@ -64,7 +66,7 @@ NEXT_PUBLIC_API_BASE_URL=https://portal.example.com
 
 # Secrets
 SECRET_KEY=replace-me-with-a-long-random-string
-SECRETS_ENCRYPTION_KEY=
+SECRETS_ENCRYPTION_KEY=replace-with-fernet-key
 
 # Docker-network DB/Redis (recommended when set explicitly)
 DATABASE_URL=postgresql+psycopg://postgres:postgres@postgres:5432/redux_portal
@@ -74,6 +76,9 @@ CELERY_RESULT_BACKEND=redis://redis:6379/0
 ```
 
 > If you leave the sample `DATABASE_URL=...@localhost...` / `REDIS_URL=...localhost...` in place, containers will try to connect to themselves and fail.
+>
+> Generate `SECRETS_ENCRYPTION_KEY` with:
+> `docker compose run --rm api python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`
 
 #### Local development values (optional)
 
@@ -129,7 +134,7 @@ docker compose run --rm api sh -c '\
   SITE_DISPLAY_NAMES="Lab,Office" \
   SITE_UNIFI_SITE_IDS=default,default \
   UNIFI_BASE_URL=https://unifi.local \
-  UNIFI_API_KEY_REF=dev-unifi-key \
+  UNIFI_API_KEY=replace-with-unifi-api-key \
   python -m app.scripts.seed'
 ```
 

@@ -118,6 +118,17 @@ const clampNumber = (value: number | null | undefined, minimum: number, maximum:
   return Math.max(minimum, Math.min(maximum, value));
 };
 
+const normalizeHexColor = (value: string | null | undefined, fallback = "#1f6feb") => {
+  if (!value) {
+    return fallback;
+  }
+  const trimmed = value.trim();
+  if (/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(trimmed)) {
+    return trimmed;
+  }
+  return fallback;
+};
+
 const resolveTemplateMode = (
   mode: string | null | undefined,
   enabled: boolean | null | undefined,
@@ -194,6 +205,7 @@ export default function GuestLanding() {
   const logoAlignment = templateTheme?.logo_alignment ?? "left";
   const cardAlignment = templateTheme?.card_alignment ?? "center";
   const connectButtonColor = templateTheme?.connect_button_color ?? config?.branding.primary_color ?? null;
+  const resolvedConnectButtonColor = normalizeHexColor(connectButtonColor);
 
   const brandStyle = useMemo(() => {
     if (!config?.branding.primary_color && !templateTheme?.card_background_color) {
@@ -253,6 +265,9 @@ export default function GuestLanding() {
       terms_html: sanitizeHtmlForInjection(config?.branding.terms_html),
       support_contact: escapeHtml(config?.branding.support_contact),
       connect_button_color: connectButtonColor,
+      connect_action: methods.includes("tos_only")
+        ? `<button type="button" data-connect-action="tos-accept" style="padding:12px 18px;border:none;border-radius:10px;background:${resolvedConnectButtonColor};color:#fff;font-weight:600;cursor:pointer;">${escapeHtml(authPending ? "Authorizing..." : "Accept terms and connect")}</button>`
+        : "",
       logo_size_px: String(logoSizePx),
       heading_size_px: String(headingSizePx),
       body_size_px: String(bodySizePx),
@@ -263,7 +278,19 @@ export default function GuestLanding() {
       card_background_color: templateTheme?.card_background_color,
       text_color: templateTheme?.text_color,
     }),
-    [cardAlignment, cardMaxWidthPx, config, connectButtonColor, headingSizePx, logoAlignment, logoSizePx, templateTheme]
+    [
+      authPending,
+      cardAlignment,
+      cardMaxWidthPx,
+      config,
+      connectButtonColor,
+      headingSizePx,
+      logoAlignment,
+      logoSizePx,
+      methods,
+      resolvedConnectButtonColor,
+      templateTheme,
+    ]
   );
 
   const resolvedTemplate = useMemo(() => {
@@ -741,28 +768,38 @@ export default function GuestLanding() {
       return;
     }
 
-    const btn = document.getElementById("sponsored-connect") as HTMLButtonElement | null;
-    if (!btn) {
+    const buttons = Array.from(
+      document.querySelectorAll<HTMLButtonElement>(`[data-connect-action="tos-accept"], #sponsored-connect`)
+    );
+    if (buttons.length === 0) {
       return;
     }
 
-    const handleClick = () => {
+    const shouldDisable =
+      Boolean(previewParam) || !portalSessionId || authPending || !methods.includes("tos_only");
+
+    const handleClick = (event: Event) => {
+      event.preventDefault();
       void acceptTos();
     };
 
-    btn.disabled = Boolean(previewParam) || !portalSessionId || authPending;
-    btn.addEventListener("click", handleClick);
+    buttons.forEach((button) => {
+      button.disabled = shouldDisable;
+      button.addEventListener("click", handleClick);
+    });
 
     // Expose for templates that execute their own scripts.
     (window as any).acceptTosFromTemplate = acceptTos;
 
     return () => {
-      btn.removeEventListener("click", handleClick);
+      buttons.forEach((button) => {
+        button.removeEventListener("click", handleClick);
+      });
       if ((window as any).acceptTosFromTemplate === acceptTos) {
         delete (window as any).acceptTosFromTemplate;
       }
     };
-  }, [acceptTos, authPending, portalSessionId, previewParam, resolvedTemplate]);
+  }, [acceptTos, authPending, methods, portalSessionId, previewParam, resolvedTemplate]);
 
   if (loading && !config) {
     return (

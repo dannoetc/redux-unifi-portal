@@ -81,7 +81,7 @@ Open another terminal tab:
 
 ```bash
 cd backend
-SUPERADMIN_PASSWORD=change-me TENANT_SLUG=acme TENANT_NAME="Acme MSP" SITE_SLUGS=lab,office SITE_DISPLAY_NAMES="Lab,Office" SITE_UNIFI_SITE_IDS=default,default UNIFI_BASE_URL=https://unifi.local UNIFI_API_KEY_REF=dev-unifi-key python -m app.scripts.seed
+SUPERADMIN_PASSWORD=change-me TENANT_SLUG=acme TENANT_NAME="Acme MSP" SITE_SLUGS=lab,office SITE_DISPLAY_NAMES="Lab,Office" SITE_UNIFI_SITE_IDS=default,default UNIFI_BASE_URL=https://unifi.local UNIFI_API_KEY=replace-with-unifi-api-key python -m app.scripts.seed
 ```
 
 ---

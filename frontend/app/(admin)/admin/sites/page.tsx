@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ColumnDef } from "@tanstack/react-table";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -60,6 +60,7 @@ const siteSchema = z.object({
   display_name: z.string().min(2),
   slug: z.string().min(2),
   enabled: z.boolean().default(true),
+  enable_tos_only: z.boolean().default(false),
   unifi_base_url: z.string().optional().or(z.literal("")),
   unifi_port: optionalPort,
   unifi_site_id: z.string().min(1),
@@ -133,6 +134,7 @@ export default function SitesPage() {
     resolver: zodResolver(siteSchema),
     defaultValues: {
       enabled: true,
+      enable_tos_only: false,
       default_time_limit_minutes: 60,
       unifi_port: DEFAULT_UNIFI_PORT,
       unifi_api_key: "",
@@ -214,6 +216,15 @@ export default function SitesPage() {
     };
   }, [discoverOpen, tenantId]);
 
+  const copySiteSlug = useCallback(async (slug: string) => {
+    try {
+      await navigator.clipboard.writeText(slug);
+      toast.success("Site slug copied.");
+    } catch {
+      toast.error("Unable to copy site slug.");
+    }
+  }, []);
+
   const columns = useMemo<ColumnDef<Site>[]>(
     () => [
       {
@@ -221,12 +232,23 @@ export default function SitesPage() {
         header: "Site",
         cell: ({ row }) => (
           <div>
-            <Link
-              href={`/admin/sites/${row.original.id}?tenant=${tenantId ?? ""}`}
-              className="font-medium text-foreground underline-offset-4 hover:underline"
-            >
-              {row.original.display_name}
-            </Link>
+            <div className="flex items-center gap-2">
+              <Link
+                href={`/admin/sites/${row.original.id}?tenant=${tenantId ?? ""}`}
+                className="font-medium text-foreground underline-offset-4 hover:underline"
+              >
+                {row.original.display_name}
+              </Link>
+              <button
+                type="button"
+                className="text-[11px] font-semibold text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                onClick={() => {
+                  void copySiteSlug(row.original.slug);
+                }}
+              >
+                Copy slug
+              </button>
+            </div>
             <div className="text-xs text-muted-foreground">{row.original.slug}</div>
           </div>
         ),
@@ -278,7 +300,7 @@ export default function SitesPage() {
         ),
       },
     ],
-    [tenantId, tenantSlug]
+    [copySiteSlug, tenantId, tenantSlug]
   );
 
   const onSubmit = async (values: CreateSite) => {
@@ -402,6 +424,23 @@ export default function SitesPage() {
                     <span className="h-5 w-9 rounded-full bg-muted transition peer-checked:bg-primary" />
                     <span className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition peer-checked:translate-x-4" />
                   </label>
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="create_access_mode">Access mode</Label>
+                  <select
+                    id="create_access_mode"
+                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2 focus:ring-offset-white"
+                    value={form.watch("enable_tos_only") ? "unauthenticated" : "authenticated"}
+                    onChange={(event) => {
+                      form.setValue("enable_tos_only", event.target.value === "unauthenticated");
+                    }}
+                  >
+                    <option value="authenticated">Authenticated (voucher/email/SSO)</option>
+                    <option value="unauthenticated">Unauthenticated (TOS-only tracked access)</option>
+                  </select>
+                  <p className="text-xs text-muted-foreground">
+                    Unauthenticated mode enables TOS-only guest access tracking.
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="unifi_base_url">UniFi controller IP (optional override)</Label>

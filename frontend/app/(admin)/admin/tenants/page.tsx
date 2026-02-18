@@ -34,14 +34,12 @@ const schema = z.object({
   status: z.string().optional(),
   unifi_base_url: z.string().optional().or(z.literal("")),
   unifi_port: optionalPort,
-  unifi_api_key_ref: z.string().optional().or(z.literal("")),
   unifi_api_key: z.string().optional().or(z.literal("")),
 });
 
 const controllerSchema = z.object({
   unifi_base_url: z.string().optional().or(z.literal("")),
   unifi_port: optionalPort,
-  unifi_api_key_ref: z.string().optional().or(z.literal("")),
   unifi_api_key: z.string().optional().or(z.literal("")),
 });
 
@@ -265,11 +263,19 @@ export default function TenantsPage() {
     controllerForm.reset({
       unifi_base_url: host,
       unifi_port: port,
-      unifi_api_key_ref: tenant.unifi_api_key_ref ?? "",
       unifi_api_key: "",
     });
     setControllerOpen(true);
   }, [controllerForm]);
+
+  const copyTenantSlug = useCallback(async (slug: string) => {
+    try {
+      await navigator.clipboard.writeText(slug);
+      toast.success("Tenant slug copied.");
+    } catch {
+      toast.error("Unable to copy tenant slug.");
+    }
+  }, []);
 
   const columns = useMemo<ColumnDef<Tenant>[]>(
     () => [
@@ -277,13 +283,24 @@ export default function TenantsPage() {
         accessorKey: "name",
         header: "Name",
         cell: ({ row }) => (
-          <button
-            type="button"
-            className="font-medium text-foreground underline-offset-4 hover:underline"
-            onClick={() => openControllerDialog(row.original)}
-          >
-            {row.original.name}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="font-medium text-foreground underline-offset-4 hover:underline"
+              onClick={() => openControllerDialog(row.original)}
+            >
+              {row.original.name}
+            </button>
+            <button
+              type="button"
+              className="text-[11px] font-semibold text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+              onClick={() => {
+                void copyTenantSlug(row.original.slug);
+              }}
+            >
+              Copy slug
+            </button>
+          </div>
         ),
       },
       {
@@ -346,7 +363,7 @@ export default function TenantsPage() {
         ),
       },
     ],
-    [openControllerDialog]
+    [copyTenantSlug, openControllerDialog]
   );
 
   const onSubmit = async (values: CreateTenant) => {
@@ -357,7 +374,7 @@ export default function TenantsPage() {
         ...rest,
         status: values.status ?? "ACTIVE",
         unifi_base_url: normalizeUnifiBaseUrl(unifiHost),
-        unifi_api_key_ref: values.unifi_api_key_ref || undefined,
+        unifi_api_key_ref: "",
         unifi_api_key: values.unifi_api_key?.trim() ? values.unifi_api_key : undefined,
       };
       const data = await apiFetch<{ tenant: Tenant }>("/api/admin/tenants", {
@@ -400,7 +417,7 @@ export default function TenantsPage() {
       const unifiHost = applyUnifiPort(values.unifi_base_url, values.unifi_port);
       const payload = {
         unifi_base_url: normalizeUnifiBaseUrl(unifiHost),
-        unifi_api_key_ref: values.unifi_api_key_ref || undefined,
+        unifi_api_key_ref: "",
         unifi_api_key: values.unifi_api_key?.trim() ? values.unifi_api_key : undefined,
       };
       const data = await apiFetch<{ tenant: Tenant }>(`/api/admin/tenants/${tenantToConfigure.id}`, {
@@ -434,7 +451,7 @@ export default function TenantsPage() {
   };
 
   return (
-    <div className="mx-auto flex min-h-[calc(100vh-104px)] w-full max-w-7xl flex-col gap-6">
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 pb-4">
         <div>
           <h1 className="text-2xl font-semibold">Tenants</h1>
@@ -508,11 +525,6 @@ export default function TenantsPage() {
                 <Input id="unifi_api_key" type="password" {...form.register("unifi_api_key")} />
                 <p className="text-xs text-muted-foreground">Stored encrypted in the database.</p>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="unifi_api_key_ref">UniFi API key reference (optional)</Label>
-                <Input id="unifi_api_key_ref" type="password" {...form.register("unifi_api_key_ref")} />
-                <p className="text-xs text-muted-foreground">Legacy env var name (overridden by stored key).</p>
-              </div>
               <DialogFooter>
                 <Button type="submit" variant="primary">
                   Create tenant
@@ -575,7 +587,7 @@ export default function TenantsPage() {
           </p>
         </div>
       </details>
-      <section className="flex min-h-0 flex-1 flex-col">
+      <section className="min-h-0">
         {loading ? (
           <div className="space-y-3 rounded-lg border border-border/60 bg-muted/20 p-4">
             {Array.from({ length: 6 }).map((_, index) => (
@@ -601,7 +613,7 @@ export default function TenantsPage() {
             </Button>
           </div>
         ) : (
-          <div className="flex-1 overflow-visible rounded-lg border border-border/60 bg-background">
+          <div className="overflow-visible rounded-lg border border-border/60 bg-background">
             <DataTable columns={columns} data={tenants} />
           </div>
         )}
@@ -664,15 +676,6 @@ export default function TenantsPage() {
                     ? "Encrypted key is stored. Leave blank to keep the current value."
                     : "Stored encrypted in the database."}
                 </p>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="controller_api_key_ref">API key reference (optional)</Label>
-                <Input
-                  id="controller_api_key_ref"
-                  type="password"
-                  {...controllerForm.register("unifi_api_key_ref")}
-                />
-                <p className="text-xs text-muted-foreground">Legacy env var name (overridden by stored key).</p>
               </div>
             </div>
             <DialogFooter className="gap-2">

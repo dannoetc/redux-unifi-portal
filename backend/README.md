@@ -12,7 +12,7 @@ SITE_SLUGS=lab,office,guest,warehouse \
 SITE_DISPLAY_NAMES="Lab,Office,Guest,Warehouse" \
 SITE_UNIFI_SITE_IDS=default,default,default,default \
 UNIFI_BASE_URL=https://unifi.local \
-UNIFI_API_KEY_REF=dev-unifi-key \
+UNIFI_API_KEY=replace-with-unifi-api-key \
 python -m app.scripts.seed
 ```
 
