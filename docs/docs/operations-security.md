@@ -34,9 +34,31 @@ If site resolution fails, inspect original URI and parsed params first.
 
 ## Rate limits
 
-OTP and voucher endpoints are rate-limited.
+The platform enforces Redis-backed rate limits for:
+- admin login (per IP and per email fingerprint)
+- OTP start/verify
+- voucher redemption attempts
 
 If many valid users are rate-limited, check for captive-browser redirect loops.
+
+## Admin session security
+
+- Admin auth uses a signed session cookie (`admin_session`).
+- Cookie is `HttpOnly` and `SameSite=Lax`.
+- Session lifetime is controlled by `ADMIN_SESSION_MAX_AGE_SECONDS`.
+- In production, set `ADMIN_SESSION_COOKIE_SECURE=true` so cookies are HTTPS-only.
+
+## Browser and edge hardening
+
+Current deployment applies browser security headers:
+- `Content-Security-Policy`
+- `X-Frame-Options: DENY`
+- `X-Content-Type-Options: nosniff`
+- `Referrer-Policy: strict-origin-when-cross-origin`
+- `Permissions-Policy: camera=(), microphone=(), geolocation=()`
+
+On HTTPS listeners, nginx also sets:
+- `Strict-Transport-Security` (`max-age=31536000; includeSubDomains`)
 
 ## Logging
 
@@ -51,10 +73,22 @@ Never hardcode:
 - SMTP credentials
 - OIDC client secrets
 
+Current behavior:
+- Secret values can be stored encrypted at rest (requires `SECRETS_ENCRYPTION_KEY`).
+- Secret references (`*_ref`) can point to env-backed values.
+- If encryption key is missing/invalid, encrypted secret operations fail safely.
+
 In production, use a secret manager and env references.
+
+## Input sanitization controls
+
+- Guest portal custom HTML is sanitized server-side before storage/use.
+- Redirect URLs are sanitized and constrained to safe schemes/relative paths.
+- UniFi redirect parsing handles malformed/encoded inputs defensively.
 
 ## TLS baseline
 
 - enforce HTTPS for guest and admin URLs
 - keep certificates valid and monitor expiration
 - verify UniFi external portal URL exactly matches production host/scheme
+- TLS mode supports both Let's Encrypt and validated custom certificate/key upload
