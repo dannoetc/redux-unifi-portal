@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import time
 
 from fastapi import HTTPException
@@ -15,6 +16,12 @@ def limit_key_ip(ip: str, route: str) -> str:
 def limit_key_mac(site_id: str, client_mac: str, route: str) -> str:
     normalized = normalize_mac(client_mac)
     return f"mac:{route}:{site_id}:{normalized}"
+
+
+def limit_key_email(email: str, route: str) -> str:
+    normalized = email.strip().lower()
+    digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:24]
+    return f"email:{route}:{digest}"
 
 
 def enforce_rate_limit(

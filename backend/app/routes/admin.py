@@ -11,7 +11,7 @@ import time
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy import false, func, or_, select
 from sqlalchemy.orm import Session
@@ -38,6 +38,7 @@ from app.models import (
     VoucherBatch,
     VoucherRedemption,
 )
+from app.redis import get_redis_client
 from app.schemas.admin_dashboard import (
     DashboardDailyPoint,
     DashboardMethodBreakdown,
@@ -72,6 +73,8 @@ from app.schemas.admin_site import (
 from app.schemas.admin_tenant import TenantCreateRequest, TenantResponse, TenantUpdateRequest
 from app.schemas.admin_voucher import VoucherBatchCreateRequest
 from app.security import create_session_token, hash_password, verify_password
+from app.services.ratelimit import enforce_rate_limit, limit_key_email, limit_key_ip
+from app.services.sanitization import sanitize_guest_html, sanitize_redirect_url
 from app.services.secrets import SecretError, encrypt_secret, resolve_secret_value
 from app.services.unifi import UnifiApiError, UnifiClient
 from app.settings import settings
@@ -83,7 +86,22 @@ DEFAULT_PAGE_LIMIT = 50
 MAX_PAGE_LIMIT = 200
 
 @router.post("/login")
-def login(payload: AdminLoginRequest, db: Session = Depends(get_db)) -> JSONResponse:
+def login(payload: AdminLoginRequest, request: Request, db: Session = Depends(get_db)) -> JSONResponse:
+    redis_client = get_redis_client()
+    client_ip = request.client.host if request.client else "unknown"
+    enforce_rate_limit(
+        redis_client,
+        scope_key=limit_key_ip(client_ip, "admin_login"),
+        limit=settings.ADMIN_LOGIN_RATE_LIMIT_PER_IP,
+        window_seconds=settings.ADMIN_LOGIN_RATE_LIMIT_WINDOW_SECONDS,
+    )
+    enforce_rate_limit(
+        redis_client,
+        scope_key=limit_key_email(payload.email, "admin_login"),
+        limit=settings.ADMIN_LOGIN_RATE_LIMIT_PER_EMAIL,
+        window_seconds=settings.ADMIN_LOGIN_RATE_LIMIT_WINDOW_SECONDS,
+    )
+
     stmt = select(AdminUser).where(AdminUser.email == payload.email)
     admin = db.execute(stmt).scalar_one_or_none()
     if not admin or not verify_password(payload.password, admin.password_hash):
@@ -751,7 +769,9 @@ def create_site(
             },
         )
 
-    portal_template_html = _empty_to_none(payload.portal_template_html)
+    portal_template_html = sanitize_guest_html(_empty_to_none(payload.portal_template_html))
+    terms_html = sanitize_guest_html(_empty_to_none(payload.terms_html))
+    success_url = _normalize_success_url(payload.success_url)
     portal_template_mode = _resolve_portal_template_mode(
         mode=payload.portal_template_mode,
         enabled=payload.portal_template_enabled,
@@ -766,13 +786,13 @@ def create_site(
         enabled=payload.enabled,
         logo_url=_empty_to_none(payload.logo_url),
         primary_color=_empty_to_none(payload.primary_color),
-        terms_html=_empty_to_none(payload.terms_html),
+        terms_html=terms_html,
         portal_template_html=portal_template_html,
         portal_template_enabled=portal_template_mode != "off",
         portal_template_mode=portal_template_mode,
         portal_template_theme=_normalize_portal_template_theme(payload.portal_template_theme),
         support_contact=_empty_to_none(payload.support_contact),
-        success_url=_empty_to_none(payload.success_url),
+        success_url=success_url,
         enable_tos_only=payload.enable_tos_only,
         unifi_base_url=_empty_to_none(payload.unifi_base_url),
         unifi_site_id=payload.unifi_site_id.strip(),
@@ -924,10 +944,11 @@ def restore_site_portal_template_version(
             detail={"ok": False, "error": {"code": "NOT_FOUND", "message": "Template version not found."}},
         )
 
-    _validate_portal_template(version.portal_template_mode, version.portal_template_html)
+    restored_template_html = sanitize_guest_html(version.portal_template_html)
+    _validate_portal_template(version.portal_template_mode, restored_template_html)
     site.portal_template_mode = version.portal_template_mode
     site.portal_template_enabled = version.portal_template_mode != "off"
-    site.portal_template_html = version.portal_template_html
+    site.portal_template_html = restored_template_html
     site.portal_template_theme = version.portal_template_theme
 
     db.add(site)
@@ -981,10 +1002,10 @@ def update_site(
     if payload.primary_color is not None:
         site.primary_color = _empty_to_none(payload.primary_color)
     if payload.terms_html is not None:
-        site.terms_html = _empty_to_none(payload.terms_html)
+        site.terms_html = sanitize_guest_html(_empty_to_none(payload.terms_html))
     next_portal_template_html = site.portal_template_html
     if payload.portal_template_html is not None:
-        next_portal_template_html = _empty_to_none(payload.portal_template_html)
+        next_portal_template_html = sanitize_guest_html(_empty_to_none(payload.portal_template_html))
         site.portal_template_html = next_portal_template_html
     if payload.portal_template_theme is not None:
         site.portal_template_theme = _normalize_portal_template_theme(payload.portal_template_theme)
@@ -1006,7 +1027,7 @@ def update_site(
     if payload.support_contact is not None:
         site.support_contact = _empty_to_none(payload.support_contact)
     if payload.success_url is not None:
-        site.success_url = _empty_to_none(payload.success_url)
+        site.success_url = _normalize_success_url(payload.success_url)
     if payload.enable_tos_only is not None:
         site.enable_tos_only = payload.enable_tos_only
     if payload.unifi_base_url is not None:
@@ -2236,6 +2257,22 @@ def _empty_to_none(value: str | None) -> str | None:
     return value
 
 
+def _normalize_success_url(value: str | None) -> str | None:
+    normalized = _empty_to_none(value)
+    if normalized is None:
+        return None
+    sanitized = sanitize_redirect_url(normalized, allow_relative=True)
+    if sanitized is None:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "ok": False,
+                "error": {"code": "INVALID_SUCCESS_URL", "message": "success_url must be http(s) or a relative path."},
+            },
+        )
+    return sanitized
+
+
 def _resolve_portal_template_mode(
     *,
     mode: str | None,
@@ -2481,13 +2518,13 @@ def _site_response(site: Site) -> SiteResponse:
         enabled=site.enabled,
         logo_url=site.logo_url,
         primary_color=site.primary_color,
-        terms_html=site.terms_html,
-        portal_template_html=site.portal_template_html,
+        terms_html=sanitize_guest_html(site.terms_html),
+        portal_template_html=sanitize_guest_html(site.portal_template_html),
         portal_template_enabled=template_mode != "off",
         portal_template_mode=template_mode,
         portal_template_theme=site.portal_template_theme,
         support_contact=site.support_contact,
-        success_url=site.success_url,
+        success_url=sanitize_redirect_url(site.success_url, allow_relative=True),
         enable_tos_only=site.enable_tos_only,
         unifi_base_url=site.unifi_base_url,
         unifi_site_id=site.unifi_site_id,

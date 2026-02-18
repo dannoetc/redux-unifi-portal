@@ -5,7 +5,6 @@ import re
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any
 
 import structlog
 from redis import Redis
@@ -13,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import PortalSession, PortalSessionStatus, Site
-from app.redis import get_redis_client
+from app.services.sanitization import sanitize_redirect_url
 
 logger = structlog.get_logger(__name__)
 
@@ -44,10 +43,7 @@ def normalize_mac(raw_mac: str) -> str:
 
 
 def sanitize_orig_url(url: str | None, max_len: int = 2048) -> str | None:
-    if not url:
-        return None
-    cleaned = url.replace("\n", "").replace("\r", "")
-    return cleaned[:max_len]
+    return sanitize_redirect_url(url, allow_relative=True, max_len=max_len)
 
 
 def _serialize_session(data: PortalSessionData) -> str:

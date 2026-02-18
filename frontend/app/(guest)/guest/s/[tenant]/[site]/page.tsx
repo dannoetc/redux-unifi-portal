@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const PORTAL_TEMPLATE_TOKEN = "{{portal}}";
+const SAFE_PROTOCOLS = new Set(["http:", "https:"]);
 
 type PortalTemplateMode = "off" | "replace" | "embed";
 type PortalTheme = {
@@ -47,6 +48,66 @@ const applyTemplateTokens = (
     output = output.replaceAll(`{{${key}}}`, value ?? "");
   });
   return output;
+};
+
+const escapeHtml = (value: string | null | undefined) => {
+  if (!value) {
+    return "";
+  }
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+};
+
+const sanitizeHtmlForInjection = (value: string | null | undefined): string => {
+  if (!value) {
+    return "";
+  }
+  if (typeof window === "undefined") {
+    return value;
+  }
+
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(value, "text/html");
+  doc.querySelectorAll("script, style, iframe, object, embed").forEach((node) => node.remove());
+  doc.querySelectorAll("*").forEach((element) => {
+    Array.from(element.attributes).forEach((attribute) => {
+      const key = attribute.name.toLowerCase();
+      const normalizedValue = attribute.value.trim().toLowerCase();
+      if (key.startsWith("on")) {
+        element.removeAttribute(attribute.name);
+        return;
+      }
+      if (
+        (key === "href" || key === "src") &&
+        (normalizedValue.startsWith("javascript:") || normalizedValue.startsWith("data:text/html"))
+      ) {
+        element.removeAttribute(attribute.name);
+      }
+    });
+  });
+  return doc.body.innerHTML;
+};
+
+const sanitizeContinueUrl = (value: string | null | undefined) => {
+  if (!value || typeof window === "undefined") {
+    return null;
+  }
+  try {
+    const parsed = new URL(value, window.location.origin);
+    if (!SAFE_PROTOCOLS.has(parsed.protocol)) {
+      return null;
+    }
+    if (value.startsWith("/")) {
+      return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+    }
+    return parsed.toString();
+  } catch {
+    return null;
+  }
 };
 
 const clampNumber = (value: number | null | undefined, minimum: number, maximum: number) => {
@@ -184,11 +245,11 @@ export default function GuestLanding() {
 
   const templateTokens = useMemo(
     () => ({
-      display_name: config?.branding.display_name,
-      logo_url: config?.branding.logo_url,
-      primary_color: config?.branding.primary_color,
-      terms_html: config?.branding.terms_html,
-      support_contact: config?.branding.support_contact,
+      display_name: escapeHtml(config?.branding.display_name),
+      logo_url: escapeHtml(config?.branding.logo_url),
+      primary_color: escapeHtml(config?.branding.primary_color),
+      terms_html: sanitizeHtmlForInjection(config?.branding.terms_html),
+      support_contact: escapeHtml(config?.branding.support_contact),
       logo_size_px: String(logoSizePx),
       heading_size_px: String(headingSizePx),
       body_size_px: String(bodySizePx),
@@ -206,8 +267,14 @@ export default function GuestLanding() {
     if (templateMode === "off" || !config?.portal_template?.html) {
       return null;
     }
-    return applyTemplateTokens(config.portal_template.html, templateTokens);
+    return sanitizeHtmlForInjection(applyTemplateTokens(config.portal_template.html, templateTokens));
   }, [config?.portal_template?.html, templateMode, templateTokens]);
+
+  const sanitizedTermsHtml = useMemo(
+    () => sanitizeHtmlForInjection(config?.branding.terms_html),
+    [config?.branding.terms_html]
+  );
+  const safeContinueUrl = useMemo(() => sanitizeContinueUrl(continueUrl), [continueUrl]);
 
   useEffect(() => {
     let active = true;
@@ -447,7 +514,7 @@ export default function GuestLanding() {
             ) : null}
             {methods.includes("tos_only") && (
               <div className="space-y-3">
-                {config?.branding.terms_html ? (
+                {sanitizedTermsHtml ? (
                   <label className="flex items-start gap-2 text-xs text-muted-foreground">
                     <input
                       type="checkbox"
@@ -465,7 +532,7 @@ export default function GuestLanding() {
                   disabled={
                     !portalSessionId ||
                     Boolean(previewParam) ||
-                    (config?.branding.terms_html ? !tosAccepted : false) ||
+                    (sanitizedTermsHtml ? !tosAccepted : false) ||
                     authPending
                   }
                 >
@@ -602,18 +669,18 @@ export default function GuestLanding() {
             <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
               Connected. Your access is ready.
             </div>
-            {continueUrl ? (
+            {safeContinueUrl ? (
               <Button asChild className="w-full">
-                <a href={continueUrl}>Continue</a>
+                <a href={safeContinueUrl}>Continue</a>
               </Button>
             ) : null}
           </div>
         )}
 
-        {config?.branding.terms_html ? (
+        {sanitizedTermsHtml ? (
           <div
             className="rounded-md border bg-white/70 p-3 text-xs text-muted-foreground"
-            dangerouslySetInnerHTML={{ __html: config.branding.terms_html }}
+            dangerouslySetInnerHTML={{ __html: sanitizedTermsHtml }}
           />
         ) : (
           <div className="text-xs text-muted-foreground">

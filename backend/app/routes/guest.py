@@ -30,6 +30,7 @@ from app.schemas.guest import (
 from app.services.otp import start_challenge, verify_code
 from app.services.portal_session import create_or_reuse_session, get_session, normalize_mac, set_status
 from app.services.ratelimit import enforce_rate_limit, limit_key_ip, limit_key_mac
+from app.services.sanitization import sanitize_guest_html, sanitize_redirect_url
 from app.services.secrets import SecretError, resolve_secret_value
 from app.services.unifi import UnifiClient, UnifiPolicy
 from app.services.vouchers import VoucherError, redeem_voucher
@@ -231,9 +232,12 @@ def get_site_config(
             detail={"ok": False, "error": {"code": "NOT_FOUND", "message": "Site not found."}},
         )
 
+    sanitized_terms_html = sanitize_guest_html(site.terms_html)
+    sanitized_portal_template_html = sanitize_guest_html(site.portal_template_html)
+
     template_mode = site.portal_template_mode or (
         "embed"
-        if site.portal_template_enabled and site.portal_template_html and "{{portal}}" in site.portal_template_html
+        if site.portal_template_enabled and sanitized_portal_template_html and "{{portal}}" in sanitized_portal_template_html
         else "replace"
         if site.portal_template_enabled
         else "off"
@@ -263,14 +267,14 @@ def get_site_config(
             "branding": {
                 "logo_url": site.logo_url,
                 "primary_color": site.primary_color,
-                "terms_html": site.terms_html,
+                "terms_html": sanitized_terms_html,
                 "support_contact": site.support_contact,
                 "display_name": site.display_name,
             },
             "portal_template": {
                 "enabled": template_mode != "off",
                 "mode": template_mode,
-                "html": site.portal_template_html,
+                "html": sanitized_portal_template_html,
                 "theme": site.portal_template_theme,
             },
             "methods": methods,
@@ -925,8 +929,10 @@ def _upsert_guest_identity(db: Session, tenant_id: uuid.UUID, email: str) -> Gue
 
 
 def _continue_url(portal_session: PortalSession, site: Site) -> str:
-    if portal_session.orig_url:
-        return portal_session.orig_url
-    if site.success_url:
-        return site.success_url
+    original_target = sanitize_redirect_url(portal_session.orig_url, allow_relative=True)
+    if original_target:
+        return original_target
+    success_target = sanitize_redirect_url(site.success_url, allow_relative=True)
+    if success_target:
+        return success_target
     return settings.BASE_URL

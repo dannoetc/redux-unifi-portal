@@ -11,6 +11,18 @@ from app.models import AdminMembership, AdminRole, AdminUser, Tenant, TenantStat
 from app.security import hash_password, verify_password
 
 
+class FakeRedis:
+    def __init__(self) -> None:
+        self.counters: dict[str, int] = {}
+
+    def incr(self, key: str) -> int:
+        self.counters[key] = self.counters.get(key, 0) + 1
+        return self.counters[key]
+
+    def expire(self, key: str, ttl: int) -> None:
+        return None
+
+
 def test_password_hashing():
     password = "correct-horse-battery-staple"
     hashed = hash_password(password)
@@ -32,6 +44,28 @@ def test_login_sets_cookie(client, db_session):
     assert response.status_code == 200
     assert response.json()["ok"] is True
     assert "admin_session=" in response.headers.get("set-cookie", "")
+
+
+def test_login_rate_limited(client, db_session, monkeypatch):
+    admin = AdminUser(
+        id=uuid.uuid4(),
+        email="admin@example.com",
+        password_hash=hash_password("secret"),
+        is_superadmin=True,
+    )
+    db_session.add(admin)
+    db_session.commit()
+
+    from app import routes as _routes
+
+    monkeypatch.setattr(_routes.admin, "get_redis_client", lambda: FakeRedis())
+    monkeypatch.setattr(_routes.admin.settings, "ADMIN_LOGIN_RATE_LIMIT_PER_IP", 0)
+    monkeypatch.setattr(_routes.admin.settings, "ADMIN_LOGIN_RATE_LIMIT_PER_EMAIL", 0)
+    monkeypatch.setattr(_routes.admin.settings, "ADMIN_LOGIN_RATE_LIMIT_WINDOW_SECONDS", 60)
+
+    response = client.post("/api/admin/login", json={"email": admin.email, "password": "secret"})
+    assert response.status_code == 429
+    assert response.json()["error"]["code"] == "RATE_LIMITED"
 
 
 def test_require_tenant_role_enforces_membership(db_session):

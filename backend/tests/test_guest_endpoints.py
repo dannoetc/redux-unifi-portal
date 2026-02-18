@@ -24,6 +24,7 @@ from app.models import (
 from app.services.otp import start_challenge
 from app.services.portal_session import create_or_reuse_session, set_status
 from app.services.unifi import UnifiClient
+from app.settings import settings
 
 
 class FakeRedis:
@@ -137,6 +138,26 @@ def test_guest_config_includes_portal_template(client, db_session):
     assert template["mode"] == "embed"
     assert template["html"] == "<section>{{portal}}</section>"
     assert template["theme"]["logo_size_px"] == 64
+
+
+def test_guest_config_sanitizes_terms_and_template_html(client, db_session):
+    tenant, site = _seed_site(db_session)
+    site.terms_html = "<p>Terms</p><script>alert(1)</script><a href='javascript:alert(1)'>Bad</a>"
+    site.portal_template_enabled = True
+    site.portal_template_mode = "replace"
+    site.portal_template_html = "<section onclick='alert(1)'>Hi</section><script>alert(1)</script>"
+    db_session.add(site)
+    db_session.commit()
+
+    response = client.get(f"/api/guest/{tenant.slug}/{site.slug}/config")
+    assert response.status_code == 200
+
+    payload = response.json()["data"]
+    terms_html = payload["branding"]["terms_html"]
+    template_html = payload["portal_template"]["html"]
+    assert "<script" not in terms_html.lower()
+    assert "javascript:" not in terms_html.lower()
+    assert "onclick=" not in template_html.lower()
 
 
 def test_voucher_endpoint_authorizes_unifi_httpx(client, db_session, monkeypatch):
@@ -362,6 +383,45 @@ def test_tos_only_idempotent_when_authorized(client, db_session, monkeypatch):
         )
     ).scalar_one_or_none()
     assert auth_event is None
+
+
+def test_tos_continue_url_falls_back_when_stored_urls_invalid(client, db_session, monkeypatch):
+    tenant, site = _seed_site(db_session, enable_tos_only=True)
+    site.success_url = "javascript:alert(1)"
+    db_session.add(site)
+    db_session.commit()
+
+    redis_client = FakeRedis()
+    from app import routes as _routes
+
+    monkeypatch.setattr(_routes.guest, "get_redis_client", lambda: redis_client)
+
+    session_data = create_or_reuse_session(
+        db_session,
+        redis_client,
+        tenant_id=tenant.id,
+        site=site,
+        client_mac="AA:BB:CC:DD:EE:FF",
+        ap_mac="11:22:33:44:55:66",
+        ssid="TestWiFi",
+        orig_url="javascript:alert(1)",
+        ip="127.0.0.1",
+        user_agent="pytest",
+    )
+    set_status(
+        db_session,
+        redis_client,
+        site_id=site.id,
+        client_mac="AA:BB:CC:DD:EE:FF",
+        status=PortalSessionStatus.AUTHORIZED,
+    )
+
+    response = client.post(
+        f"/api/guest/{tenant.slug}/{site.slug}/tos/accept",
+        json={"portal_session_id": str(session_data.portal_session_id)},
+    )
+    assert response.status_code == 200
+    assert response.json()["data"]["continue_url"] == settings.BASE_URL
 
 
 def test_tos_only_rate_limit(client, db_session, monkeypatch):
