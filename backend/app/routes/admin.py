@@ -8,6 +8,7 @@ import logging
 import os
 import re
 import secrets
+import smtplib
 import socket
 import string
 import subprocess
@@ -15,6 +16,7 @@ import tempfile
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
+from email.message import EmailMessage
 from pathlib import Path
 from urllib import request as urllib_request
 
@@ -32,6 +34,7 @@ from app.models import (
     AuthEvent,
     AuthMethod,
     AuthResult,
+    AppSetting,
     GuestIdentity,
     OidcProvider,
     PortalSession,
@@ -70,6 +73,14 @@ from app.schemas.admin_oidc import (
 )
 from app.schemas.admin_user import AdminUserCreateRequest, AdminUserResponse, AdminUserUpdateRequest
 from app.schemas.admin_tls import TlsCustomCertificateRequest, TlsModeUpdateRequest, TlsStatusResponse
+from app.schemas.admin_system import (
+    SmtpSettingsResponse,
+    SmtpSettingsUpdateRequest,
+    SmtpTestRequest,
+    SystemPreferencesResponse,
+    SystemPreferencesUpdateRequest,
+    SystemSettingsResponse,
+)
 from app.schemas.admin_site import (
     PortalTemplateVersionResponse,
     SiteCreateRequest,
@@ -84,6 +95,13 @@ from app.security import create_session_token, hash_password, verify_password
 from app.services.ratelimit import enforce_rate_limit, limit_key_email, limit_key_ip
 from app.services.sanitization import sanitize_guest_html, sanitize_redirect_url
 from app.services.secrets import SecretError, encrypt_secret, resolve_secret_value
+from app.services.system_settings import (
+    PREFERENCES_SETTINGS_KEY,
+    SMTP_SETTINGS_KEY,
+    get_effective_smtp_settings,
+    get_preferences,
+    get_setting,
+)
 from app.services.unifi import UnifiApiError, UnifiClient
 from app.settings import settings
 
@@ -187,6 +205,123 @@ def get_external_portal_ip(_admin: AdminUser = Depends(get_current_admin)) -> di
             detail={"ok": False, "error": {"code": "IP_RESOLUTION_FAILED", "message": "Unable to resolve external IP from DOMAIN."}},
         )
     return {"ok": True, "data": {"ip": resolved_ip, "domain": domain, "source": source}}
+
+
+@router.get("/system/settings")
+def get_system_settings(
+    db: Session = Depends(get_db),
+    _admin: AdminUser = Depends(require_superadmin),
+) -> dict:
+    smtp = get_effective_smtp_settings(db)
+    preferences = get_preferences(db)
+    response = SystemSettingsResponse(
+        smtp=SmtpSettingsResponse(
+            host=smtp["host"],
+            port=smtp["port"],
+            username=smtp["username"],
+            from_email=smtp["from_email"],
+            from_name=smtp["from_name"],
+            password_configured=smtp["password_configured"],
+        ),
+        preferences=SystemPreferencesResponse(**preferences),
+    )
+    return {"ok": True, "data": response.model_dump(mode="json")}
+
+
+@router.put("/system/settings/smtp")
+def update_system_smtp_settings(
+    payload: SmtpSettingsUpdateRequest,
+    db: Session = Depends(get_db),
+    _admin: AdminUser = Depends(require_superadmin),
+) -> dict:
+    setting = get_setting(db, SMTP_SETTINGS_KEY)
+    if not setting:
+        setting = AppSetting(key=SMTP_SETTINGS_KEY)
+        db.add(setting)
+
+    setting.value_json = {
+        "host": payload.host.strip(),
+        "port": payload.port,
+        "username": payload.username.strip(),
+        "from_email": payload.from_email,
+        "from_name": payload.from_name.strip(),
+    }
+
+    if payload.clear_password:
+        setting.value_encrypted = None
+    elif payload.password is not None:
+        normalized_password = payload.password.strip()
+        if not normalized_password:
+            setting.value_encrypted = None
+        else:
+            try:
+                setting.value_encrypted = encrypt_secret(normalized_password)
+            except SecretError as exc:
+                raise HTTPException(
+                    status_code=400,
+                    detail={"ok": False, "error": {"code": exc.code, "message": str(exc)}},
+                ) from exc
+
+    db.commit()
+
+    smtp = get_effective_smtp_settings(db)
+    response = SmtpSettingsResponse(
+        host=smtp["host"],
+        port=smtp["port"],
+        username=smtp["username"],
+        from_email=smtp["from_email"],
+        from_name=smtp["from_name"],
+        password_configured=smtp["password_configured"],
+    )
+    return {"ok": True, "data": response.model_dump(mode="json")}
+
+
+@router.post("/system/settings/smtp/test")
+def test_system_smtp_settings(
+    payload: SmtpTestRequest,
+    db: Session = Depends(get_db),
+    _admin: AdminUser = Depends(require_superadmin),
+) -> dict:
+    smtp = get_effective_smtp_settings(db)
+    message = EmailMessage()
+    message["Subject"] = "ReduxTC WiFi SMTP test"
+    message["From"] = f"{smtp['from_name']} <{smtp['from_email']}>"
+    message["To"] = payload.to_email
+    message.set_content("SMTP test email from ReduxTC WiFi admin settings.")
+
+    try:
+        with smtplib.SMTP(smtp["host"], smtp["port"]) as client:
+            if smtp["username"]:
+                client.login(smtp["username"], smtp["password"])
+            client.send_message(message)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "ok": False,
+                "error": {"code": "SMTP_TEST_FAILED", "message": f"SMTP test failed: {exc}"},
+            },
+        ) from exc
+
+    return {"ok": True, "data": {"sent": True}}
+
+
+@router.put("/system/settings/preferences")
+def update_system_preferences(
+    payload: SystemPreferencesUpdateRequest,
+    db: Session = Depends(get_db),
+    _admin: AdminUser = Depends(require_superadmin),
+) -> dict:
+    setting = get_setting(db, PREFERENCES_SETTINGS_KEY)
+    if not setting:
+        setting = AppSetting(key=PREFERENCES_SETTINGS_KEY)
+        db.add(setting)
+    setting.value_json = {
+        "compact_tables": payload.compact_tables,
+        "show_setup_checklists": payload.show_setup_checklists,
+    }
+    db.commit()
+    return {"ok": True, "data": SystemPreferencesResponse(**setting.value_json).model_dump(mode="json")}
 
 
 @router.put("/system/tls/custom")
