@@ -16,7 +16,7 @@ const NAV_ITEMS = [
   { href: "/admin/vouchers", label: "Vouchers" },
   { href: "/admin/reports", label: "Reports" },
   { href: "/admin/auth-events", label: "Auth Events" },
-  { href: "/admin/certificates", label: "Certificates" },
+  { href: "/admin/settings", label: "Settings" },
 ];
 
 type SidebarNavProps = {
@@ -42,7 +42,7 @@ export function SidebarNav({ collapsed = false, icons = {} }: SidebarNavProps) {
   return (
     <ul className={cn("mt-3 space-y-1.5 text-sm", collapsed ? "mt-2" : "mt-3")}>
       {NAV_ITEMS.filter((item) => {
-        if (item.href === "/admin/admin-users" || item.href === "/admin/certificates") {
+        if (item.href === "/admin/admin-users" || item.href === "/admin/settings") {
           return isSuperadmin;
         }
         return true;

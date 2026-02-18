@@ -296,6 +296,11 @@ const escapeHtml = (value?: string) => {
     .replaceAll("'", "&#39;");
 };
 
+const replaceTemplateToken = (template: string, key: string, value: string) => {
+  const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return template.replace(new RegExp(`{{\\s*${escaped}\\s*}}`, "g"), value);
+};
+
 const serializeBuilderBlocks = (blocks: PortalBuilderBlock[]) => {
   if (typeof window === "undefined" || typeof btoa !== "function") {
     return null;
@@ -1098,23 +1103,29 @@ export default function SiteDetailPage() {
       return "";
     }
     const connectActionPreview = `<button type="button" style="padding:12px 18px;border:none;border-radius:10px;background:${brandingConnectButtonColor};color:#fff;font-weight:600;cursor:pointer;">Accept terms and connect</button>`;
-    return previewSource
-      .replaceAll("{{display_name}}", brandingDisplayName)
-      .replaceAll("{{logo_url}}", brandingLogoUrl)
-      .replaceAll("{{primary_color}}", brandingPrimaryColor)
-      .replaceAll("{{connect_button_color}}", brandingConnectButtonColor)
-      .replaceAll("{{connect_action}}", connectActionPreview)
-      .replaceAll("{{support_contact}}", brandingSupportContact)
-      .replaceAll("{{portal}}", `<div style="padding:16px;border:1px dashed #94a3b8;border-radius:12px;">Built-in portal card preview</div>`)
-      .replaceAll("{{logo_size_px}}", String(portalTheme.logo_size_px ?? 48))
-      .replaceAll("{{heading_size_px}}", String(portalTheme.heading_size_px ?? 24))
-      .replaceAll("{{body_size_px}}", String(portalTheme.body_size_px ?? 14))
-      .replaceAll("{{card_max_width_px}}", String(portalTheme.card_max_width_px ?? 420))
-      .replaceAll("{{card_alignment}}", portalTheme.card_alignment ?? "center")
-      .replaceAll("{{logo_alignment}}", portalTheme.logo_alignment ?? "left")
-      .replaceAll("{{background_color}}", portalTheme.background_color ?? "")
-      .replaceAll("{{card_background_color}}", portalTheme.card_background_color ?? "")
-      .replaceAll("{{text_color}}", portalTheme.text_color ?? "");
+    const previewTokens: Record<string, string> = {
+      display_name: brandingDisplayName,
+      logo_url: brandingLogoUrl,
+      primary_color: brandingPrimaryColor,
+      connect_button_color: brandingConnectButtonColor,
+      connect_action: connectActionPreview,
+      support_contact: brandingSupportContact,
+      portal: `<div style="padding:16px;border:1px dashed #94a3b8;border-radius:12px;">Built-in portal card preview</div>`,
+      logo_size_px: String(portalTheme.logo_size_px ?? 48),
+      heading_size_px: String(portalTheme.heading_size_px ?? 24),
+      body_size_px: String(portalTheme.body_size_px ?? 14),
+      card_max_width_px: String(portalTheme.card_max_width_px ?? 420),
+      card_alignment: portalTheme.card_alignment ?? "center",
+      logo_alignment: portalTheme.logo_alignment ?? "left",
+      background_color: portalTheme.background_color ?? "",
+      card_background_color: portalTheme.card_background_color ?? "",
+      text_color: portalTheme.text_color ?? "",
+    };
+
+    return Object.entries(previewTokens).reduce(
+      (html, [key, value]) => replaceTemplateToken(html, key, value),
+      previewSource
+    );
   }, [activeTemplateHtml, brandingConnectButtonColor, brandingDisplayName, brandingLogoUrl, brandingPrimaryColor, brandingSupportContact, portalTheme]);
   const portalVersionsHasPrevious = portalVersionsOffset > 0;
   const portalVersionsHasNext = portalVersionsOffset + PORTAL_VERSION_PAGE_SIZE < portalVersionsTotal;

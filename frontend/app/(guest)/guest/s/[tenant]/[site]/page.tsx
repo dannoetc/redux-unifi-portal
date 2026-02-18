@@ -33,11 +33,12 @@ const applyTemplateTokens = (
   template: string,
   tokens: Record<string, string | null | undefined>
 ) => {
+  const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   let output = template;
 
   // Minimal support for `{{#if key}}...{{else}}...{{/if}}` blocks so templates can toggle logo fallbacks.
   output = output.replace(
-    /{{#if (\w+)}}([\s\S]*?)(?:{{else}}([\s\S]*?))?{{\/if}}/g,
+    /{{#if\s+([a-zA-Z0-9_]+)\s*}}([\s\S]*?)(?:{{\s*else\s*}}([\s\S]*?))?{{\s*\/if\s*}}/g,
     (_match, key: string, truthy: string, falsy?: string) => {
       const value = tokens[key];
       const hasValue = value !== null && value !== undefined && value !== "";
@@ -46,7 +47,8 @@ const applyTemplateTokens = (
   );
 
   Object.entries(tokens).forEach(([key, value]) => {
-    output = output.replaceAll(`{{${key}}}`, value ?? "");
+    const pattern = new RegExp(`{{\\s*${escapeRegex(key)}\\s*}}`, "g");
+    output = output.replace(pattern, value ?? "");
   });
   return output;
 };
