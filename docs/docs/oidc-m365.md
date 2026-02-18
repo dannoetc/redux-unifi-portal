@@ -94,7 +94,7 @@ If you skip this:
 In the portal Admin UI:
 
 1. Go to **Admin → OIDC**
-2. Select the correct tenant in the top bar
+2. Select the correct tenant in the **left sidebar tenant selector**
 3. Click **New provider**
 4. Fill out:
 

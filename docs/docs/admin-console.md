@@ -11,15 +11,22 @@ Admin URL:
 
 Left sidebar:
 
-- **Dashboard** — quick links and status
+- **Dashboard** — auth/usage KPIs, method mix, site performance, and daily traffic
 - **Tenants** — create/edit tenants + default UniFi controller config
 - **Sites** — create/edit sites + branding/policies + UniFi site mapping
 - **Admins** — create/edit admin users and roles
 - **OIDC** — create/edit OIDC providers (tenant-scoped)
 - **Vouchers** — generate voucher batches and export to CSV
-- **Auth Events** — audit trail + export CSV
+- **Reports** — saved filter presets + method/site comparison exports
+- **Auth Events** — audit trail + export CSV + pagination
 
 ---
+
+## Tenant selection behavior
+
+- Tenant scope is controlled from the **left sidebar Tenant selector**.
+- The console remembers the last selected tenant in your browser.
+- If no tenants exist, pages show a guided onboarding state with a direct **Create tenant** action.
 
 ## Common workflows (with the right docs)
 
@@ -39,7 +46,8 @@ Left sidebar:
 - Microsoft SSO (OIDC) → **[OIDC SSO (Microsoft Entra ID)](oidc-m365.md)**
 
 ### Audit and reporting
-- Auth Events table + export CSV  
+- Dashboard, Reports, and Auth Events all support long-list pagination and filter persistence.
+- Auth Events + Reports support CSV export.  
   → **[Auth Events & Reporting](auth-events.md)**
 
 ### Staff access control

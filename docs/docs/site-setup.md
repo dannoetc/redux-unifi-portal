@@ -53,17 +53,25 @@ If you want “click-to-accept only” access, enable:
 
 ## 4) Portal template (advanced)
 
-If you enable a custom portal template:
-- Set **Portal template enabled**
-- Paste **Portal template HTML**
+Portal template modes:
+- **off**: use built-in portal only
+- **embed**: render custom layout and inject built-in auth card at `{{portal}}`
+- **replace**: fully replace built-in layout with your template HTML
 
-The template should include the placeholder:
+Recommended workflow:
+1. Open site detail → **Portal Template** tab
+2. Choose mode (`off` / `embed` / `replace`)
+3. Use **Visual Builder** or raw HTML editor
+4. Tune theme controls (logo size/alignment, card alignment/width, heading/body sizing, colors)
+5. Save and validate preview
+
+For `embed` mode, include:
 
 ```text
 {{portal}}
 ```
 
-That’s where the built-in portal UI gets injected.
+Use **Template version history** to review previous saves and restore prior versions if a change regresses UX.
 
 ---
 

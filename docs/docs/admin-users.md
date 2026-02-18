@@ -20,7 +20,7 @@ This is how you give staff access to the Admin Console.
 ## Create an admin user
 
 1. Go to **Admin → Admins**
-2. Confirm you’ve selected the right tenant in the top bar.
+2. Confirm you’ve selected the right tenant in the **left sidebar tenant selector**.
 3. Click **New admin**
 4. Fill in:
    - **Email**
@@ -33,7 +33,7 @@ This is how you give staff access to the Admin Console.
 ## Edit an admin user
 
 1. Go to **Admin → Admins**
-2. Click the row menu for the user
+2. Click **Edit** on the user row
 3. Update:
    - Email
    - Role
@@ -45,6 +45,6 @@ This is how you give staff access to the Admin Console.
 
 ## Remove access
 
-To remove access, delete the user from **Admin → Admins** (or set their role to the least privileged role you support operationally).
+To remove access, click **Remove** on the user row in **Admin → Admins** (or set least privilege role as needed).
 
 Tip: if you’re offboarding someone, rotate shared secrets too (UniFi keys, SMTP creds, etc.).

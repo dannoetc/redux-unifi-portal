@@ -14,7 +14,7 @@ Vouchers are staff-issued codes guests can type into the captive portal.
 ## 1) Generate a voucher batch
 
 1. Go to **Admin → Vouchers**
-2. Confirm the correct tenant is selected in the top bar.
+2. Confirm the correct tenant is selected in the **left sidebar tenant selector**.
 3. Fill out the form:
    - **Batch name** (e.g., `Front Desk - February`)
    - **Site** (the location this batch applies to)
@@ -29,8 +29,9 @@ Vouchers are staff-issued codes guests can type into the captive portal.
 
 ## 2) Export vouchers to CSV (for printing / emailing)
 
-1. On the vouchers page, find the batch you generated
-2. Click **Export CSV**
+1. Copy the generated **Batch ID** after creating the batch.
+2. In the **Export vouchers** section, paste that Batch ID.
+3. Click **Export CSV**.
 
 You’ll get a file containing one voucher code per row.
 

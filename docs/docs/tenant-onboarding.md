@@ -22,7 +22,8 @@ You’ll do two things:
 ## 1) Pick the tenant you’re working on (important)
 
 1. Go to **Admin → Tenants**
-2. Use the tenant selector (top bar) to confirm you’re editing the right tenant.
+2. Use the **Tenant selector in the left sidebar** to confirm you’re editing the right tenant.
+3. The selected tenant is persisted in-browser, so switching pages keeps scope stable.
 
 ---
 
@@ -81,6 +82,7 @@ Rules:
 3. Confirm:
    - UniFi settings are present (site or tenant)
    - `UniFi site id` is correct
+   - Dashboard and Reports load for the selected tenant without errors
 
 Next steps:
 - Configure UniFi external portal URL: **[UniFi Setup](unifi-setup.md)**
