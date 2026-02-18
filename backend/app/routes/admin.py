@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import csv
 import io
+import ipaddress
 import json
 import logging
 import os
 import re
 import secrets
+import socket
 import string
 import subprocess
 import tempfile
@@ -14,6 +16,7 @@ import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from urllib import request as urllib_request
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -168,6 +171,22 @@ def me(current_admin: AdminUser = Depends(get_current_admin)) -> dict:
 @router.get("/system/tls")
 def get_tls_status(_admin: AdminUser = Depends(require_superadmin)) -> dict:
     return {"ok": True, "data": _tls_status().model_dump(mode="json")}
+
+
+@router.get("/system/external-ip")
+def get_external_portal_ip(_admin: AdminUser = Depends(get_current_admin)) -> dict:
+    domain = _get_primary_domain()
+    resolved_ip = _resolve_public_ipv4()
+    source = "public-ip-service"
+    if not resolved_ip:
+        resolved_ip = _resolve_domain_ipv4(domain)
+        source = "dns"
+    if not resolved_ip:
+        raise HTTPException(
+            status_code=502,
+            detail={"ok": False, "error": {"code": "IP_RESOLUTION_FAILED", "message": "Unable to resolve external IP from DOMAIN."}},
+        )
+    return {"ok": True, "data": {"ip": resolved_ip, "domain": domain, "source": source}}
 
 
 @router.put("/system/tls/custom")
@@ -2469,6 +2488,7 @@ def _normalize_portal_template_theme(theme: object | None) -> dict | None:
     _normalize_color("background_color")
     _normalize_color("card_background_color")
     _normalize_color("text_color")
+    _normalize_color("connect_button_color")
 
     return normalized or None
 
@@ -3158,3 +3178,28 @@ def _atomic_write(path: Path, content: str, mode: int) -> None:
     finally:
         if os.path.exists(tmp_path):
             os.unlink(tmp_path)
+
+
+def _resolve_domain_ipv4(domain: str) -> str | None:
+    try:
+        infos = socket.getaddrinfo(domain, None, family=socket.AF_INET, type=socket.SOCK_STREAM)
+    except socket.gaierror:
+        return None
+    for info in infos:
+        sockaddr = info[4]
+        if sockaddr and isinstance(sockaddr, tuple) and sockaddr[0]:
+            return str(sockaddr[0])
+    return None
+
+
+def _resolve_public_ipv4() -> str | None:
+    for url in ("https://api.ipify.org", "https://ifconfig.me/ip"):
+        try:
+            with urllib_request.urlopen(url, timeout=3) as response:
+                candidate = response.read().decode("utf-8", errors="ignore").strip()
+            ip = ipaddress.ip_address(candidate)
+            if isinstance(ip, ipaddress.IPv4Address):
+                return str(ip)
+        except Exception:
+            continue
+    return None

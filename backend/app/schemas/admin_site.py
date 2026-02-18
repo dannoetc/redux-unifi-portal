@@ -36,6 +36,7 @@ class PortalTemplateTheme(BaseModel):
     background_color: str | None = None
     card_background_color: str | None = None
     text_color: str | None = None
+    connect_button_color: str | None = None
 
 
 class SiteCreateRequest(BaseModel):

@@ -7,7 +7,6 @@ import { toast } from "sonner";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { MoreHorizontal, Pencil } from "lucide-react";
 
 import { apiFetch } from "@/lib/api";
 import { useTenantSelection } from "@/lib/use-tenant";
@@ -17,7 +16,6 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { PopoverMenu, PopoverMenuItem, PopoverMenuLink, PopoverMenuSeparator } from "@/components/ui/PopoverMenu";
 import StatusPill from "@/components/ui/StatusPill";
 
 type Site = {
@@ -216,45 +214,6 @@ export default function SitesPage() {
     };
   }, [discoverOpen, tenantId]);
 
-  const RowActions = ({ site }: { site: Site }) => {
-    return (
-      <PopoverMenu
-        trigger={
-          <button
-            type="button"
-            aria-label="Open row actions"
-            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
-          >
-            <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
-          </button>
-        }
-      >
-        <PopoverMenuLink
-          href={tenantSlug ? `/guest/s/${tenantSlug}/${site.slug}?preview=1` : "#"}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Preview
-        </PopoverMenuLink>
-        <PopoverMenuLink
-          href={`/admin/sites/${site.id}?tenant=${tenantId ?? ""}`}
-        >
-          Edit
-        </PopoverMenuLink>
-        <PopoverMenuSeparator />
-        <PopoverMenuItem
-          className="text-destructive"
-          onClick={() => {
-            setSiteToDelete(site);
-            setDeleteOpen(true);
-          }}
-        >
-          Remove site
-        </PopoverMenuItem>
-      </PopoverMenu>
-    );
-  };
-
   const columns = useMemo<ColumnDef<Site>[]>(
     () => [
       {
@@ -262,7 +221,12 @@ export default function SitesPage() {
         header: "Site",
         cell: ({ row }) => (
           <div>
-            <div className="font-medium text-foreground">{row.original.display_name}</div>
+            <Link
+              href={`/admin/sites/${row.original.id}?tenant=${tenantId ?? ""}`}
+              className="font-medium text-foreground underline-offset-4 hover:underline"
+            >
+              {row.original.display_name}
+            </Link>
             <div className="text-xs text-muted-foreground">{row.original.slug}</div>
           </div>
         ),
@@ -281,21 +245,35 @@ export default function SitesPage() {
       },
       {
         id: "actions",
-        header: () => <span className="sr-only">Actions</span>,
+        header: () => <span>Actions</span>,
         cell: ({ row }) => (
-          <div className="flex items-center justify-end gap-1">
+          <div className="flex items-center justify-end gap-2">
+            {tenantSlug ? (
+              <Button asChild variant="ghost" size="sm">
+                <a
+                  href={`/guest/s/${tenantSlug}/${row.original.slug}?preview=1`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Preview
+                </a>
+              </Button>
+            ) : (
+              <Button variant="ghost" size="sm" disabled>
+                Preview
+              </Button>
+            )}
             <Button
-              asChild
               variant="ghost"
               size="sm"
-              className="h-8 w-8 p-0"
+              className="text-destructive hover:text-destructive"
+              onClick={() => {
+                setSiteToDelete(row.original);
+                setDeleteOpen(true);
+              }}
             >
-              <a href={`/admin/sites/${row.original.id}?tenant=${tenantId ?? ""}`}>
-                <Pencil className="h-4 w-4" />
-                <span className="sr-only">Edit {row.original.display_name}</span>
-              </a>
+              Remove
             </Button>
-            <RowActions site={row.original} />
           </div>
         ),
       },
@@ -379,7 +357,7 @@ export default function SitesPage() {
   };
 
   return (
-    <div className="mx-auto flex min-h-[calc(100vh-104px)] w-full max-w-7xl flex-col gap-6">
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 pb-4">
         <div>
           <h1 className="text-2xl font-semibold">Sites</h1>
@@ -580,7 +558,7 @@ export default function SitesPage() {
           </Dialog>
         </div>
       </div>
-      <section className="flex min-h-0 flex-1 flex-col">
+      <section className="min-h-0">
         {noTenants ? (
           <TenantOnboardingState description="Create your first tenant before adding sites." />
         ) : loading ? (
@@ -608,7 +586,7 @@ export default function SitesPage() {
             </Button>
           </div>
         ) : (
-          <div className="flex-1 overflow-visible rounded-lg border border-border/60 bg-background">
+          <div className="overflow-visible rounded-lg border border-border/60 bg-background">
             <DataTable columns={columns} data={sites} />
           </div>
         )}

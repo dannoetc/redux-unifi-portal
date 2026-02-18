@@ -14,7 +14,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 const optionalText = z.string().optional().nullable().or(z.literal(""));
 const optionalPort = z.preprocess(
@@ -58,6 +57,7 @@ type PortalTemplateTheme = {
   background_color?: string;
   card_background_color?: string;
   text_color?: string;
+  connect_button_color?: string;
 };
 type TemplateEditorMode = "visual" | "code";
 type PortalBuilderBlockType = "hero" | "text" | "portal" | "button" | "spacer";
@@ -114,9 +114,10 @@ type SiteOidcForm = {
   allowed_email_domains: string;
 };
 
+type SectionId = "overview" | "branding" | "portal" | "policy" | "unifi" | "oidc";
+
 const UNIFI_INTEGRATION_PATH = "/proxy/network/integration";
 const DEFAULT_UNIFI_PORT = 443;
-const EXTERNAL_PORTAL_IP = process.env.NEXT_PUBLIC_PORTAL_IP ?? "0.0.0.0";
 const PORTAL_VERSION_PAGE_SIZE = 10;
 const BUILDER_META_PREFIX = "<!--portal_builder:";
 const BUILDER_META_SUFFIX = "-->";
@@ -138,7 +139,7 @@ const TEMPLATE_PRESETS = {
   customOnly: `<section style="max-width:720px;margin:0 auto;padding:28px;border:1px solid #dbe5ef;border-radius:16px;background:#ffffff;">
   <h2 style="margin-top:0;color:{{primary_color}};">Welcome to {{display_name}}</h2>
   <p style="font-size:15px;color:#334155;">Connect instantly with sponsored access.</p>
-  <button id="sponsored-connect" style="margin-top:12px;padding:12px 18px;border:none;border-radius:10px;background:{{primary_color}};color:#fff;font-weight:600;cursor:pointer;">
+  <button id="sponsored-connect" style="margin-top:12px;padding:12px 18px;border:none;border-radius:10px;background:{{connect_button_color}};color:#fff;font-weight:600;cursor:pointer;">
     Accept terms and connect
   </button>
   <p style="margin-top:12px;font-size:12px;color:#64748b;">Support: {{support_contact}}</p>
@@ -190,7 +191,7 @@ const DEFAULT_BUILDER_BLOCKS_REPLACE: PortalBuilderBlock[] = [
     id: "button",
     type: "button",
     buttonLabel: "Accept terms and connect",
-    buttonColor: "{{primary_color}}",
+    buttonColor: "{{connect_button_color}}",
   },
   {
     id: "text",
@@ -238,7 +239,7 @@ const defaultBlockForType = (type: PortalBuilderBlockType): PortalBuilderBlock =
         id: createBuilderId(),
         type,
         buttonLabel: "Accept terms and connect",
-        buttonColor: "{{primary_color}}",
+        buttonColor: "{{connect_button_color}}",
       };
     case "spacer":
       return {
@@ -384,7 +385,7 @@ const renderBuilderBlock = (block: PortalBuilderBlock) => {
 </section>`;
     case "button":
       return `<section style="padding:8px 0;">
-  <button id="sponsored-connect" style="padding:12px 18px;border:none;border-radius:10px;background:${block.buttonColor || "{{primary_color}}"};color:#fff;font-weight:600;cursor:pointer;">
+  <button id="sponsored-connect" style="padding:12px 18px;border:none;border-radius:10px;background:${block.buttonColor || "{{connect_button_color}}"};color:#fff;font-weight:600;cursor:pointer;">
     ${escapeHtml(block.buttonLabel || "Accept terms and connect")}
   </button>
 </section>`;
@@ -494,7 +495,9 @@ export default function SiteDetailPage() {
   const logoInputRef = useRef<HTMLInputElement | null>(null);
   const portalUrlRef = useRef<HTMLInputElement | null>(null);
   const originalUnifiPortRef = useRef<number | undefined>(undefined);
-  const [activeTab, setActiveTab] = useState("branding");
+  const [activeTab, setActiveTab] = useState<SectionId>("overview");
+  const [externalPortalIp, setExternalPortalIp] = useState<string>("");
+  const [externalIpLoading, setExternalIpLoading] = useState(false);
   const [portalTheme, setPortalTheme] = useState<PortalTemplateTheme>(DEFAULT_TEMPLATE_THEME);
   const [templateEditorMode, setTemplateEditorMode] = useState<TemplateEditorMode>("visual");
   const [builderBlocks, setBuilderBlocks] = useState<PortalBuilderBlock[]>(DEFAULT_BUILDER_BLOCKS_EMBED);
@@ -631,6 +634,30 @@ export default function SiteDetailPage() {
       active = false;
     };
   }, [tenantId, params, siteForm, syncTemplateEditorFromHtml, loadPortalVersions]);
+
+  useEffect(() => {
+    let active = true;
+    setExternalIpLoading(true);
+    apiFetch<{ ip: string }>("/api/admin/system/external-ip")
+      .then((data) => {
+        if (active) {
+          setExternalPortalIp(data.ip);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setExternalPortalIp("");
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setExternalIpLoading(false);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const saveSite = async (values: SiteFormValues) => {
     if (!tenantId) {
@@ -778,7 +805,7 @@ export default function SiteDetailPage() {
     default_rx_kbps: "RX limit (kbps)",
     default_tx_kbps: "TX limit (kbps)",
   };
-  const fieldTabs: Record<keyof SiteFormValues, string> = {
+  const fieldTabs: Record<keyof SiteFormValues, SectionId> = {
     display_name: "branding",
     slug: "branding",
     enabled: "branding",
@@ -829,9 +856,14 @@ export default function SiteDetailPage() {
   };
 
   const copyPortalIp = async () => {
+    const ipToCopy = externalPortalIp || "Unavailable";
+    if (!externalPortalIp) {
+      toast.error("External IP is not available yet.");
+      return;
+    }
     try {
       if (navigator?.clipboard?.writeText) {
-        await navigator.clipboard.writeText(EXTERNAL_PORTAL_IP);
+        await navigator.clipboard.writeText(ipToCopy);
         toast.success("Portal IP copied.");
         return;
       }
@@ -844,11 +876,11 @@ export default function SiteDetailPage() {
     if (input) {
       input.focus();
       input.select();
-      input.setSelectionRange(0, EXTERNAL_PORTAL_IP.length);
+      input.setSelectionRange(0, ipToCopy.length);
       copied = document.execCommand("copy");
     } else {
       const textarea = document.createElement("textarea");
-      textarea.value = EXTERNAL_PORTAL_IP;
+      textarea.value = ipToCopy;
       textarea.style.position = "fixed";
       textarea.style.opacity = "0";
       document.body.appendChild(textarea);
@@ -983,6 +1015,7 @@ export default function SiteDetailPage() {
   const brandingDisplayName = siteForm.watch("display_name") ?? "Guest WiFi";
   const brandingLogoUrl = siteForm.watch("logo_url") ?? "";
   const brandingPrimaryColor = siteForm.watch("primary_color") ?? "#1f6feb";
+  const brandingConnectButtonColor = portalTheme.connect_button_color ?? brandingPrimaryColor;
   const brandingSupportContact = siteForm.watch("support_contact") ?? "support@example.com";
   const builderTemplateHtml = useMemo(
     () => buildTemplateFromBlocks(builderBlocks, portalTemplateMode),
@@ -999,6 +1032,7 @@ export default function SiteDetailPage() {
       .replaceAll("{{display_name}}", brandingDisplayName)
       .replaceAll("{{logo_url}}", brandingLogoUrl)
       .replaceAll("{{primary_color}}", brandingPrimaryColor)
+      .replaceAll("{{connect_button_color}}", brandingConnectButtonColor)
       .replaceAll("{{support_contact}}", brandingSupportContact)
       .replaceAll("{{portal}}", `<div style="padding:16px;border:1px dashed #94a3b8;border-radius:12px;">Built-in portal card preview</div>`)
       .replaceAll("{{logo_size_px}}", String(portalTheme.logo_size_px ?? 48))
@@ -1010,9 +1044,17 @@ export default function SiteDetailPage() {
       .replaceAll("{{background_color}}", portalTheme.background_color ?? "")
       .replaceAll("{{card_background_color}}", portalTheme.card_background_color ?? "")
       .replaceAll("{{text_color}}", portalTheme.text_color ?? "");
-  }, [activeTemplateHtml, brandingDisplayName, brandingLogoUrl, brandingPrimaryColor, brandingSupportContact, portalTheme]);
+  }, [activeTemplateHtml, brandingConnectButtonColor, brandingDisplayName, brandingLogoUrl, brandingPrimaryColor, brandingSupportContact, portalTheme]);
   const portalVersionsHasPrevious = portalVersionsOffset > 0;
   const portalVersionsHasNext = portalVersionsOffset + PORTAL_VERSION_PAGE_SIZE < portalVersionsTotal;
+  const sectionMeta: Array<{ id: SectionId; label: string }> = [
+    { id: "overview", label: "Overview" },
+    { id: "branding", label: "Branding" },
+    { id: "portal", label: "Template" },
+    { id: "policy", label: "Policy" },
+    { id: "unifi", label: "UniFi" },
+    { id: "oidc", label: "SSO" },
+  ];
 
   return (
     <div className="space-y-6">
@@ -1074,32 +1116,77 @@ export default function SiteDetailPage() {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-      <div className="rounded-lg border border-border/60 bg-muted/20 p-4">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm font-semibold text-foreground">External portal IP</p>
-            <p className="text-xs text-muted-foreground">
-              Share this IP with anyone configuring UniFi&apos;s external portal settings.
-            </p>
-          </div>
-          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
-            <Input readOnly value={EXTERNAL_PORTAL_IP} ref={portalUrlRef} className="sm:w-[280px]" />
-            <Button type="button" variant="secondary" onClick={copyPortalIp}>
-              Copy
-            </Button>
-          </div>
-        </div>
-      </div>
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="branding">Branding</TabsTrigger>
-          <TabsTrigger value="portal">Portal Template</TabsTrigger>
-          <TabsTrigger value="policy">Policy Defaults</TabsTrigger>
-          <TabsTrigger value="unifi">UniFi Connection</TabsTrigger>
-          <TabsTrigger value="oidc">SSO (OIDC)</TabsTrigger>
-        </TabsList>
+      <div className="grid gap-6 lg:grid-cols-[1fr_280px]">
+        <aside className="lg:order-2 lg:sticky lg:top-20 lg:h-fit">
+          <Card className="border border-border/60">
+            <CardContent className="space-y-1">
+              {sectionMeta.map((section) => (
+                <button
+                  key={section.id}
+                  type="button"
+                  onClick={() => setActiveTab(section.id)}
+                  className={`w-full rounded-md px-3 py-2 text-left transition ${
+                    activeTab === section.id
+                      ? "bg-primary/10 text-foreground"
+                      : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
+                  }`}
+                >
+                  <div className="text-sm font-semibold">{section.label}</div>
+                </button>
+              ))}
+            </CardContent>
+          </Card>
+        </aside>
+        <div className="space-y-4 lg:order-1">
+        {activeTab === "overview" ? (
+          <Card className="rounded-xl border bg-card shadow-soft">
+            <CardHeader>
+              <CardTitle>Overview</CardTitle>
+              <CardDescription>Deployment values and quick checks for this site.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="rounded-lg border border-border/60 bg-muted/20 p-4">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">External portal IP</p>
+                    <p className="text-xs text-muted-foreground">
+                      Resolved from `DOMAIN` and ready for UniFi external portal settings.
+                    </p>
+                  </div>
+                  <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+                    <Input
+                      readOnly
+                      value={externalIpLoading ? "Resolving..." : externalPortalIp || "Unavailable"}
+                      ref={portalUrlRef}
+                      className="sm:w-[280px]"
+                    />
+                    <Button type="button" variant="secondary" onClick={copyPortalIp} disabled={!externalPortalIp}>
+                      Copy
+                    </Button>
+                  </div>
+                </div>
+              </div>
+              <div className="grid gap-3 md:grid-cols-3">
+                <div className="rounded-md border border-border/60 p-3">
+                  <div className="text-xs uppercase text-muted-foreground">Template mode</div>
+                  <div className="text-sm font-semibold text-foreground">{portalTemplateMode}</div>
+                </div>
+                <div className="rounded-md border border-border/60 p-3">
+                  <div className="text-xs uppercase text-muted-foreground">UniFi site ID</div>
+                  <div className="text-sm font-semibold text-foreground">
+                    {siteForm.watch("unifi_site_id") || "Not set"}
+                  </div>
+                </div>
+                <div className="rounded-md border border-border/60 p-3">
+                  <div className="text-xs uppercase text-muted-foreground">Dirty state</div>
+                  <div className="text-sm font-semibold text-foreground">{canSave ? "Unsaved changes" : "Saved"}</div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ) : null}
 
-        <TabsContent value="branding">
+        {activeTab === "branding" ? (
           <Card className="rounded-xl border bg-card shadow-soft">
             <CardHeader>
               <CardTitle>Branding</CardTitle>
@@ -1247,9 +1334,9 @@ export default function SiteDetailPage() {
               </form>
             </CardContent>
           </Card>
-        </TabsContent>
+        ) : null}
 
-        <TabsContent value="portal">
+        {activeTab === "portal" ? (
           <Card className="rounded-xl border bg-card shadow-soft">
             <CardHeader>
               <CardTitle>Portal templating</CardTitle>
@@ -1326,7 +1413,7 @@ export default function SiteDetailPage() {
                   Core tokens: {`{{display_name}}`}, {`{{logo_url}}`}, {`{{primary_color}}`}, {`{{terms_html}}`}, {`{{support_contact}}`}.
                   Theme tokens: {`{{logo_size_px}}`}, {`{{heading_size_px}}`}, {`{{body_size_px}}`}, {`{{card_max_width_px}}`},
                   {` {{card_alignment}}`}, {`{{logo_alignment}}`}, {`{{background_color}}`}, {`{{card_background_color}}`},
-                  {` {{text_color}}`}.
+                  {` {{text_color}}`}, {`{{connect_button_color}}`}.
                 </div>
 
                 {templateEditorMode === "visual" ? (
@@ -1508,7 +1595,7 @@ export default function SiteDetailPage() {
                                     <Label>Button color</Label>
                                     <Input
                                       value={block.buttonColor ?? ""}
-                                      placeholder="{{primary_color}}"
+                                      placeholder="{{connect_button_color}}"
                                       onChange={(event) =>
                                         updateBuilderBlock(block.id, { buttonColor: event.target.value })
                                       }
@@ -1642,6 +1729,15 @@ export default function SiteDetailPage() {
                       onChange={(event) => updateTheme({ text_color: event.target.value || undefined })}
                     />
                   </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="theme_connect_button_color">Connection button color</Label>
+                    <Input
+                      id="theme_connect_button_color"
+                      placeholder="#1f6feb"
+                      value={portalTheme.connect_button_color ?? ""}
+                      onChange={(event) => updateTheme({ connect_button_color: event.target.value || undefined })}
+                    />
+                  </div>
                 </div>
 
                 <div className="space-y-2">
@@ -1744,9 +1840,9 @@ export default function SiteDetailPage() {
               </form>
             </CardContent>
           </Card>
-        </TabsContent>
+        ) : null}
 
-        <TabsContent value="policy">
+        {activeTab === "policy" ? (
           <Card className="rounded-xl border bg-card shadow-soft">
             <CardHeader>
               <CardTitle>Default policy</CardTitle>
@@ -1768,9 +1864,10 @@ export default function SiteDetailPage() {
               </form>
             </CardContent>
           </Card>
-        </TabsContent>
+        ) : null}
 
-        <TabsContent value="unifi">
+        {activeTab === "unifi" ? (
+          <>
           <Card className="rounded-xl border bg-card shadow-soft">
             <CardHeader>
               <CardTitle>UniFi connection</CardTitle>
@@ -1842,9 +1939,10 @@ export default function SiteDetailPage() {
               </Button>
             </CardContent>
           </Card>
-        </TabsContent>
+          </>
+        ) : null}
 
-        <TabsContent value="oidc">
+        {activeTab === "oidc" ? (
           <Card className="rounded-xl border bg-card shadow-soft">
             <CardHeader>
               <CardTitle>OIDC enablement</CardTitle>
@@ -1899,8 +1997,9 @@ export default function SiteDetailPage() {
               </Button>
             </CardContent>
           </Card>
-        </TabsContent>
-      </Tabs>
+        ) : null}
+        </div>
+      </div>
     </div>
   );
 }

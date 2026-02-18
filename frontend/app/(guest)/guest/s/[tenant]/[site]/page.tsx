@@ -26,6 +26,7 @@ type PortalTheme = {
   background_color?: string | null;
   card_background_color?: string | null;
   text_color?: string | null;
+  connect_button_color?: string | null;
 };
 
 const applyTemplateTokens = (
@@ -192,6 +193,7 @@ export default function GuestLanding() {
   const cardMaxWidthPx = clampNumber(templateTheme?.card_max_width_px, 320, 1024) ?? 420;
   const logoAlignment = templateTheme?.logo_alignment ?? "left";
   const cardAlignment = templateTheme?.card_alignment ?? "center";
+  const connectButtonColor = templateTheme?.connect_button_color ?? config?.branding.primary_color ?? null;
 
   const brandStyle = useMemo(() => {
     if (!config?.branding.primary_color && !templateTheme?.card_background_color) {
@@ -207,11 +209,11 @@ export default function GuestLanding() {
   }, [bodySizePx, cardMaxWidthPx, config, templateTheme?.card_background_color, templateTheme?.text_color]);
 
   const primaryButtonStyle = useMemo(() => {
-    if (!config?.branding.primary_color) {
+    if (!connectButtonColor) {
       return undefined;
     }
-    return { backgroundColor: config.branding.primary_color } as CSSProperties;
-  }, [config]);
+    return { backgroundColor: connectButtonColor } as CSSProperties;
+  }, [connectButtonColor]);
 
   const pageStyle = useMemo(() => {
     if (!templateTheme?.background_color && !templateTheme?.text_color) {
@@ -250,6 +252,7 @@ export default function GuestLanding() {
       primary_color: escapeHtml(config?.branding.primary_color),
       terms_html: sanitizeHtmlForInjection(config?.branding.terms_html),
       support_contact: escapeHtml(config?.branding.support_contact),
+      connect_button_color: connectButtonColor,
       logo_size_px: String(logoSizePx),
       heading_size_px: String(headingSizePx),
       body_size_px: String(bodySizePx),
@@ -260,7 +263,7 @@ export default function GuestLanding() {
       card_background_color: templateTheme?.card_background_color,
       text_color: templateTheme?.text_color,
     }),
-    [cardAlignment, cardMaxWidthPx, config, headingSizePx, logoAlignment, logoSizePx, templateTheme]
+    [cardAlignment, cardMaxWidthPx, config, connectButtonColor, headingSizePx, logoAlignment, logoSizePx, templateTheme]
   );
 
   const resolvedTemplate = useMemo(() => {

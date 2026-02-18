@@ -205,7 +205,7 @@ test("visual builder saves embed mode template and persists on reload", async ({
   await page.goto(`/admin/sites/${SITE_ID}?tenant=${TENANT_ID}`);
   await expect(page.getByRole("heading", { name: "Site settings" })).toBeVisible();
 
-  await page.getByRole("tab", { name: "Portal Template" }).click();
+  await page.getByRole("button", { name: "Template" }).click();
   await page.locator("#portal_template_mode").selectOption("embed");
   await page.getByRole("button", { name: "Add hero" }).click();
   await page.getByRole("button", { name: "Save changes" }).click();
@@ -216,7 +216,7 @@ test("visual builder saves embed mode template and persists on reload", async ({
   expect(String(body.portal_template_html)).toContain("{{portal}}");
 
   await page.reload();
-  await page.getByRole("tab", { name: "Portal Template" }).click();
+  await page.getByRole("button", { name: "Template" }).click();
   await expect(page.getByRole("button", { name: "Visual Builder" })).toBeVisible();
   await expect(page.locator("text=portal block")).toHaveCount(1);
 });
@@ -234,7 +234,7 @@ test("can restore a previous portal template version", async ({ page }) => {
   api.templateVersions.unshift(buildVersion(api.siteState, "replace"));
 
   await page.goto(`/admin/sites/${SITE_ID}?tenant=${TENANT_ID}`);
-  await page.getByRole("tab", { name: "Portal Template" }).click();
+  await page.getByRole("button", { name: "Template" }).click();
 
   await expect(page.getByText("embed mode", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Restore" }).nth(1).click();

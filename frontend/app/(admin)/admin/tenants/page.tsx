@@ -1,19 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ColumnDef } from "@tanstack/react-table";
 import { toast } from "sonner";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ChevronDown, MoreHorizontal } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { DataTable } from "@/components/data-table";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { PopoverMenu, PopoverMenuItem, PopoverMenuSeparator } from "@/components/ui/PopoverMenu";
 import StatusPill from "@/components/ui/StatusPill";
 
 const optionalPort = z.preprocess(
@@ -73,7 +72,6 @@ const formatStatus = (status?: string) => {
 
 const UNIFI_INTEGRATION_PATH = "/proxy/network/integration";
 const DEFAULT_UNIFI_PORT = 443;
-const EXTERNAL_PORTAL_IP = process.env.NEXT_PUBLIC_PORTAL_IP ?? "0.0.0.0";
 
 const parseUnifiHostAndPort = (value?: string | null) => {
   if (!value) {
@@ -138,6 +136,8 @@ export default function TenantsPage() {
   const [setupInitialized, setSetupInitialized] = useState(false);
   const portalUrlRef = useRef<HTMLInputElement | null>(null);
   const [onboardingMode, setOnboardingMode] = useState(false);
+  const [externalPortalIp, setExternalPortalIp] = useState<string>("");
+  const [externalIpLoading, setExternalIpLoading] = useState(false);
 
   const form = useForm<CreateTenant>({
     resolver: zodResolver(schema),
@@ -193,10 +193,39 @@ export default function TenantsPage() {
     }
   }, [loading, onboardingMode, tenants.length]);
 
+  useEffect(() => {
+    let active = true;
+    setExternalIpLoading(true);
+    apiFetch<{ ip: string }>("/api/admin/system/external-ip")
+      .then((data) => {
+        if (active) {
+          setExternalPortalIp(data.ip);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setExternalPortalIp("");
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setExternalIpLoading(false);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const copyPortalIp = async () => {
+    const ipToCopy = externalPortalIp || "Unavailable";
+    if (!externalPortalIp) {
+      toast.error("External IP is not available yet.");
+      return;
+    }
     try {
       if (navigator?.clipboard?.writeText) {
-        await navigator.clipboard.writeText(EXTERNAL_PORTAL_IP);
+        await navigator.clipboard.writeText(ipToCopy);
         toast.success("Portal IP copied.");
         return;
       }
@@ -209,11 +238,11 @@ export default function TenantsPage() {
     if (input) {
       input.focus();
       input.select();
-      input.setSelectionRange(0, EXTERNAL_PORTAL_IP.length);
+      input.setSelectionRange(0, ipToCopy.length);
       copied = document.execCommand("copy");
     } else {
       const textarea = document.createElement("textarea");
-      textarea.value = EXTERNAL_PORTAL_IP;
+      textarea.value = ipToCopy;
       textarea.style.position = "fixed";
       textarea.style.opacity = "0";
       document.body.appendChild(textarea);
@@ -230,47 +259,17 @@ export default function TenantsPage() {
     }
   };
 
-  const RowActions = ({ tenant }: { tenant: Tenant }) => {
-    return (
-      <PopoverMenu
-        trigger={
-          <button
-            type="button"
-            aria-label="Open row actions"
-            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
-          >
-            <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
-          </button>
-        }
-      >
-        <PopoverMenuItem
-          onClick={() => {
-            setTenantToConfigure(tenant);
-            const { host, port } = parseUnifiHostAndPort(tenant.unifi_base_url);
-            controllerForm.reset({
-              unifi_base_url: host,
-              unifi_port: port,
-              unifi_api_key_ref: tenant.unifi_api_key_ref ?? "",
-              unifi_api_key: "",
-            });
-            setControllerOpen(true);
-          }}
-        >
-          Configure UniFi
-        </PopoverMenuItem>
-        <PopoverMenuSeparator />
-        <PopoverMenuItem
-          className="text-destructive"
-          onClick={() => {
-            setTenantToDelete(tenant);
-            setDeleteOpen(true);
-          }}
-        >
-          Remove tenant
-        </PopoverMenuItem>
-      </PopoverMenu>
-    );
-  };
+  const openControllerDialog = useCallback((tenant: Tenant) => {
+    setTenantToConfigure(tenant);
+    const { host, port } = parseUnifiHostAndPort(tenant.unifi_base_url);
+    controllerForm.reset({
+      unifi_base_url: host,
+      unifi_port: port,
+      unifi_api_key_ref: tenant.unifi_api_key_ref ?? "",
+      unifi_api_key: "",
+    });
+    setControllerOpen(true);
+  }, [controllerForm]);
 
   const columns = useMemo<ColumnDef<Tenant>[]>(
     () => [
@@ -278,7 +277,13 @@ export default function TenantsPage() {
         accessorKey: "name",
         header: "Name",
         cell: ({ row }) => (
-          <div className="font-medium text-foreground">{row.original.name}</div>
+          <button
+            type="button"
+            className="font-medium text-foreground underline-offset-4 hover:underline"
+            onClick={() => openControllerDialog(row.original)}
+          >
+            {row.original.name}
+          </button>
         ),
       },
       {
@@ -316,15 +321,32 @@ export default function TenantsPage() {
       },
       {
         id: "actions",
-        header: () => <span className="sr-only">Actions</span>,
+        header: () => <span>Actions</span>,
         cell: ({ row }) => (
-          <div className="flex items-center justify-end">
-            <RowActions tenant={row.original} />
+          <div className="flex items-center justify-end gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => openControllerDialog(row.original)}
+            >
+              Configure
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-destructive hover:text-destructive"
+              onClick={() => {
+                setTenantToDelete(row.original);
+                setDeleteOpen(true);
+              }}
+            >
+              Remove
+            </Button>
           </div>
         ),
       },
     ],
-    []
+    [openControllerDialog]
   );
 
   const onSubmit = async (values: CreateTenant) => {
@@ -538,8 +560,13 @@ export default function TenantsPage() {
             External portal IP
           </Label>
           <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
-            <Input id="portal-url" readOnly value={EXTERNAL_PORTAL_IP} ref={portalUrlRef} />
-            <Button type="button" variant="secondary" onClick={copyPortalIp}>
+            <Input
+              id="portal-url"
+              readOnly
+              value={externalIpLoading ? "Resolving..." : externalPortalIp || "Unavailable"}
+              ref={portalUrlRef}
+            />
+            <Button type="button" variant="secondary" onClick={copyPortalIp} disabled={!externalPortalIp}>
               Copy
             </Button>
           </div>
