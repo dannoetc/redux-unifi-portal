@@ -1,10 +1,8 @@
-# Troubleshooting (step-by-step)
+# Troubleshooting
 
-This is the “what do I check first?” page.
+Use this page as first-response runbook.
 
----
-
-## Basic commands
+## Quick commands
 
 ```bash
 docker compose ps
@@ -15,78 +13,47 @@ docker compose logs -f celery
 docker compose logs -f postgres
 ```
 
----
+## HTTPS or certificate issues
 
-## Problem: Certbot / HTTPS is broken
+Check:
+1. DNS A record points to the correct host.
+2. Ports `80` and `443` are open.
+3. `DOMAIN` in `.env` matches requested hostname.
+4. certbot logs:
 
-Symptoms:
-- browser warns about cert
-- Certbot logs show failures
-- `http://` works but `https://` doesn’t
+```bash
+docker compose -f docker-compose.yml -f docker-compose.nginx-certbot.yml logs -f certbot
+```
 
-Checklist:
-1. DNS A record points to this server:
-   ```bash
-   dig <your-domain> +short
-   ```
-2. Ports 80/443 allowed:
-   ```bash
-   sudo ufw status
-   ```
-3. DOMAIN matches the hostname in `.env`
-4. Tail certbot logs:
-   ```bash
-   docker compose -f docker-compose.yml -f docker-compose.nginx-certbot.yml logs -f certbot
-   ```
+## Portal loads but guest not authorized
 
----
+Usually UniFi configuration mismatch.
 
-## Problem: Guests see portal but never get access
+Verify:
+- site has correct `UniFi site id`
+- tenant/site UniFi key and base URL exist
+- API logs for authorize failures
 
-This is almost always UniFi connectivity.
+## Wrong site branding or site not found
 
-Checklist:
-- Site has **UniFi site id**
-- Tenant or site has UniFi **base URL** and **API key**
-- If controller uses self-signed TLS, set `UNIFI_VERIFY_SSL=false`
-- Check API logs for errors on authorize:
-  ```bash
-  docker compose logs -f api
-  ```
+Verify:
+- tenant and site slugs
+- UniFi external portal URL is `/guest/`
+- redirected URI parsing behavior (see Operations & Security)
 
----
+## OTP failures
 
-## Problem: “Site not found” / wrong site branding
+Verify:
+- `celery` service is running
+- SMTP relay reachable from backend
+- deliverability records are configured
 
-Checklist:
-- You created the site in the expected tenant
-- UniFi external portal URL is correct (`/guest/`)
-- In the UI, confirm site slug + tenant slug are correct
-- Look for UniFi weird encoding issues in logs (see Operations & Security)
+## OIDC failures
 
----
+Most common:
+- redirect URI mismatch
+- wrong issuer
+- invalid/missing client secret
+- missing email claim for domain filtering
 
-## Problem: Email OTP doesn’t send
-
-Checklist:
-- Celery worker running:
-  ```bash
-  docker compose ps
-  ```
-- Celery logs:
-  ```bash
-  docker compose logs -f celery
-  ```
-- SMTP host reachable from server (and not blocked by hosting)
-
----
-
-## Problem: OIDC fails
-
-Start with:
-- Redirect URI mismatch (most common)
-- Issuer wrong
-- Missing client secret
-- Missing email claim if you enforce allowed domains
-
-See: **[OIDC SSO (Microsoft Entra ID)](oidc-m365.md)**
+Guide: [OIDC SSO (Microsoft Entra ID)](oidc-m365.md)

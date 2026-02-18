@@ -1,15 +1,34 @@
 site_name: ReduxTC WiFi Portal Docs
 site_url: https://wifi.reduxtc.com/docs/
 repo_url: https://wifi.reduxtc.com
-site_description: End user documentation for the ReduxTC UniFi Captive Portal platform.
+site_description: End-user documentation for the ReduxTC UniFi Captive Portal platform.
 
 theme:
   name: material
+  font:
+    text: Source Sans 3
+    code: JetBrains Mono
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: cyan
   features:
     - navigation.tabs
     - navigation.sections
     - navigation.top
+    - navigation.expand
+    - toc.follow
+    - search.highlight
+    - search.suggest
     - content.code.copy
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+
+extra_css:
+  - stylesheets/extra.css
 
 nav:
   - Home: index.md
@@ -24,6 +43,7 @@ nav:
       - Tenant Onboarding: tenant-onboarding.md
       - Site Setup Checklist: site-setup.md
       - Admin Users & Roles: admin-users.md
+      - Certificates & TLS: certificates.md
       - Vouchers: vouchers.md
       - Auth Events & Reporting: auth-events.md
 

@@ -1,92 +1,47 @@
-# Tenant Onboarding (step-by-step)
+# Tenant Onboarding
 
-This is the **do-this-in-order** guide for creating a new customer tenant in the Admin UI.
+This is the operator checklist for adding a new customer tenant.
 
-You’ll do two things:
-1) Create a **tenant** (the customer org)  
-2) Create **sites** under that tenant (the customer locations)
+## Before you start
 
----
+Collect:
+- tenant display name
+- tenant slug (`acme`, `district-42`, etc.)
+- UniFi controller host and port
+- UniFi API key
 
-## 0) What you need before you click anything
+## Step 1: Create the tenant
 
-- The customer’s **tenant name** (e.g., “Acme Schools”)
-- The **tenant slug** you want (short + URL-safe, e.g., `acme`)
-- UniFi controller details (at least one of these must be set somewhere):
-  - UniFi **base URL** (example: `https://unifi.example.com`)
-  - UniFi **port** (usually `443`)
-  - UniFi **API key** (stored encrypted in the database)
+1. Go to `Admin -> Tenants`.
+2. Click `New tenant`.
+3. Set `Name`, `Slug`, and status.
+4. Enter tenant-level UniFi defaults:
+   - base URL
+   - controller port
+   - API key
+5. Save.
 
----
+![Tenants page](assets/screenshots/admin-tenants.png)
 
-## 1) Pick the tenant you’re working on (important)
+## Step 2: Create the first site
 
-1. Go to **Admin → Tenants**
-2. Use the **Tenant selector in the left sidebar** to confirm you’re editing the right tenant.
-3. The selected tenant is persisted in-browser, so switching pages keeps scope stable.
+1. Go to `Admin -> Sites`.
+2. Click `New site`.
+3. Set:
+   - display name
+   - slug
+   - `UniFi site id` (commonly `default`)
+4. Leave site enabled.
+5. Save.
 
----
+## Step 3: Validate the tenant
 
-## 2) Create the tenant
+1. Open the created site record.
+2. Confirm `UniFi site id` is correct.
+3. Confirm UniFi connection details are present (site override or tenant defaults).
+4. Confirm dashboard and reports load for that tenant.
 
-1. Go to **Admin → Tenants**
-2. Click **New tenant**
-3. Fill out:
-   - **Name** (human-friendly)
-   - **Slug** (URL-safe identifier)
-   - **Status** (leave default unless you have a reason)
-
-4. (Recommended) Set UniFi defaults at the tenant level:
-   - **UniFi base URL**
-   - **UniFi port**
-   - **UniFi API key** (paste; stored encrypted in the database)
-
-> Tenant-level UniFi settings are used as defaults. You can override them per site later.
-
----
-
-## 3) Create at least one site under the tenant
-
-1. Go to **Admin → Sites**
-2. Click **New site**
-3. Fill out:
-   - **Display name** (what admins see)
-   - **Slug** (URL-safe identifier)
-   - **Enabled** (leave enabled)
-   - **UniFi site id** (this must match the UniFi “site” identifier — commonly `default`)
-
-4. Optional but common:
-   - Branding: **Logo URL**, **Primary color**
-   - Policy defaults: **Time limit**, **Bandwidth caps**, etc.
-
----
-
-## 4) Set UniFi controller connection for the site (if needed)
-
-On the site page, set any overrides if this site uses a different controller:
-
-- **UniFi base URL** (optional override)
-- **UniFi port** (optional override)
-- **UniFi API key** (optional override)
-
-Rules:
-- If the site fields are blank, the portal falls back to the tenant’s UniFi settings.
-- If both are blank, guests **cannot** be authorized.
-
----
-
-## 5) Verify (fast sanity check)
-
-1. Go to **Admin → Sites**
-2. Open the site you just created
-3. Confirm:
-   - UniFi settings are present (site or tenant)
-   - `UniFi site id` is correct
-   - Dashboard and Reports load for the selected tenant without errors
-
-Next steps:
-- Configure UniFi external portal URL: **[UniFi Setup](unifi-setup.md)**
-- Enable authentication options (vouchers, OTP, SSO) per site:
-  - Vouchers: **[Vouchers](vouchers.md)**
-  - Email OTP: **[Email OTP (SMTP)](email-otp-smtp.md)**
-  - SSO: **[OIDC SSO (Microsoft Entra ID)](oidc-m365.md)**
+Next:
+- [Site Setup Checklist](site-setup.md)
+- [UniFi Setup](unifi-setup.md)
+- [Vouchers](vouchers.md), [Email OTP (SMTP)](email-otp-smtp.md), [OIDC SSO](oidc-m365.md)

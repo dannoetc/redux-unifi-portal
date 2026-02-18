@@ -1,23 +1,14 @@
-# Email OTP (SMTP) Setup (step-by-step)
+# Email OTP (SMTP)
 
-Email OTP lets guests verify an email address and receive a one-time code.
+Email OTP allows guests to verify with a one-time code.
 
-Important: the backend sends email using a basic SMTP client. If your mail provider requires STARTTLS or special auth flows,
-you may need an SMTP relay that supports plain SMTP from the server.
+## Prerequisites
 
----
+- reachable SMTP host
+- sender address you control
+- SPF/DKIM/DMARC configured for deliverability
 
-## 0) What you need
-
-- An SMTP server reachable from your portal server
-- The “from” address you want guests to see (example: `wifi@example.com`)
-- Deliverability configured (SPF/DKIM/DMARC) so codes don’t go to spam
-
----
-
-## 1) Set SMTP variables in `.env`
-
-Edit your `.env` (at the repo root on the server) and set:
+## Configure SMTP in `.env`
 
 ```bash
 SMTP_HOST=smtp.example.com
@@ -28,49 +19,23 @@ SMTP_FROM_EMAIL=wifi@example.com
 SMTP_FROM_NAME="Example WiFi"
 ```
 
-If your SMTP server requires auth, set username/password.
+If your provider requires auth, set username/password.
 
----
-
-## 2) Restart the stack
+## Apply changes
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.nginx-certbot.yml up -d
 ```
 
----
+## Validate guest flow
 
-## 3) Test OTP
+1. Connect test device to SSID.
+2. Choose `Email OTP` in the guest portal.
+3. Submit email and verify received code.
+4. Confirm guest receives internet access.
 
-1. Go to the guest portal (or connect a device to the hotspot WiFi)
-2. Choose **Email OTP**
-3. Enter your email
-4. Confirm you receive a code and can complete auth
+## Troubleshooting
 
----
-
-## 4) Debugging
-
-### Codes aren’t sending
-Check the Celery worker logs (OTP is sent in a background job):
-
-```bash
-docker compose logs -f celery
-```
-
-Also check the API logs:
-
-```bash
-docker compose logs -f api
-```
-
-### Codes are sending but landing in spam
-That’s almost always deliverability:
-- SPF/DKIM/DMARC
-- sender reputation
-- using a domain you own (not a random free mailbox)
-
-### Port blocked
-Some hosting environments block outbound SMTP (especially port 25). If so:
-- use your provider’s approved relay port
-- or use an SMTP relay inside your network
+- No email sent: check `celery` logs.
+- Email in spam: fix sender reputation and DNS records.
+- SMTP blocked: move to approved relay/port for your hosting provider.

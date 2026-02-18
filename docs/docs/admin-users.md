@@ -1,50 +1,33 @@
-# Admin Users & Roles (step-by-step)
+# Admin Users & Roles
 
-This is how you give staff access to the Admin Console.
+Use this page to grant or revoke staff access to the admin console.
 
----
+## Role model
 
-## Roles (what they can do)
-
-- **Tenant Admin**
-  - Can manage sites, vouchers, OIDC settings, and view/export auth events for their tenant.
-
-- **Tenant Viewer**
-  - Read-only access for their tenant (view sites and auth events, export reports).
-
-- **Superadmin** (flag)
-  - Can access **all tenants** and platform-wide settings.
-
----
+- `Tenant Admin`: manage sites, vouchers, OIDC, and reporting for assigned tenant(s)
+- `Tenant Viewer`: read-only access for assigned tenant(s)
+- `Superadmin`: full platform access across all tenants
 
 ## Create an admin user
 
-1. Go to **Admin → Admins**
-2. Confirm you’ve selected the right tenant in the **left sidebar tenant selector**.
-3. Click **New admin**
-4. Fill in:
-   - **Email**
-   - **Password** (minimum 8 characters)
-   - **Role** (Tenant Admin or Tenant Viewer)
-5. Click **Create**
+1. Open `Admin -> Admins`.
+2. Confirm the tenant selector is set correctly.
+3. Click `New admin`.
+4. Enter email, password, and role.
+5. Save.
 
----
+![Admin users page](assets/screenshots/admin-users.png)
 
-## Edit an admin user
+## Edit an existing admin
 
-1. Go to **Admin → Admins**
-2. Click **Edit** on the user row
-3. Update:
-   - Email
-   - Role
-   - Superadmin flag (if you have permission)
-   - Password (optional)
-4. Save changes
-
----
+1. In `Admin -> Admins`, select `Edit` for the user row.
+2. Update email, role, password, or superadmin status.
+3. Save.
 
 ## Remove access
 
-To remove access, click **Remove** on the user row in **Admin → Admins** (or set least privilege role as needed).
+1. In `Admin -> Admins`, select `Remove`.
+2. Confirm deletion.
 
-Tip: if you’re offboarding someone, rotate shared secrets too (UniFi keys, SMTP creds, etc.).
+Operational note:
+If you remove privileged staff, rotate shared credentials (UniFi key, SMTP secret, OIDC client secret).

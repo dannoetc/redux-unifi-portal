@@ -1,59 +1,44 @@
 # ReduxTC WiFi Portal Documentation
 
-Hey 👋 — this is the user-friendly guide to running the ReduxTC UniFi Captive Portal platform.
+This documentation is for operators who manage tenant WiFi access in production.
 
-If you’re here to *operate* the platform (add tenants, set up sites, issue vouchers, troubleshoot captive portal weirdness),
-you’re in the right place. If you’re here to *develop* the platform, the deeper technical spec lives in `SPEC.md` in the repo.
-
----
+Screenshots in this guide were captured from the live app on February 18, 2026.
 
 ## Start here
 
-1) Deploy the platform:
-- **[Cheat Sheet (Production)](cheat-sheet.md)**
-- **[Production Deployment (Ubuntu 20.04 / DigitalOcean)](deployment-ubuntu20-digitalocean.md)**
-
-2) Configure your first customer:
-- **[Tenant Onboarding](tenant-onboarding.md)**
-- **[Site Setup Checklist](site-setup.md)**
-- **[UniFi Setup](unifi-setup.md)**
-
-3) Enable guest auth options:
-- **[Vouchers](vouchers.md)**
-- **[Email OTP (SMTP)](email-otp-smtp.md)**
-- **[OIDC SSO (Microsoft Entra ID)](oidc-m365.md)**
-
-4) Operate and report:
-- **[Auth Events & Reporting](auth-events.md)**
-- **[Troubleshooting](troubleshooting.md)**
-- **[Operations & Security](operations-security.md)**
-
----
+1. Deploy the platform:
+   - [Cheat Sheet (Production)](cheat-sheet.md)
+   - [Production Deployment (Ubuntu 20.04 / DigitalOcean)](deployment-ubuntu20-digitalocean.md)
+2. Onboard your first customer:
+   - [Tenant Onboarding](tenant-onboarding.md)
+   - [Site Setup Checklist](site-setup.md)
+   - [UniFi Setup](unifi-setup.md)
+3. Enable guest sign-in methods:
+   - [Vouchers](vouchers.md)
+   - [Email OTP (SMTP)](email-otp-smtp.md)
+   - [OIDC SSO (Microsoft Entra ID)](oidc-m365.md)
+4. Operate day to day:
+   - [Auth Events & Reporting](auth-events.md)
+   - [Troubleshooting](troubleshooting.md)
+   - [Operations & Security](operations-security.md)
 
 ## What this platform does
 
-ReduxTC hosts an **external captive portal** for UniFi Hotspot networks.
+ReduxTC hosts an external captive portal for UniFi Hotspot networks.
 
-Guests connect to WiFi, see a splash page, complete an auth flow, and then we tell UniFi: “yep, let them through.”
+A guest joins WiFi, completes an auth flow, and ReduxTC calls UniFi to authorize internet access.
 
-### Key capabilities
+- Tenant and site isolation for MSP operations
+- Voucher, email OTP, OIDC SSO, and terms-only auth options
+- Admin UI for tenants, sites, policies, vouchers, IdPs, reports, and certificates
+- Audit trail with CSV export
 
-- **Multi-tenant**: tenants + sites (MSP-friendly).
-- **Guest auth options**: voucher code, email OTP, OIDC SSO, or terms-only.
-- **UniFi integration**: we authorize guests via the UniFi Network API.
-- **Admin console**: manage tenants, sites, branding, policies, vouchers, and IdPs.
-- **Audit trail**: auth events + exports.
+## Product views
 
----
+### Admin dashboard
 
-## Two experiences
+![Admin dashboard with KPIs and auth mix](assets/screenshots/admin-dashboard.png)
 
-- **Guest portal** — what visitors see.
-- **Admin console** — what staff use to configure and manage everything.
+### Guest portal preview
 
-## One portal URL, many sites
-
-UniFi can be configured to send everyone to a single external portal URL:
-`https://<your-domain>/guest/`
-
-We use the redirect parameters UniFi provides to resolve the correct tenant/site and apply the right policy.
+![Guest portal preview page](assets/screenshots/guest-site-preview.png)

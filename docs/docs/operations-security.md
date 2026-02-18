@@ -1,127 +1,60 @@
 # Operations & Security
 
-This page is the “keep it running” guide: what we store, what we don’t, and how to troubleshoot the common issues.
+Use this page for day-2 operations and security guardrails.
 
----
+## Tenant isolation
 
-## Tenant isolation (what it means here)
+- Every record is tenant or site scoped.
+- Admin access is limited to assigned tenants unless `superadmin`.
 
-- Data is always scoped by **tenant** and **site**.
-- Admin access is limited to assigned tenant(s), unless you’re a superadmin.
+## Data minimization
 
-In practice, this means one tenant can’t see another tenant’s sites, vouchers, or audit trail.
+Stored:
+- MAC address (required for authorize/audit)
+- email only for OTP/SSO flows
+- auth event metadata for reporting
 
----
+Avoid collecting unnecessary personal data.
 
-## What data we store (and what we avoid)
+## Reliability behavior
 
-We intentionally keep data minimal:
+- active portal sessions are cached to reduce guest retries
+- duplicate portal requests are handled idempotently
+- UniFi client lookup uses retry/backoff for association race conditions
 
-- **Guest MAC addresses** — needed for authorization + auditing.
-- **Email addresses** — only collected when the guest uses Email OTP or SSO.
-- **Auth events** — tenant/site + method + timestamps so you can audit and export.
+## UniFi redirect edge cases
 
-We do **not** want to store extra identity info “just because.”
+UniFi may send encoded or malformed redirect URLs.
 
----
+Required contract:
+1. nginx forwards raw request URI as `X-Original-URI`
+2. backend parses both encoded fragments and querystring safely
 
-## Reliability & “don’t make guests start over”
+If site resolution fails, inspect original URI and parsed params first.
 
-Captive portals are messy. Guests reconnect, captive browsers time out, and UniFi may bounce them through the portal more than once.
+## Rate limits
 
-To keep things smooth:
+OTP and voucher endpoints are rate-limited.
 
-- Portal sessions are cached so a guest doesn’t have to re-auth every time they reconnect.
-- Duplicate requests are handled safely (we don’t double-authorize or create duplicate sessions).
-- We retry UniFi lookups a few times with short backoff to handle controller hiccups.
+If many valid users are rate-limited, check for captive-browser redirect loops.
 
----
+## Logging
 
-## UniFi redirect weirdness (the one that bites everyone)
+Operational logs should include tenant, site, method, and result fields without exposing secrets.
 
-UniFi sometimes sends the external portal redirect in an encoded or malformed form, like:
+Use `Auth Events` as source of truth for "guest could not connect" reports.
 
-- `/guest%3Fap=...&id=...`
-- `url=` values that are double-encoded
+## Secret handling
 
-We can’t fix UniFi — we can only accept it.
-
-### The contract
-
-1) **nginx forwards the raw request URI** (percent-encoding intact):
-
-Add this header for guest routes:
-
-```nginx
-proxy_set_header X-Original-URI $request_uri;
-```
-
-2) **backend parses parameters defensively**:
-- If it sees `/guest%3F...`, it parses the part after `%3F` as key/value params
-- It also parses the normal query string
-- It merges them and normalizes MAC addresses
-
-If you’re diagnosing “why did it fail to resolve the site?”, start by logging `X-Original-URI` and the parsed params map.
-
----
-
-## Rate limits (abuse prevention)
-
-- OTP and voucher endpoints are rate-limited to prevent hammering.
-- If a legit guest gets rate limited, that’s a signal to look for looping captive browser behavior or a misconfigured redirect.
-
----
-
-## Logging & audit trail
-
-- Every authorization event includes tenant + site + method.
-- Exports exist so MSPs can keep compliance records.
-
-Operational tip: if you’re chasing a “guest says it didn’t work” report, the auth events view is your truth source.
-
----
-
-## Secrets & configuration
-
-Basic rule: **don’t bake secrets into code**.
-
+Never hardcode:
 - UniFi API keys
 - SMTP credentials
 - OIDC client secrets
-- Any signing keys / peppers
 
-In dev, `.env` is fine. In prod, store secrets in your secret manager and reference them via env vars.
-Use `.env-sample` at the repo root as the complete configuration reference.
+In production, use a secret manager and env references.
 
----
+## TLS baseline
 
-## TLS / HTTPS
-
-Use HTTPS for the portal. Captive portals and redirects behave better when everything is cleanly HTTPS.
-
-- Keep certs current
-- Validate the external portal URL in UniFi uses the same scheme/host you expect
-
----
-
-## Quick troubleshooting
-
-### “Site not found” / “client not found”
-- Check you’re calling the right UniFi endpoint shape:
-  - hosted/tenant-mode controllers require `/v1/tenants/{tenantId}/...`
-- Confirm the client MAC is normalized (format differences matter)
-- Check UniFi has the client in its “clients” list (sometimes you need a brief delay after association)
-
-### OTP emails not arriving
-- Check deliverability (SPF/DKIM/DMARC)
-- Check SMTP blocks from the hosting environment
-- Check rate limits (looping can trigger it)
-
-### Guests stuck in captive portal loop
-- Usually a UniFi config mismatch (wrong external portal URL, wrong Hotspot config)
-- Or the device is failing to open the captive assistant (iOS/macOS can be picky). Suggest “Open in browser.”
-
----
-
-## If you need the exact UniFi API calls
-Go to: **[UniFi Quick Reference](unifi-quickref.md)**.
+- enforce HTTPS for guest and admin URLs
+- keep certificates valid and monitor expiration
+- verify UniFi external portal URL exactly matches production host/scheme

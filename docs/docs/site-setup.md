@@ -1,100 +1,82 @@
-# Site Setup Checklist (step-by-step)
+# Site Setup Checklist
 
-This page is the “make the portal work for this location” checklist.
+A site controls location-level behavior for guest access.
 
-A **site** controls:
-- branding (logo/colors)
-- guest policy defaults (time, caps)
-- UniFi target site id (where authorizations happen)
-- which auth methods are available (TOS-only + OIDC enablement)
+## What a site configures
 
----
+- branding and support contact
+- portal template mode (`off`, `embed`, `replace`)
+- guest policy defaults (time/data/rate limits)
+- UniFi site mapping and connection overrides
+- OIDC enablement and domain allowlist
 
-## 0) Start on the right site
+## Open the site settings page
 
-1. Go to **Admin → Sites**
-2. Click the site you’re configuring
+1. Go to `Admin -> Sites`.
+2. Click `Preview` for the site you want to configure.
 
----
+![Sites list](assets/screenshots/admin-sites.png)
 
-## 1) Required: UniFi mapping
+The site settings page uses a right-side section navigator:
+- Overview
+- Branding
+- Template
+- Policy
+- UniFi
+- SSO
 
-On the site page, you must set:
+![Site settings overview](assets/screenshots/admin-site-detail.png)
 
-- **UniFi site id** (example: `default`)
+## Configure each section
 
-And you must have UniFi connectivity configured either:
-- at the **tenant** level (Admin → Tenants), or
-- overridden on this **site** (fields on the site page)
+### Overview
 
-If UniFi settings are missing, the portal cannot authorize guests.
+Confirm:
+- external portal IP
+- template mode
+- UniFi site ID
+- dirty-state/save status
 
----
+### Branding
 
-## 2) Branding (optional but recommended)
+Set logo URL, primary color, and support contact.
 
-Fill out:
-- **Logo URL**
-- **Primary color**
-- **Support contact** (this gets shown in OTP emails and can be used in portal UI)
+![Site branding section](assets/screenshots/admin-site-detail-branding.png)
 
----
+### Template
 
-## 3) Terms and success behavior
+Set portal template mode and content:
+- `off`: built-in portal only
+- `embed`: custom layout with `{{portal}}` placeholder
+- `replace`: fully custom HTML
 
-- **Terms HTML**: the terms guests accept
-- **Success URL** (optional): where to send guests after authorization
+![Site template section](assets/screenshots/admin-site-detail-template.png)
 
-If you want “click-to-accept only” access, enable:
+### Policy
 
-- **Enable TOS-only**
+Set default policy values applied at authorize time:
+- time limit minutes
+- data limit MB (optional)
+- RX/TX rate caps (optional)
 
----
+![Site policy section](assets/screenshots/admin-site-detail-policy.png)
 
-## 4) Portal template (advanced)
+### UniFi
 
-Portal template modes:
-- **off**: use built-in portal only
-- **embed**: render custom layout and inject built-in auth card at `{{portal}}`
-- **replace**: fully replace built-in layout with your template HTML
+Set site-level UniFi connection overrides only when needed.
 
-Recommended workflow:
-1. Open site detail → **Portal Template** tab
-2. Choose mode (`off` / `embed` / `replace`)
-3. Use **Visual Builder** or raw HTML editor
-4. Tune theme controls (logo size/alignment, card alignment/width, heading/body sizing, colors)
-5. Save and validate preview
+If left empty, tenant-level UniFi settings are used.
 
-For `embed` mode, include:
+![Site UniFi section](assets/screenshots/admin-site-detail-unifi.png)
 
-```text
-{{portal}}
-```
+### SSO
 
-Use **Template version history** to review previous saves and restore prior versions if a change regresses UX.
+Enable OIDC for this site, select provider, and optionally set allowed domains.
 
----
+![Site SSO section](assets/screenshots/admin-site-detail-sso.png)
 
-## 5) Guest policy defaults (recommended)
+## Save and verify
 
-Set defaults so guests get a sane policy even when auth method doesn’t specify one:
-
-- **Default time limit (minutes)**
-- **Default data limit (MB)** (optional)
-- **Default RX/TX (kbps)** (optional)
-
----
-
-## 6) Enable auth methods
-
-Out of the box, guests will see:
-- Voucher
-- Email OTP
-- (Optional) TOS-only if enabled
-- (Optional) OIDC if enabled
-
-To make those work:
-
-- Vouchers require generating voucher batches: **[Vouchers](vouchers.md)**
-- Email OTP requires SMTP configured: **[Email OTP (SMTP)](email-otp-smtp.md)**
-- OIDC requires an IdP provider + site settings: **[OIDC SSO (Microsoft Entra ID)](oidc-m365.md)**
+1. Click `Save changes`.
+2. Use `Preview portal` to sanity-check the guest page.
+3. Run a real guest flow on the SSID.
