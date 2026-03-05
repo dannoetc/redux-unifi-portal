@@ -26,3 +26,20 @@ class AdminUserResponse(BaseModel):
     role: str
     is_superadmin: bool
     created_at: datetime
+
+
+class SuperadminCreateRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=8)
+
+
+class SuperadminUpdateRequest(BaseModel):
+    email: EmailStr | None = None
+    password: str | None = Field(default=None, min_length=8)
+
+
+class SuperadminResponse(BaseModel):
+    id: str
+    email: str
+    is_superadmin: bool
+    created_at: datetime

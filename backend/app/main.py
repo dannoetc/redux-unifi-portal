@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.settings import settings
-from app.routes import guest, admin, oidc
+from app.routes import admin, guest, oidc, setup
 
 app = FastAPI(title="ReduxTC UniFi Captive Portal API", version="0.1.0")
 
@@ -46,6 +46,7 @@ app.add_middleware(
 app.include_router(guest.router, prefix="/api/guest", tags=["guest"])
 app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
 app.include_router(oidc.router, prefix="/api/oidc", tags=["oidc"])
+app.include_router(setup.router, prefix="/api/setup", tags=["setup"])
 
 @app.get("/healthz")
 def healthz() -> dict:

@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     ADMIN_LOGIN_RATE_LIMIT_WINDOW_SECONDS: int = 60
     ADMIN_LOGIN_RATE_LIMIT_PER_IP: int = 10
     ADMIN_LOGIN_RATE_LIMIT_PER_EMAIL: int = 8
+    SETUP_BOOTSTRAP_RATE_LIMIT_WINDOW_SECONDS: int = 60
+    SETUP_BOOTSTRAP_RATE_LIMIT_PER_IP: int = 5
     OTP_RATE_LIMIT_WINDOW_SECONDS: int = 60
     OTP_RATE_LIMIT_PER_IP: int = 5
     OTP_RATE_LIMIT_PER_MAC: int = 5
@@ -50,6 +52,15 @@ class Settings(BaseSettings):
     CORS_ALLOW_ORIGINS: str = "http://localhost:3000"
     TLS_CERTS_DIR: str = "/etc/letsencrypt"
     TLS_CERT_SOURCE_FILE: str = ".cert-source"
+
+    # Setup wizard defaults
+    SETUP_DEFAULT_ADMIN_EMAIL: str = ""
+    SETUP_DEFAULT_TENANT_NAME: str = ""
+    SETUP_DEFAULT_TENANT_SLUG: str = ""
+    SETUP_DEFAULT_SITE_SLUG: str = ""
+    SETUP_DEFAULT_SITE_DISPLAY_NAME: str = ""
+    SETUP_DEFAULT_UNIFI_BASE_URL: str = ""
+    SETUP_DEFAULT_UNIFI_PORT: int = 443
 
     def cors_allow_origins_list(self) -> list[str]:
         return [item.strip() for item in self.CORS_ALLOW_ORIGINS.split(",") if item.strip()]

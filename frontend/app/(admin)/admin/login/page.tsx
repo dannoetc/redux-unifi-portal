@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -24,9 +24,14 @@ type AdminLoginResponse = {
   admin_user: { id: string; email: string; is_superadmin: boolean };
 };
 
+type SetupStatusResponse = {
+  bootstrapped: boolean;
+};
+
 export default function AdminLoginPage() {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
+  const [checkingSetup, setCheckingSetup] = useState(true);
   const {
     register,
     handleSubmit,
@@ -48,6 +53,39 @@ export default function AdminLoginPage() {
       toast.error(message);
     }
   };
+
+  useEffect(() => {
+    let active = true;
+    const checkSetup = async () => {
+      try {
+        const status = await apiFetch<SetupStatusResponse>("/api/setup/status");
+        if (active && !status.bootstrapped) {
+          router.replace("/setup");
+          return;
+        }
+      } catch {
+        // Allow login attempt if setup status cannot be resolved.
+      } finally {
+        if (active) {
+          setCheckingSetup(false);
+        }
+      }
+    };
+    void checkSetup();
+    return () => {
+      active = false;
+    };
+  }, [router]);
+
+  if (checkingSetup) {
+    return (
+      <div className="mx-auto flex min-h-[80vh] max-w-md items-center px-4">
+        <div className="w-full rounded-xl bg-white p-6 shadow-sm">
+          <p className="text-sm text-muted-foreground">Checking setup status...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto flex min-h-[80vh] max-w-md items-center px-4">

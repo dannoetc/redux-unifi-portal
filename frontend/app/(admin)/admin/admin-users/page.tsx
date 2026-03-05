@@ -16,23 +16,35 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-const adminSchema = z.object({
+const tenantAdminCreateSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
   role: z.enum(["TENANT_ADMIN", "TENANT_VIEWER"]),
 });
 
-const updateSchema = z.object({
+const tenantAdminUpdateSchema = z.object({
   email: z.string().email(),
   role: z.enum(["TENANT_ADMIN", "TENANT_VIEWER"]),
-  is_superadmin: z.boolean(),
   password: z.preprocess(
     (value) => (value === "" ? undefined : value),
     z.string().min(8).optional()
   ),
 });
 
-type AdminUser = {
+const superadminCreateSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(8),
+});
+
+const superadminUpdateSchema = z.object({
+  email: z.string().email(),
+  password: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.string().min(8).optional()
+  ),
+});
+
+type TenantAdminUser = {
   id: string;
   email: string;
   role: string;
@@ -40,10 +52,22 @@ type AdminUser = {
   created_at: string;
 };
 
-type AdminList = { admins: AdminUser[] };
+type SuperadminUser = {
+  id: string;
+  email: string;
+  is_superadmin: boolean;
+  created_at: string;
+};
 
-type CreateAdmin = z.infer<typeof adminSchema>;
-type UpdateAdmin = z.infer<typeof updateSchema>;
+type TenantAdminList = { admins: TenantAdminUser[] };
+type SuperadminList = { superadmins: SuperadminUser[] };
+
+type TenantAdminCreate = z.infer<typeof tenantAdminCreateSchema>;
+type TenantAdminUpdate = z.infer<typeof tenantAdminUpdateSchema>;
+type SuperadminCreate = z.infer<typeof superadminCreateSchema>;
+type SuperadminUpdate = z.infer<typeof superadminUpdateSchema>;
+
+type AdminTab = "tenant_admins" | "superadmins";
 
 const formatDate = (value: string) => {
   const date = new Date(value);
@@ -55,23 +79,42 @@ const formatDate = (value: string) => {
 
 export default function AdminUsersPage() {
   const { tenantId, tenants, adminUser, loading: tenantLoading } = useTenantSelection();
-  const [admins, setAdmins] = useState<AdminUser[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editOpen, setEditOpen] = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [adminToDelete, setAdminToDelete] = useState<AdminUser | null>(null);
-  const [adminToEdit, setAdminToEdit] = useState<AdminUser | null>(null);
+  const [tenantAdmins, setTenantAdmins] = useState<TenantAdminUser[]>([]);
+  const [superadmins, setSuperadmins] = useState<SuperadminUser[]>([]);
+  const [tenantAdminsLoading, setTenantAdminsLoading] = useState(true);
+  const [superadminsLoading, setSuperadminsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<AdminTab>("tenant_admins");
 
-  const form = useForm<CreateAdmin>({
-    resolver: zodResolver(adminSchema),
+  const [tenantCreateOpen, setTenantCreateOpen] = useState(false);
+  const [tenantEditOpen, setTenantEditOpen] = useState(false);
+  const [tenantDeleteOpen, setTenantDeleteOpen] = useState(false);
+  const [superCreateOpen, setSuperCreateOpen] = useState(false);
+  const [superEditOpen, setSuperEditOpen] = useState(false);
+  const [superDeleteOpen, setSuperDeleteOpen] = useState(false);
+
+  const [tenantSaving, setTenantSaving] = useState(false);
+  const [tenantDeleting, setTenantDeleting] = useState(false);
+  const [superSaving, setSuperSaving] = useState(false);
+  const [superDeleting, setSuperDeleting] = useState(false);
+
+  const [tenantAdminToDelete, setTenantAdminToDelete] = useState<TenantAdminUser | null>(null);
+  const [tenantAdminToEdit, setTenantAdminToEdit] = useState<TenantAdminUser | null>(null);
+  const [superadminToDelete, setSuperadminToDelete] = useState<SuperadminUser | null>(null);
+  const [superadminToEdit, setSuperadminToEdit] = useState<SuperadminUser | null>(null);
+
+  const tenantCreateForm = useForm<TenantAdminCreate>({
+    resolver: zodResolver(tenantAdminCreateSchema),
     defaultValues: { role: "TENANT_ADMIN" },
   });
-  const editForm = useForm<UpdateAdmin>({
-    resolver: zodResolver(updateSchema),
-    defaultValues: { role: "TENANT_ADMIN", is_superadmin: false },
+  const tenantEditForm = useForm<TenantAdminUpdate>({
+    resolver: zodResolver(tenantAdminUpdateSchema),
+    defaultValues: { role: "TENANT_ADMIN" },
+  });
+  const superCreateForm = useForm<SuperadminCreate>({
+    resolver: zodResolver(superadminCreateSchema),
+  });
+  const superEditForm = useForm<SuperadminUpdate>({
+    resolver: zodResolver(superadminUpdateSchema),
   });
 
   const activeTenant = useMemo(
@@ -83,32 +126,39 @@ export default function AdminUsersPage() {
   const noTenants = !tenantLoading && tenants.length === 0;
 
   useEffect(() => {
+    if (!canManageUsers || !adminLoaded) {
+      return;
+    }
+    setActiveTab("superadmins");
+  }, [adminLoaded, canManageUsers]);
+
+  useEffect(() => {
     if (!tenantId || !adminUser) {
       if (adminLoaded && !tenantId) {
-        setAdmins([]);
-        setLoading(false);
+        setTenantAdmins([]);
+        setTenantAdminsLoading(false);
       }
       return;
     }
     if (!canManageUsers) {
-      setAdmins([]);
-      setLoading(false);
+      setTenantAdmins([]);
+      setTenantAdminsLoading(false);
       return;
     }
     let active = true;
-    setLoading(true);
-    apiFetch<AdminList>(`/api/admin/tenants/${tenantId}/admins`)
+    setTenantAdminsLoading(true);
+    apiFetch<TenantAdminList>(`/api/admin/tenants/${tenantId}/admins`)
       .then((data) => {
         if (active) {
-          setAdmins(data.admins);
+          setTenantAdmins(data.admins);
         }
       })
       .catch((error) => {
-        toast.error(error?.message ?? "Unable to load admins.");
+        toast.error(error?.message ?? "Unable to load tenant admins.");
       })
       .finally(() => {
         if (active) {
-          setLoading(false);
+          setTenantAdminsLoading(false);
         }
       });
     return () => {
@@ -116,7 +166,41 @@ export default function AdminUsersPage() {
     };
   }, [tenantId, adminUser, adminLoaded, canManageUsers]);
 
-  const columns = useMemo<ColumnDef<AdminUser>[]>(
+  useEffect(() => {
+    if (!adminUser) {
+      if (adminLoaded) {
+        setSuperadmins([]);
+        setSuperadminsLoading(false);
+      }
+      return;
+    }
+    if (!canManageUsers) {
+      setSuperadmins([]);
+      setSuperadminsLoading(false);
+      return;
+    }
+    let active = true;
+    setSuperadminsLoading(true);
+    apiFetch<SuperadminList>("/api/admin/superadmins")
+      .then((data) => {
+        if (active) {
+          setSuperadmins(data.superadmins);
+        }
+      })
+      .catch((error) => {
+        toast.error(error?.message ?? "Unable to load superadmins.");
+      })
+      .finally(() => {
+        if (active) {
+          setSuperadminsLoading(false);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [adminUser, adminLoaded, canManageUsers]);
+
+  const tenantColumns = useMemo<ColumnDef<TenantAdminUser>[]>(
     () => [
       {
         accessorKey: "email",
@@ -148,14 +232,13 @@ export default function AdminUsersPage() {
               variant="secondary"
               size="sm"
               onClick={() => {
-                setAdminToEdit(row.original);
-                editForm.reset({
+                setTenantAdminToEdit(row.original);
+                tenantEditForm.reset({
                   email: row.original.email,
-                  role: row.original.role as UpdateAdmin["role"],
-                  is_superadmin: row.original.is_superadmin,
+                  role: row.original.role as TenantAdminUpdate["role"],
                   password: "",
                 });
-                setEditOpen(true);
+                setTenantEditOpen(true);
               }}
             >
               Edit
@@ -165,8 +248,8 @@ export default function AdminUsersPage() {
               size="sm"
               disabled={row.original.is_superadmin}
               onClick={() => {
-                setAdminToDelete(row.original);
-                setDeleteOpen(true);
+                setTenantAdminToDelete(row.original);
+                setTenantDeleteOpen(true);
               }}
             >
               Remove
@@ -175,144 +258,349 @@ export default function AdminUsersPage() {
         ),
       },
     ],
-    []
+    [tenantEditForm]
   );
 
-  const onSubmit = async (values: CreateAdmin) => {
+  const superColumns = useMemo<ColumnDef<SuperadminUser>[]>(
+    () => [
+      {
+        accessorKey: "email",
+        header: "Email",
+        cell: ({ row }) => (
+          <div className="font-medium text-foreground">{row.original.email}</div>
+        ),
+      },
+      {
+        id: "scope",
+        header: "Scope",
+        cell: () => (
+          <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold uppercase text-muted-foreground">
+            Platform
+          </span>
+        ),
+      },
+      {
+        accessorKey: "created_at",
+        header: "Added",
+        cell: ({ row }) => formatDate(row.original.created_at),
+      },
+      {
+        id: "actions",
+        header: () => <span className="sr-only">Actions</span>,
+        cell: ({ row }) => {
+          const isCurrentUser = row.original.id === adminUser?.id;
+          return (
+            <div className="flex items-center justify-end gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  setSuperadminToEdit(row.original);
+                  superEditForm.reset({
+                    email: row.original.email,
+                    password: "",
+                  });
+                  setSuperEditOpen(true);
+                }}
+              >
+                Edit
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={isCurrentUser}
+                onClick={() => {
+                  setSuperadminToDelete(row.original);
+                  setSuperDeleteOpen(true);
+                }}
+              >
+                Remove
+              </Button>
+            </div>
+          );
+        },
+      },
+    ],
+    [adminUser?.id, superEditForm]
+  );
+
+  const createTenantAdmin = async (values: TenantAdminCreate) => {
     if (!tenantId) {
       toast.error("Select a tenant before creating an admin.");
       return;
     }
     try {
-      const data = await apiFetch<{ admin: AdminUser }>(`/api/admin/tenants/${tenantId}/admins`, {
+      const data = await apiFetch<{ admin: TenantAdminUser }>(`/api/admin/tenants/${tenantId}/admins`, {
         method: "POST",
         body: JSON.stringify(values),
       });
-      setAdmins((prev) => [data.admin, ...prev]);
-      toast.success("Admin user created.");
-      setDialogOpen(false);
-      form.reset({ role: "TENANT_ADMIN", email: "", password: "" });
+      setTenantAdmins((prev) => [data.admin, ...prev]);
+      toast.success("Tenant admin created.");
+      setTenantCreateOpen(false);
+      tenantCreateForm.reset({ role: "TENANT_ADMIN", email: "", password: "" });
     } catch (error: any) {
-      toast.error(error?.message ?? "Unable to create admin user.");
+      toast.error(error?.message ?? "Unable to create tenant admin.");
     }
   };
 
-  const updateAdmin = async (values: UpdateAdmin) => {
-    if (!tenantId || !adminToEdit) {
+  const updateTenantAdmin = async (values: TenantAdminUpdate) => {
+    if (!tenantId || !tenantAdminToEdit) {
       return;
     }
-    setSaving(true);
+    setTenantSaving(true);
     try {
-      const payload: Partial<UpdateAdmin> & { password?: string } = {
+      const payload: Partial<TenantAdminUpdate> & { password?: string } = {
         email: values.email,
         role: values.role,
-        is_superadmin: values.is_superadmin,
       };
       if (values.password) {
         payload.password = values.password;
       }
-      const data = await apiFetch<{ admin: AdminUser }>(
-        `/api/admin/tenants/${tenantId}/admins/${adminToEdit.id}`,
+      const data = await apiFetch<{ admin: TenantAdminUser }>(
+        `/api/admin/tenants/${tenantId}/admins/${tenantAdminToEdit.id}`,
         {
           method: "PUT",
           body: JSON.stringify(payload),
         }
       );
-      setAdmins((prev) =>
+      setTenantAdmins((prev) =>
         prev.map((admin) => (admin.id === data.admin.id ? data.admin : admin))
       );
-      toast.success("Admin updated.");
-      setEditOpen(false);
-      setAdminToEdit(null);
+      toast.success("Tenant admin updated.");
+      setTenantEditOpen(false);
+      setTenantAdminToEdit(null);
     } catch (error: any) {
-      toast.error(error?.message ?? "Unable to update admin.");
+      toast.error(error?.message ?? "Unable to update tenant admin.");
     } finally {
-      setSaving(false);
+      setTenantSaving(false);
     }
   };
 
-  const deleteAdmin = async () => {
-    if (!tenantId || !adminToDelete) {
+  const deleteTenantAdmin = async () => {
+    if (!tenantId || !tenantAdminToDelete) {
       return;
     }
-    setDeleting(true);
+    setTenantDeleting(true);
     try {
-      await apiFetch(`/api/admin/tenants/${tenantId}/admins/${adminToDelete.id}`, { method: "DELETE" });
-      setAdmins((prev) => prev.filter((admin) => admin.id !== adminToDelete.id));
-      toast.success("Admin removed.");
-      setDeleteOpen(false);
-      setAdminToDelete(null);
+      await apiFetch(`/api/admin/tenants/${tenantId}/admins/${tenantAdminToDelete.id}`, { method: "DELETE" });
+      setTenantAdmins((prev) => prev.filter((admin) => admin.id !== tenantAdminToDelete.id));
+      toast.success("Tenant admin removed.");
+      setTenantDeleteOpen(false);
+      setTenantAdminToDelete(null);
     } catch (error: any) {
-      toast.error(error?.message ?? "Unable to remove admin.");
+      toast.error(error?.message ?? "Unable to remove tenant admin.");
     } finally {
-      setDeleting(false);
+      setTenantDeleting(false);
     }
   };
+
+  const createSuperadmin = async (values: SuperadminCreate) => {
+    try {
+      const data = await apiFetch<{ superadmin: SuperadminUser }>("/api/admin/superadmins", {
+        method: "POST",
+        body: JSON.stringify(values),
+      });
+      setSuperadmins((prev) => [data.superadmin, ...prev]);
+      toast.success("Superadmin created.");
+      setSuperCreateOpen(false);
+      superCreateForm.reset({ email: "", password: "" });
+    } catch (error: any) {
+      toast.error(error?.message ?? "Unable to create superadmin.");
+    }
+  };
+
+  const updateSuperadmin = async (values: SuperadminUpdate) => {
+    if (!superadminToEdit) {
+      return;
+    }
+    setSuperSaving(true);
+    try {
+      const payload: Partial<SuperadminUpdate> & { password?: string } = {
+        email: values.email,
+      };
+      if (values.password) {
+        payload.password = values.password;
+      }
+      const data = await apiFetch<{ superadmin: SuperadminUser }>(
+        `/api/admin/superadmins/${superadminToEdit.id}`,
+        {
+          method: "PUT",
+          body: JSON.stringify(payload),
+        }
+      );
+      setSuperadmins((prev) =>
+        prev.map((admin) => (admin.id === data.superadmin.id ? data.superadmin : admin))
+      );
+      toast.success("Superadmin updated.");
+      setSuperEditOpen(false);
+      setSuperadminToEdit(null);
+    } catch (error: any) {
+      toast.error(error?.message ?? "Unable to update superadmin.");
+    } finally {
+      setSuperSaving(false);
+    }
+  };
+
+  const deleteSuperadmin = async () => {
+    if (!superadminToDelete) {
+      return;
+    }
+    setSuperDeleting(true);
+    try {
+      await apiFetch(`/api/admin/superadmins/${superadminToDelete.id}`, { method: "DELETE" });
+      setSuperadmins((prev) => prev.filter((admin) => admin.id !== superadminToDelete.id));
+      toast.success("Superadmin removed.");
+      setSuperDeleteOpen(false);
+      setSuperadminToDelete(null);
+    } catch (error: any) {
+      toast.error(error?.message ?? "Unable to remove superadmin.");
+    } finally {
+      setSuperDeleting(false);
+    }
+  };
+
+  const tabButtonClass = (tab: AdminTab) =>
+    `rounded-md px-3 py-2 text-sm font-medium transition ${
+      activeTab === tab
+        ? "bg-foreground text-background"
+        : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+    }`;
+
+  const showTenantTab = activeTab === "tenant_admins";
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Admin users</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Provision tenant-scoped admin access.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Manage tenant admins and platform superadmins.</p>
           <p className="mt-2 text-xs text-muted-foreground">
             {activeTenant ? `Active tenant: ${activeTenant.name}` : "Select a tenant from the sidebar to continue."}
           </p>
         </div>
-        <div className="flex flex-wrap items-end gap-3">
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button variant="primary" disabled={!tenantId || !canManageUsers}>
-                New admin
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl">
-              <DialogHeader>
-                <DialogTitle>Create admin user</DialogTitle>
-                <DialogDescription>Invite a new admin for the selected tenant.</DialogDescription>
-              </DialogHeader>
-              <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input id="email" type="email" autoFocus {...form.register("email")} />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="password">Temporary password</Label>
-                  <Input id="password" type="password" {...form.register("password")} />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="role">Role</Label>
-                  <select
-                    id="role"
-                    className="h-10 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-                    {...form.register("role")}
-                  >
-                    <option value="TENANT_ADMIN">Tenant admin</option>
-                    <option value="TENANT_VIEWER">Tenant viewer</option>
-                  </select>
-                </div>
-                <DialogFooter>
-                  <Button type="submit" variant="primary">
-                    Create admin
-                  </Button>
-                </DialogFooter>
-              </form>
-            </DialogContent>
-          </Dialog>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="inline-flex rounded-lg border border-border/70 bg-muted/20 p-1">
+            <button type="button" className={tabButtonClass("superadmins")} onClick={() => setActiveTab("superadmins")}>
+              Superadmins
+            </button>
+            <button type="button" className={tabButtonClass("tenant_admins")} onClick={() => setActiveTab("tenant_admins")}>
+              Tenant admins
+            </button>
+          </div>
+
+          {showTenantTab ? (
+            <Dialog open={tenantCreateOpen} onOpenChange={setTenantCreateOpen}>
+              <DialogTrigger asChild>
+                <Button variant="primary" disabled={!tenantId || !canManageUsers}>
+                  New tenant admin
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle>Create tenant admin</DialogTitle>
+                  <DialogDescription>Invite a new admin for the selected tenant.</DialogDescription>
+                </DialogHeader>
+                <form className="space-y-4" onSubmit={tenantCreateForm.handleSubmit(createTenantAdmin)}>
+                  <div className="space-y-2">
+                    <Label htmlFor="tenant_admin_email">Email</Label>
+                    <Input id="tenant_admin_email" type="email" autoFocus {...tenantCreateForm.register("email")} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="tenant_admin_password">Temporary password</Label>
+                    <Input id="tenant_admin_password" type="password" {...tenantCreateForm.register("password")} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="tenant_admin_role">Role</Label>
+                    <select
+                      id="tenant_admin_role"
+                      className="h-10 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                      {...tenantCreateForm.register("role")}
+                    >
+                      <option value="TENANT_ADMIN">Tenant admin</option>
+                      <option value="TENANT_VIEWER">Tenant viewer</option>
+                    </select>
+                  </div>
+                  <DialogFooter>
+                    <Button type="submit" variant="primary">
+                      Create tenant admin
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
+          ) : (
+            <Dialog open={superCreateOpen} onOpenChange={setSuperCreateOpen}>
+              <DialogTrigger asChild>
+                <Button variant="primary" disabled={!canManageUsers}>
+                  New superadmin
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-xl">
+                <DialogHeader>
+                  <DialogTitle>Create superadmin</DialogTitle>
+                  <DialogDescription>Grant full platform access to a new superadmin.</DialogDescription>
+                </DialogHeader>
+                <form className="space-y-4" onSubmit={superCreateForm.handleSubmit(createSuperadmin)}>
+                  <div className="space-y-2">
+                    <Label htmlFor="superadmin_email">Email</Label>
+                    <Input id="superadmin_email" type="email" autoFocus {...superCreateForm.register("email")} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="superadmin_password">Password</Label>
+                    <Input id="superadmin_password" type="password" {...superCreateForm.register("password")} />
+                  </div>
+                  <DialogFooter>
+                    <Button type="submit" variant="primary">
+                      Create superadmin
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
+          )}
         </div>
       </div>
+
       <Card className="rounded-xl border bg-card p-6 shadow-soft">
-        {noTenants ? (
-          <TenantOnboardingState compact description="Create a tenant before managing admin users." />
-        ) : !canManageUsers && adminLoaded ? (
+        {!canManageUsers && adminLoaded ? (
           <div className="text-sm text-muted-foreground">
             Only superadmins can manage admin users.
           </div>
-        ) : loading ? (
+        ) : showTenantTab ? (
+          noTenants ? (
+            <TenantOnboardingState compact description="Create a tenant before managing tenant admins." />
+          ) : tenantAdminsLoading ? (
+            <div className="space-y-3">
+              {Array.from({ length: 6 }).map((_, index) => (
+                <div
+                  key={`tenant-admin-skeleton-${index}`}
+                  className="grid animate-pulse grid-cols-[2fr_1fr_1fr_120px] items-center gap-4"
+                >
+                  <div className="h-4 rounded bg-muted/60" />
+                  <div className="h-4 rounded bg-muted/60" />
+                  <div className="h-4 rounded bg-muted/60" />
+                  <div className="h-8 rounded bg-muted/60" />
+                </div>
+              ))}
+            </div>
+          ) : tenantAdmins.length === 0 ? (
+            <div className="flex flex-col items-start gap-2 rounded-lg bg-muted/30 p-4">
+              <div className="text-sm font-semibold">No tenant admins yet.</div>
+              <div className="text-sm text-muted-foreground">
+                Create the first admin for this tenant.
+              </div>
+              <Button variant="primary" onClick={() => setTenantCreateOpen(true)}>
+                Create tenant admin
+              </Button>
+            </div>
+          ) : (
+            <DataTable columns={tenantColumns} data={tenantAdmins} />
+          )
+        ) : superadminsLoading ? (
           <div className="space-y-3">
-            {Array.from({ length: 6 }).map((_, index) => (
+            {Array.from({ length: 4 }).map((_, index) => (
               <div
-                key={`admin-skeleton-${index}`}
+                key={`superadmin-skeleton-${index}`}
                 className="grid animate-pulse grid-cols-[2fr_1fr_1fr_120px] items-center gap-4"
               >
                 <div className="h-4 rounded bg-muted/60" />
@@ -322,84 +610,114 @@ export default function AdminUsersPage() {
               </div>
             ))}
           </div>
-        ) : admins.length === 0 ? (
+        ) : superadmins.length === 0 ? (
           <div className="flex flex-col items-start gap-2 rounded-lg bg-muted/30 p-4">
-            <div className="text-sm font-semibold">No admins yet.</div>
+            <div className="text-sm font-semibold">No superadmins found.</div>
             <div className="text-sm text-muted-foreground">
-              Create the first admin for this tenant.
+              Create a superadmin to grant platform-wide access.
             </div>
-            <Button variant="primary" onClick={() => setDialogOpen(true)}>
-              Create admin
+            <Button variant="primary" onClick={() => setSuperCreateOpen(true)}>
+              Create superadmin
             </Button>
           </div>
         ) : (
-          <DataTable columns={columns} data={admins} />
+          <DataTable columns={superColumns} data={superadmins} />
         )}
       </Card>
-      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+
+      <Dialog open={tenantDeleteOpen} onOpenChange={setTenantDeleteOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Remove admin</DialogTitle>
+            <DialogTitle>Remove tenant admin</DialogTitle>
             <DialogDescription>
-              This will remove access for {adminToDelete?.email ?? "this admin"}.
+              This will remove tenant access for {tenantAdminToDelete?.email ?? "this admin"}.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
-            <Button variant="secondary" onClick={() => setDeleteOpen(false)}>
+            <Button variant="secondary" onClick={() => setTenantDeleteOpen(false)}>
               Cancel
             </Button>
-            <Button variant="destructive" onClick={deleteAdmin} disabled={deleting}>
-              {deleting ? "Removing..." : "Confirm remove"}
+            <Button variant="destructive" onClick={deleteTenantAdmin} disabled={tenantDeleting}>
+              {tenantDeleting ? "Removing..." : "Confirm remove"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+
+      <Dialog open={tenantEditOpen} onOpenChange={setTenantEditOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Edit admin</DialogTitle>
-            <DialogDescription>Update email, role, or platform access.</DialogDescription>
+            <DialogTitle>Edit tenant admin</DialogTitle>
+            <DialogDescription>Update email, role, or reset password.</DialogDescription>
           </DialogHeader>
-          <form className="space-y-4" onSubmit={editForm.handleSubmit(updateAdmin)}>
+          <form className="space-y-4" onSubmit={tenantEditForm.handleSubmit(updateTenantAdmin)}>
             <div className="space-y-2">
-              <Label htmlFor="edit_email">Email</Label>
-              <Input id="edit_email" type="email" autoFocus {...editForm.register("email")} />
+              <Label htmlFor="edit_tenant_email">Email</Label>
+              <Input id="edit_tenant_email" type="email" autoFocus {...tenantEditForm.register("email")} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit_password">Reset password</Label>
-              <Input id="edit_password" type="password" {...editForm.register("password")} />
+              <Label htmlFor="edit_tenant_password">Reset password</Label>
+              <Input id="edit_tenant_password" type="password" {...tenantEditForm.register("password")} />
               <p className="text-xs text-muted-foreground">Leave blank to keep the current password.</p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit_role">Role</Label>
+              <Label htmlFor="edit_tenant_role">Role</Label>
               <select
-                id="edit_role"
-                className="h-10 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2 focus:ring-offset-white"
-                {...editForm.register("role")}
+                id="edit_tenant_role"
+                className="h-10 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                {...tenantEditForm.register("role")}
               >
                 <option value="TENANT_ADMIN">Tenant admin</option>
                 <option value="TENANT_VIEWER">Tenant viewer</option>
               </select>
             </div>
-            <div className="flex items-center justify-between rounded-lg border border-border/60 px-3 py-2">
-              <div>
-                <div className="text-sm font-medium">Superadmin access</div>
-                <div className="text-xs text-muted-foreground">Grant platform-wide permissions.</div>
-              </div>
-              <label className="relative inline-flex cursor-pointer items-center">
-                <input
-                  type="checkbox"
-                  className="peer sr-only"
-                  checked={Boolean(editForm.watch("is_superadmin"))}
-                  onChange={() => editForm.setValue("is_superadmin", !editForm.getValues("is_superadmin"))}
-                />
-                <span className="h-5 w-9 rounded-full bg-muted transition peer-checked:bg-primary" />
-                <span className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition peer-checked:translate-x-4" />
-              </label>
+            <DialogFooter>
+              <Button type="submit" variant="primary" disabled={tenantSaving}>
+                {tenantSaving ? "Saving..." : "Save changes"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={superDeleteOpen} onOpenChange={setSuperDeleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Remove superadmin</DialogTitle>
+            <DialogDescription>
+              This permanently removes platform access for {superadminToDelete?.email ?? "this superadmin"}.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="secondary" onClick={() => setSuperDeleteOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={deleteSuperadmin} disabled={superDeleting}>
+              {superDeleting ? "Removing..." : "Confirm remove"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={superEditOpen} onOpenChange={setSuperEditOpen}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Edit superadmin</DialogTitle>
+            <DialogDescription>Update email or reset superadmin password.</DialogDescription>
+          </DialogHeader>
+          <form className="space-y-4" onSubmit={superEditForm.handleSubmit(updateSuperadmin)}>
+            <div className="space-y-2">
+              <Label htmlFor="edit_super_email">Email</Label>
+              <Input id="edit_super_email" type="email" autoFocus {...superEditForm.register("email")} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit_super_password">Reset password</Label>
+              <Input id="edit_super_password" type="password" {...superEditForm.register("password")} />
+              <p className="text-xs text-muted-foreground">Leave blank to keep the current password.</p>
             </div>
             <DialogFooter>
-              <Button type="submit" variant="primary" disabled={saving}>
-                {saving ? "Saving..." : "Save changes"}
+              <Button type="submit" variant="primary" disabled={superSaving}>
+                {superSaving ? "Saving..." : "Save changes"}
               </Button>
             </DialogFooter>
           </form>
@@ -408,3 +726,4 @@ export default function AdminUsersPage() {
     </div>
   );
 }
+

@@ -4,7 +4,6 @@ import uuid
 
 from sqlalchemy import select
 
-from app.main import app
 from app.models import (
     AuthEvent,
     AuthMethod,

@@ -17,6 +17,7 @@ export type TenantOption = {
 
 type AdminMe = {
   admin_user: {
+    id: string;
     email: string;
     is_superadmin: boolean;
     memberships: { tenant_id: string; role: string }[];

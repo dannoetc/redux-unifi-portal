@@ -71,7 +71,14 @@ from app.schemas.admin_oidc import (
     SiteOidcResponse,
     SiteOidcUpdateRequest,
 )
-from app.schemas.admin_user import AdminUserCreateRequest, AdminUserResponse, AdminUserUpdateRequest
+from app.schemas.admin_user import (
+    AdminUserCreateRequest,
+    AdminUserResponse,
+    AdminUserUpdateRequest,
+    SuperadminCreateRequest,
+    SuperadminResponse,
+    SuperadminUpdateRequest,
+)
 from app.schemas.admin_tls import TlsCustomCertificateRequest, TlsModeUpdateRequest, TlsStatusResponse
 from app.schemas.admin_system import (
     SmtpSettingsResponse,
@@ -398,6 +405,158 @@ def get_tenant(
             "tenant": _build_tenant_response(tenant)
         },
     }
+
+
+@router.get("/superadmins")
+def list_superadmins(
+    db: Session = Depends(get_db),
+    _admin: AdminUser = Depends(require_superadmin),
+) -> dict:
+    admins = (
+        db.execute(
+            select(AdminUser)
+            .where(AdminUser.is_superadmin.is_(True))
+            .order_by(AdminUser.created_at.asc())
+        )
+        .scalars()
+        .all()
+    )
+    return {
+        "ok": True,
+        "data": {
+            "superadmins": [
+                SuperadminResponse(
+                    id=str(admin.id),
+                    email=admin.email,
+                    is_superadmin=admin.is_superadmin,
+                    created_at=admin.created_at,
+                ).model_dump(mode="json")
+                for admin in admins
+            ]
+        },
+    }
+
+
+@router.post("/superadmins")
+def create_superadmin(
+    payload: SuperadminCreateRequest,
+    db: Session = Depends(get_db),
+    _admin: AdminUser = Depends(require_superadmin),
+) -> dict:
+    normalized_email = payload.email.strip().lower()
+    existing = db.execute(select(AdminUser).where(func.lower(AdminUser.email) == normalized_email)).scalar_one_or_none()
+    if existing:
+        raise HTTPException(
+            status_code=409,
+            detail={"ok": False, "error": {"code": "EMAIL_TAKEN", "message": "Admin email is already in use."}},
+        )
+
+    superadmin = AdminUser(
+        email=normalized_email,
+        password_hash=hash_password(payload.password),
+        is_superadmin=True,
+    )
+    db.add(superadmin)
+    db.commit()
+    db.refresh(superadmin)
+    return {
+        "ok": True,
+        "data": {
+            "superadmin": SuperadminResponse(
+                id=str(superadmin.id),
+                email=superadmin.email,
+                is_superadmin=superadmin.is_superadmin,
+                created_at=superadmin.created_at,
+            ).model_dump(mode="json")
+        },
+    }
+
+
+@router.put("/superadmins/{admin_user_id}")
+def update_superadmin(
+    admin_user_id: uuid.UUID,
+    payload: SuperadminUpdateRequest,
+    db: Session = Depends(get_db),
+    _admin: AdminUser = Depends(require_superadmin),
+) -> dict:
+    superadmin = db.execute(select(AdminUser).where(AdminUser.id == admin_user_id)).scalar_one_or_none()
+    if not superadmin or not superadmin.is_superadmin:
+        raise HTTPException(
+            status_code=404,
+            detail={"ok": False, "error": {"code": "NOT_FOUND", "message": "Superadmin not found."}},
+        )
+
+    if payload.email is not None:
+        normalized_email = payload.email.strip().lower()
+        existing = db.execute(
+            select(AdminUser).where(
+                func.lower(AdminUser.email) == normalized_email,
+                AdminUser.id != admin_user_id,
+            )
+        ).scalar_one_or_none()
+        if existing:
+            raise HTTPException(
+                status_code=409,
+                detail={"ok": False, "error": {"code": "EMAIL_TAKEN", "message": "Admin email is already in use."}},
+            )
+        superadmin.email = normalized_email
+
+    if payload.password is not None:
+        superadmin.password_hash = hash_password(payload.password)
+
+    db.add(superadmin)
+    db.commit()
+    db.refresh(superadmin)
+    return {
+        "ok": True,
+        "data": {
+            "superadmin": SuperadminResponse(
+                id=str(superadmin.id),
+                email=superadmin.email,
+                is_superadmin=superadmin.is_superadmin,
+                created_at=superadmin.created_at,
+            ).model_dump(mode="json")
+        },
+    }
+
+
+@router.delete("/superadmins/{admin_user_id}")
+def delete_superadmin(
+    admin_user_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_admin: AdminUser = Depends(require_superadmin),
+) -> dict:
+    if current_admin.id == admin_user_id:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "ok": False,
+                "error": {"code": "SELF_DELETE_NOT_ALLOWED", "message": "You cannot delete your own superadmin account."},
+            },
+        )
+
+    superadmin = db.execute(select(AdminUser).where(AdminUser.id == admin_user_id)).scalar_one_or_none()
+    if not superadmin or not superadmin.is_superadmin:
+        raise HTTPException(
+            status_code=404,
+            detail={"ok": False, "error": {"code": "NOT_FOUND", "message": "Superadmin not found."}},
+        )
+
+    superadmin_count = db.execute(
+        select(func.count()).select_from(AdminUser).where(AdminUser.is_superadmin.is_(True))
+    ).scalar_one()
+    if superadmin_count <= 1:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "ok": False,
+                "error": {"code": "LAST_SUPERADMIN", "message": "At least one superadmin is required."},
+            },
+        )
+
+    db.delete(superadmin)
+    db.commit()
+    return {"ok": True, "data": {"deleted": True}}
 
 
 @router.get("/tenants/{tenant_id}/admins")

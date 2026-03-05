@@ -301,6 +301,28 @@ const replaceTemplateToken = (template: string, key: string, value: string) => {
   return template.replace(new RegExp(`{{\\s*${escaped}\\s*}}`, "g"), value);
 };
 
+const buildPreviewSrcDoc = (html: string) => {
+  const trimmed = html.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  const hasDocumentShell = /<\s*!doctype html|<\s*html[\s>]/i.test(trimmed);
+  if (hasDocumentShell) {
+    return trimmed;
+  }
+
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <style>html,body{margin:0;padding:0;}</style>
+  </head>
+  <body>${trimmed}</body>
+</html>`;
+};
+
 const serializeBuilderBlocks = (blocks: PortalBuilderBlock[]) => {
   if (typeof window === "undefined" || typeof btoa !== "function") {
     return null;
@@ -1127,6 +1149,7 @@ export default function SiteDetailPage() {
       previewSource
     );
   }, [activeTemplateHtml, brandingConnectButtonColor, brandingDisplayName, brandingLogoUrl, brandingPrimaryColor, brandingSupportContact, portalTheme]);
+  const templatePreviewSrcDoc = useMemo(() => buildPreviewSrcDoc(templatePreviewHtml), [templatePreviewHtml]);
   const portalVersionsHasPrevious = portalVersionsOffset > 0;
   const portalVersionsHasNext = portalVersionsOffset + PORTAL_VERSION_PAGE_SIZE < portalVersionsTotal;
   const portalTemplateField = siteForm.register("portal_template_html");
@@ -1894,9 +1917,14 @@ export default function SiteDetailPage() {
 
                 <div className="space-y-2">
                   <Label>Template preview</Label>
-                  <div className="max-h-[360px] overflow-auto rounded-lg border border-border/70 bg-background p-4">
-                    {templatePreviewHtml ? (
-                      <div dangerouslySetInnerHTML={{ __html: templatePreviewHtml }} />
+                  <div className="rounded-lg border border-border/70 bg-background p-2">
+                    {templatePreviewSrcDoc ? (
+                      <iframe
+                        title="Portal template preview"
+                        className="h-[360px] w-full rounded-md border border-border/60 bg-white"
+                        srcDoc={templatePreviewSrcDoc}
+                        sandbox=""
+                      />
                     ) : (
                       <div className="text-sm text-muted-foreground">
                         Enter template HTML or apply a preset to preview rendering.
