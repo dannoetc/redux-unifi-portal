@@ -68,16 +68,14 @@ If you don’t know what a variable is, leave it as-is for now.
 
 ## 4) Build and start everything (including nginx + Certbot)
 
-Use the repo’s compose + the nginx/certbot override:
-
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.nginx-certbot.yml up -d --build
+docker compose up -d --build
 ```
 
-Watch Certbot until it says the cert was obtained:
+Issue certificate once:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.nginx-certbot.yml logs -f certbot
+docker compose run --rm certbot
 ```
 
 ---
@@ -90,15 +88,15 @@ docker compose exec api alembic upgrade head
 
 ---
 
-## 6) Seed a first tenant + sites (recommended)
+## 6) Complete initial setup wizard
 
-```bash
-docker compose exec -e SUPERADMIN_PASSWORD='change-me'   -e TENANT_SLUG='acme'   -e TENANT_NAME='Acme MSP'   -e SITE_SLUGS='lab,office'   -e SITE_DISPLAY_NAMES='Lab,Office'   -e SITE_UNIFI_SITE_IDS='default,default'   -e UNIFI_BASE_URL='https://unifi.example.com'   -e UNIFI_API_KEY='replace-with-unifi-api-key'   api python -m app.scripts.seed
-```
+Open `https://wifi.example.com/setup` and complete:
 
-Notes:
-- `SUPERADMIN_EMAIL` defaults to **jhalon@reduxtc.com**.
-- If you want a different email, add `-e SUPERADMIN_EMAIL='you@example.com'`.
+- initial superadmin
+- initial tenant
+- optional initial site
+
+See [Initial Setup Wizard](setup-wizard.md) for env prefill options and seed-script fallback.
 
 ---
 

@@ -2,6 +2,9 @@
 
 This is the operator checklist for adding a new customer tenant.
 
+If this is a fresh installation with no admins yet, run the [Initial Setup Wizard](setup-wizard.md) first.
+This guide is for adding additional tenants after bootstrap.
+
 ## Before you start
 
 Collect:

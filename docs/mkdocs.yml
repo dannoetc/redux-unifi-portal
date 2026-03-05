@@ -36,6 +36,7 @@ nav:
   - Getting Started:
       - Cheat Sheet (Production): cheat-sheet.md
       - Production Deployment (Ubuntu 20.04 / DigitalOcean): deployment-ubuntu20-digitalocean.md
+      - Initial Setup Wizard: setup-wizard.md
       - Local Development Setup: local-development.md
 
   - Admin Tasks:

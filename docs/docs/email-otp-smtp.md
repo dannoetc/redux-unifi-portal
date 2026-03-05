@@ -24,7 +24,7 @@ If your provider requires auth, set username/password.
 ## Apply changes
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.nginx-certbot.yml up -d
+docker compose up -d
 ```
 
 ## Validate guest flow

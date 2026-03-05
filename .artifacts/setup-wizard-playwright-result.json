@@ -1,0 +1,52 @@
+{
+  "before": {
+    "ok": true,
+    "data": {
+      "bootstrapped": false,
+      "has_superadmin": false,
+      "defaults": {
+        "admin_email": "",
+        "tenant_name": "",
+        "tenant_slug": "",
+        "site_slug": "",
+        "site_display_name": "",
+        "unifi_base_url": "",
+        "unifi_port": 443
+      }
+    }
+  },
+  "after": {
+    "ok": true,
+    "data": {
+      "bootstrapped": true,
+      "has_superadmin": true,
+      "defaults": {
+        "admin_email": "",
+        "tenant_name": "",
+        "tenant_slug": "",
+        "site_slug": "",
+        "site_display_name": "",
+        "unifi_base_url": "",
+        "unifi_port": 443
+      }
+    }
+  },
+  "me": {
+    "ok": true,
+    "data": {
+      "admin_user": {
+        "id": "fe0d6a84-c9d0-4265-a665-dc86e82448cd",
+        "email": "owner@example.com",
+        "is_superadmin": true,
+        "memberships": [
+          {
+            "tenant_id": "470e0fb3-9618-4fae-8dad-79d733333ba4",
+            "role": "TENANT_ADMIN"
+          }
+        ]
+      }
+    }
+  },
+  "superadminCount": 1,
+  "finalUrl": "http://localhost/admin"
+}

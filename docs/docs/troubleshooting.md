@@ -22,7 +22,7 @@ Check:
 4. certbot logs:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.nginx-certbot.yml logs -f certbot
+docker compose logs -f certbot
 ```
 
 ## Portal loads but guest not authorized

@@ -115,24 +115,29 @@ NEXT_PUBLIC_API_BASE_URL=https://wifi.example.com
 
 # MUST be a long random value
 SECRET_KEY=change-me
+SECRETS_ENCRYPTION_KEY=replace-with-fernet-key
 ```
 
 Recommended:
 - Set `UNIFI_VERIFY_SSL=false` if your UniFi controller has a self-signed or private CA cert.
 - If you’re using OTP email, configure SMTP values (see **Email OTP (SMTP)** doc).
+- Optionally prefill setup wizard fields with:
+  - `SETUP_DEFAULT_ADMIN_EMAIL`
+  - `SETUP_DEFAULT_TENANT_NAME`
+  - `SETUP_DEFAULT_TENANT_SLUG`
+  - `SETUP_DEFAULT_SITE_SLUG`
+  - `SETUP_DEFAULT_SITE_DISPLAY_NAME`
+  - `SETUP_DEFAULT_UNIFI_BASE_URL`
+  - `SETUP_DEFAULT_UNIFI_PORT`
 
 ---
 
 ## 6) Start the stack with nginx + Certbot
 
-This repo uses two compose files:
-- `docker-compose.yml` (full stack)
-- `docker-compose.nginx-certbot.yml` (production behavior for nginx/certbot)
-
 Run:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.nginx-certbot.yml up -d --build
+docker compose up -d --build
 ```
 
 Check containers:
@@ -143,17 +148,26 @@ docker compose ps
 
 ---
 
-## 7) Confirm Let’s Encrypt issued the certificate
+## 7) Issue Let’s Encrypt certificate
 
-Tail Certbot logs:
+Run Certbot once after the stack is up:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.nginx-certbot.yml logs -f certbot
+docker compose run --rm certbot
 ```
 
-What “good” looks like:
-- first run requests the cert
-- then it enters the renewal loop (every ~12 hours)
+Then inspect logs:
+
+```bash
+docker compose logs -f certbot
+docker compose logs -f nginx
+```
+
+Schedule renewals on the host (example: every Sunday at 3 AM):
+
+```cron
+0 3 * * 0 cd /opt/redux-unifi-portal && /usr/bin/docker compose run --rm certbot >> /var/log/certbot_docker.log 2>&1
+```
 
 If issuance fails:
 - DNS A record is wrong or not propagated
@@ -170,17 +184,22 @@ docker compose exec api alembic upgrade head
 
 ---
 
-## 9) Create your first tenant/site + superadmin
+## 9) Complete first-run setup (wizard)
 
-Use the seed script (you can run it multiple times; it will error if you re-use unique slugs/emails).
+Open:
 
-```bash
-docker compose exec -e SUPERADMIN_PASSWORD='change-me'   -e TENANT_SLUG='acme'   -e TENANT_NAME='Acme MSP'   -e SITE_SLUGS='lab,office'   -e SITE_DISPLAY_NAMES='Lab,Office'   -e SITE_UNIFI_SITE_IDS='default,default'   -e UNIFI_BASE_URL='https://unifi.example.com'   -e UNIFI_API_KEY='replace-with-unifi-api-key'   api python -m app.scripts.seed
-```
+- `https://wifi.example.com/setup`
 
-Notes:
-- `SUPERADMIN_EMAIL` defaults to **jhalon@reduxtc.com**
-- To override it: add `-e SUPERADMIN_EMAIL='you@example.com'`
+The wizard creates:
+
+- first superadmin
+- first tenant
+- optional first site
+
+On submit, it signs in the new superadmin and redirects to `/admin`.
+
+If `/setup` redirects to login, bootstrap was already completed.
+See [Initial Setup Wizard](setup-wizard.md) for details and CLI fallback.
 
 ---
 
@@ -229,7 +248,7 @@ docker compose exec postgres pg_dump -U postgres redux_portal > backup.sql
 ```bash
 cd /opt/redux-unifi-portal
 git pull
-docker compose -f docker-compose.yml -f docker-compose.nginx-certbot.yml up -d --build
+docker compose up -d --build
 docker compose exec api alembic upgrade head
 ```
 

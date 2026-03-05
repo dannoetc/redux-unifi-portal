@@ -75,13 +75,23 @@ Frontend: http://localhost:3000
 
 ---
 
-## 6) Seed a demo tenant (optional)
+## 6) Run initial setup
 
-Open another terminal tab:
+Open in browser:
+
+- http://localhost:3000/setup
+
+Complete:
+
+- initial superadmin
+- initial tenant
+- optional initial site
+
+Seed-script fallback (optional, non-interactive):
 
 ```bash
 cd backend
-SUPERADMIN_PASSWORD=change-me TENANT_SLUG=acme TENANT_NAME="Acme MSP" SITE_SLUGS=lab,office SITE_DISPLAY_NAMES="Lab,Office" SITE_UNIFI_SITE_IDS=default,default UNIFI_BASE_URL=https://unifi.local UNIFI_API_KEY=replace-with-unifi-api-key python -m app.scripts.seed
+SUPERADMIN_EMAIL=admin@example.com SUPERADMIN_PASSWORD=change-me TENANT_SLUG=acme TENANT_NAME="Acme MSP" SITE_SLUGS=lab SITE_DISPLAY_NAMES="Lab" SITE_UNIFI_SITE_IDS=default UNIFI_BASE_URL=https://unifi.local UNIFI_API_KEY=replace-with-unifi-api-key python -m app.scripts.seed
 ```
 
 ---

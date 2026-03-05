@@ -9,6 +9,7 @@ Screenshots in this guide were captured from the live app on February 18, 2026.
 1. Deploy the platform:
    - [Cheat Sheet (Production)](cheat-sheet.md)
    - [Production Deployment (Ubuntu 20.04 / DigitalOcean)](deployment-ubuntu20-digitalocean.md)
+   - [Initial Setup Wizard](setup-wizard.md)
 2. Onboard your first customer:
    - [Tenant Onboarding](tenant-onboarding.md)
    - [Site Setup Checklist](site-setup.md)

@@ -10,7 +10,7 @@
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    🎨 CUSTOMIZATION CONTROLS
    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-:root {
+#portal-template-root {
   /* 🖼️ Background Image — Replace with your CDN URL */
   --bg-image: url('https://images.unsplash.com/photo-1557683316-973673baf926?w=1920&q=80');
   
@@ -25,13 +25,18 @@
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    🎭 FOUNDATION & RESET
    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-* {
+#portal-template-root,
+#portal-template-root * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
 
-html, body {
+#portal-template-root {
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  min-height: 100dvh;
   height: 100%;
   font-family: 'Familjen Grotesk', -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -42,13 +47,14 @@ html, body {
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    🌌 ATMOSPHERIC BACKGROUND SYSTEM
    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-.stage {
-  position: fixed;
+#portal-template-root .stage {
+  position: absolute;
   inset: 0;
   background: #0a0e1a;
+  z-index: 0;
 }
 
-.backdrop {
+#portal-template-root .backdrop {
   position: absolute;
   inset: 0;
   background-image: var(--bg-image);
@@ -63,7 +69,7 @@ html, body {
   to { transform: scale(1.08); }
 }
 
-.atmospheric-overlay {
+#portal-template-root .atmospheric-overlay {
   position: absolute;
   inset: 0;
   background: 
@@ -73,7 +79,7 @@ html, body {
   backdrop-filter: blur(2px);
 }
 
-.grain-texture {
+#portal-template-root .grain-texture {
   position: absolute;
   inset: 0;
   opacity: 0.03;
@@ -97,16 +103,17 @@ html, body {
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    💎 GLASSMORPHIC PORTAL CARD
    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-.portal-container {
+#portal-template-root .portal-container {
   position: relative;
-  min-height: 100vh;
+  z-index: 1;
+  min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 32px 20px;
 }
 
-.portal-card {
+#portal-template-root .portal-card {
   position: relative;
   width: 100%;
   max-width: 460px;
@@ -134,7 +141,7 @@ html, body {
   }
 }
 
-.portal-card::before {
+#portal-template-root .portal-card::before {
   content: '';
   position: absolute;
   inset: 0;
@@ -155,12 +162,12 @@ html, body {
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    🏢 BRAND IDENTITY SECTION
    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-.brand-lockup {
+#portal-template-root .brand-lockup {
   text-align: center;
   margin-bottom: 40px;
 }
 
-.logo-frame {
+#portal-template-root .logo-frame {
   width: 140px;
   height: 140px;
   margin: 0 auto 28px;
@@ -188,7 +195,7 @@ html, body {
   }
 }
 
-.logo-frame::before {
+#portal-template-root .logo-frame::before {
   content: '';
   position: absolute;
   inset: -50%;
@@ -205,7 +212,7 @@ html, body {
   to { transform: rotate(360deg); }
 }
 
-.logo-image {
+#portal-template-root .logo-image {
   width: 100%;
   height: 100%;
   object-fit: contain;
@@ -217,7 +224,7 @@ html, body {
   background-repeat: no-repeat;
 }
 
-.network-badge {
+#portal-template-root .network-badge {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -246,7 +253,7 @@ html, body {
   }
 }
 
-.signal-icon {
+#portal-template-root .signal-icon {
   width: 16px;
   height: 16px;
   display: flex;
@@ -254,24 +261,24 @@ html, body {
   align-items: flex-end;
 }
 
-.signal-bar {
+#portal-template-root .signal-bar {
   width: 3px;
   background: rgba(var(--primary-rgb), 0.9);
   border-radius: 2px;
   animation: signal-pulse 1.5s ease-in-out infinite;
 }
 
-.signal-bar:nth-child(1) {
+#portal-template-root .signal-bar:nth-child(1) {
   height: 6px;
   animation-delay: 0s;
 }
 
-.signal-bar:nth-child(2) {
+#portal-template-root .signal-bar:nth-child(2) {
   height: 10px;
   animation-delay: 0.1s;
 }
 
-.signal-bar:nth-child(3) {
+#portal-template-root .signal-bar:nth-child(3) {
   height: 14px;
   animation-delay: 0.2s;
 }
@@ -284,7 +291,7 @@ html, body {
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    📝 TYPOGRAPHY & MESSAGING
    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-.hero-title {
+#portal-template-root .hero-title {
   font-family: 'Unbounded', sans-serif;
   font-size: 32px;
   font-weight: 800;
@@ -308,7 +315,7 @@ html, body {
   }
 }
 
-.hero-description {
+#portal-template-root .hero-description {
   font-size: 16px;
   line-height: 1.6;
   color: rgba(255, 255, 255, 0.75);
@@ -328,13 +335,13 @@ html, body {
   }
 }
 
-.provider-credit {
+#portal-template-root .provider-credit {
   font-size: 14px;
   color: rgba(255, 255, 255, 0.6);
   font-weight: 600;
 }
 
-.provider-name {
+#portal-template-root .provider-name {
   color: rgba(var(--primary-rgb), 1);
   font-weight: 700;
 }
@@ -342,7 +349,7 @@ html, body {
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    🔘 CONNECT BUTTON — THE HERO MOMENT
    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-.connect-section {
+#portal-template-root .connect-section {
   margin-bottom: 32px;
   animation: button-reveal 1s cubic-bezier(0.16, 1, 0.3, 1) 0.6s forwards;
   opacity: 0;
@@ -359,7 +366,7 @@ html, body {
   }
 }
 
-.connect-btn {
+#portal-template-root .connect-btn {
   position: relative;
   width: 100%;
   padding: 20px 32px;
@@ -379,7 +386,7 @@ html, body {
     inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
-.connect-btn::before {
+#portal-template-root .connect-btn::before {
   content: '';
   position: absolute;
   inset: 0;
@@ -393,28 +400,28 @@ html, body {
   transition: opacity 0.4s ease;
 }
 
-.connect-btn:hover {
+#portal-template-root .connect-btn:hover {
   transform: translateY(-2px);
   box-shadow: 
     0 12px 32px rgba(var(--primary-rgb), 0.45),
     inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
-.connect-btn:hover::before {
+#portal-template-root .connect-btn:hover::before {
   opacity: 1;
 }
 
-.connect-btn:active {
+#portal-template-root .connect-btn:active {
   transform: translateY(0);
 }
 
-.connect-btn:disabled {
+#portal-template-root .connect-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
   transform: none;
 }
 
-.btn-shimmer {
+#portal-template-root .btn-shimmer {
   position: absolute;
   inset: -100%;
   background: linear-gradient(
@@ -434,7 +441,7 @@ html, body {
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    📋 SUPPORT & LEGAL
    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-.divider {
+#portal-template-root .divider {
   height: 1px;
   background: linear-gradient(
     90deg,
@@ -452,7 +459,7 @@ html, body {
   to { opacity: 1; }
 }
 
-.support-section {
+#portal-template-root .support-section {
   text-align: center;
   animation: support-reveal 1s cubic-bezier(0.16, 1, 0.3, 1) 0.8s forwards;
   opacity: 0;
@@ -469,7 +476,7 @@ html, body {
   }
 }
 
-.support-label {
+#portal-template-root .support-label {
   font-size: 13px;
   color: rgba(255, 255, 255, 0.5);
   margin-bottom: 8px;
@@ -478,7 +485,7 @@ html, body {
   font-weight: 600;
 }
 
-.support-contact {
+#portal-template-root .support-contact {
   font-size: 15px;
   color: rgba(255, 255, 255, 0.85);
   font-weight: 600;
@@ -486,11 +493,11 @@ html, body {
   transition: color 0.3s ease;
 }
 
-.support-contact:hover {
+#portal-template-root .support-contact:hover {
   color: rgba(var(--primary-rgb), 1);
 }
 
-.legal-footer {
+#portal-template-root .legal-footer {
   margin-top: 24px;
   font-size: 11px;
   line-height: 1.6;
@@ -498,13 +505,13 @@ html, body {
   text-align: center;
 }
 
-.legal-footer a {
+#portal-template-root .legal-footer a {
   color: rgba(255, 255, 255, 0.5);
   text-decoration: none;
   transition: color 0.3s ease;
 }
 
-.legal-footer a:hover {
+#portal-template-root .legal-footer a:hover {
   color: rgba(255, 255, 255, 0.8);
 }
 
@@ -512,29 +519,29 @@ html, body {
    📱 RESPONSIVE REFINEMENTS
    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 @media (max-width: 480px) {
-  .portal-card {
+  #portal-template-root .portal-card {
     padding: 44px 28px;
   }
   
-  .hero-title {
+  #portal-template-root .hero-title {
     font-size: 28px;
   }
   
-  .logo-frame {
+  #portal-template-root .logo-frame {
     width: 120px;
     height: 120px;
   }
   
-  .connect-btn {
+  #portal-template-root .connect-btn {
     padding: 18px 28px;
     font-size: 16px;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
+  #portal-template-root *,
+  #portal-template-root *::before,
+  #portal-template-root *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
@@ -544,7 +551,7 @@ html, body {
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    🎯 STATUS INDICATORS
    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-.loading-spinner {
+#portal-template-root .loading-spinner {
   display: inline-block;
   width: 16px;
   height: 16px;
@@ -561,6 +568,7 @@ html, body {
 </style>
 </head>
 <body>
+  <div id="portal-template-root">
   <!-- 🎬 STAGE & ATMOSPHERE -->
   <div class="stage">
     <div class="backdrop"></div>
@@ -625,6 +633,8 @@ html, body {
       </div>
     </div>
   </div>
+  </div>
+
   <script>
     // 🔌 CONNECT HANDLER
     async function handleConnect(btn) {
@@ -687,5 +697,4 @@ html, body {
   </script>
 </body>
 </html>
-
 
