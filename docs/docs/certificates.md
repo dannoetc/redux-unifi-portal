@@ -1,6 +1,9 @@
 # Certificates & TLS
 
-This page covers the admin `Certificates` screen for superadmins.
+This page covers TLS certificate management for superadmins.
+
+> Certificates is now part of `Admin -> Settings -> Certificates tab`.
+> The old standalone route (`/admin/certificates`) redirects to Settings automatically.
 
 ## What it manages
 
@@ -13,7 +16,7 @@ This page covers the admin `Certificates` screen for superadmins.
 
 ## Switch to Let's Encrypt mode
 
-1. Open `Admin -> Certificates`.
+1. Open `Admin -> Settings -> Certificates tab`.
 2. Click `Use Let's Encrypt`.
 3. Click `Refresh status` and confirm issuer/expiry values.
 
@@ -21,7 +24,7 @@ Use this mode when your domain and certbot automation are healthy.
 
 ## Upload a custom certificate
 
-1. Open `Admin -> Certificates`.
+1. Open `Admin -> Settings -> Certificates tab`.
 2. Paste or upload certificate PEM.
 3. Paste or upload private key PEM.
 4. Click `Upload custom certificate`.

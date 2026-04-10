@@ -1,7 +1,7 @@
 # Local Development Setup (Docker + host tooling)
 
 This is the **developer** setup (run on your laptop).  
-If you’re deploying to a server, use: **[Production Deployment](deployment-ubuntu20-digitalocean.md)**.
+If you’re deploying to a server, use: **[Production Deployment (Ubuntu / DigitalOcean)](deployment-ubuntu20-digitalocean.md)**.
 
 ---
 
@@ -34,6 +34,8 @@ For local dev, set:
 
 - `SECRET_KEY` (anything random is fine)
 - `NEXT_PUBLIC_API_BASE_URL=http://localhost:8000`
+- `SECRETS_ENCRYPTION_KEY` — required if you use encrypted secrets; generate with:
+  `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`
 
 ---
 
@@ -61,7 +63,21 @@ Leave this terminal open.
 
 ---
 
-## 5) Start the frontend web app
+## 5) Start the Celery worker (required for Email OTP)
+
+Open a new terminal tab:
+
+```bash
+cd backend
+source .venv/bin/activate
+celery -A app.worker worker --loglevel=info
+```
+
+Leave this terminal open.
+
+---
+
+## 6) Start the frontend web app
 
 Open a new terminal tab:
 
@@ -75,7 +91,7 @@ Frontend: http://localhost:3000
 
 ---
 
-## 6) Run initial setup
+## 7) Run initial setup
 
 Open in browser:
 
@@ -96,6 +112,6 @@ SUPERADMIN_EMAIL=admin@example.com SUPERADMIN_PASSWORD=change-me TENANT_SLUG=acm
 
 ---
 
-## 7) Log in
+## 8) Log in
 
 - http://localhost:3000/admin

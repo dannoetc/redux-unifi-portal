@@ -1,6 +1,8 @@
-# Production Deployment (Ubuntu 20.04 / DigitalOcean)
+# Production Deployment (Ubuntu / DigitalOcean)
 
-This is the **end-to-end** guide to deploy the portal on a **Ubuntu 20.04** DigitalOcean droplet using the repo’s **Docker + nginx + Certbot** configuration.
+This is the **end-to-end** guide to deploy the portal on a **Ubuntu 22.04** (or 24.04) DigitalOcean droplet using the repo’s **Docker + nginx + Certbot** configuration.
+
+> Ubuntu 20.04 reached end of standard support in April 2025. Use Ubuntu 22.04 LTS or 24.04 LTS for new deployments.
 
 This assumes you want a single public domain like:
 
@@ -25,7 +27,7 @@ This assumes you want a single public domain like:
 ## 1) Create the droplet (DigitalOcean)
 
 Recommended minimum:
-- Ubuntu 20.04
+- Ubuntu 22.04 LTS (or 24.04 LTS)
 - 2 vCPU / 2 GB RAM (or higher)
 - 25+ GB disk
 

@@ -18,7 +18,7 @@ Left sidebar navigation:
 - `Vouchers`: voucher batch generation and export
 - `Reports`: method and site trend reports with presets and CSV export
 - `Auth Events`: audit trail with filters and CSV export
-- `Certificates`: TLS certificate mode and custom cert upload (superadmin only)
+- `Settings`: SMTP, admin UI preferences, and TLS certificate management (superadmin only)
 
 ## Tenant scope behavior
 
@@ -43,3 +43,5 @@ Left sidebar navigation:
    - [Admin Users & Roles](admin-users.md)
 5. Manage TLS certificates:
    - [Certificates & TLS](certificates.md)
+6. Configure system settings:
+   - [System Settings](settings.md)

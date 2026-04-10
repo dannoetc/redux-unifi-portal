@@ -2,13 +2,13 @@
 
 This is the **one-page, do-this-in-order** guide to get the portal running **in production** on a Linux server using the repo’s Docker setup (nginx + Certbot included).
 
-If you want the longer “why/how” doc, see: **[Production Deployment (Ubuntu 20.04 / DigitalOcean)](deployment-ubuntu20-digitalocean.md)**.
+If you want the longer “why/how” doc, see: **[Production Deployment (Ubuntu / DigitalOcean)](deployment-ubuntu20-digitalocean.md)**.
 
 ---
 
 ## 0) You need these 3 things first
 
-1. A **Ubuntu 20.04** server with public IP (DigitalOcean droplet is fine)
+1. A **Ubuntu 22.04** (or 24.04) server with public IP (DigitalOcean droplet is fine)
 2. A DNS **A record** pointing your domain to that server (example: `wifi.example.com`)
 3. A real email for Let’s Encrypt (example: `ops@example.com`)
 
@@ -61,6 +61,8 @@ Fill in **at least**:
 - `BASE_URL=https://wifi.example.com`
 - `NEXT_PUBLIC_API_BASE_URL=https://wifi.example.com`
 - `SECRET_KEY=<long-random-string>`
+- `SECRETS_ENCRYPTION_KEY=<fernet-key>` — generate with:
+  `docker compose run --rm api python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`
 
 If you don’t know what a variable is, leave it as-is for now.
 
